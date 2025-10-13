@@ -1,0 +1,326 @@
+# MDT医疗智能体系统配置文件
+# 文件路径: config/model_config.yaml
+# 作者: 团队共同维护
+# 功能: 系统核心配置参数
+
+# ===== 系统基本配置 =====
+system:
+  name: "MDT Memory & Roleplay Framework"
+  version: "1.0.0"
+  environment: "development"  # development, testing, production
+  debug: true
+  log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  
+# ===== 数据配置 =====
+data:
+  # 数据目录
+  raw_data_dir: "data/raw"
+  processed_data_dir: "data/processed"
+  knowledge_base_dir: "data/knowledge_base"
+  results_dir: "results"
+  
+  # 数据文件
+  patient_data_file: "patient_simulated.csv"
+  consensus_history_file: "consensus_history.json"
+  
+  # 数据处理参数
+  max_patients: 1000
+  time_horizon_days: 365
+  simulation_batch_size: 50
+
+# ===== Memory Controller 配置 (杜军模块) =====
+memory:
+  # 记忆存储配置
+  storage_type: "json"  # json, mongodb, postgresql
+  memory_retention_days: 90
+  
+  # 个体记忆参数
+  individual_memory:
+    max_events_per_patient: 1000
+    event_types:
+      - "lab_test"
+      - "vital_signs"
+      - "medication"
+      - "symptom_assessment"
+      - "clinical_note"
+    
+  # 群体记忆参数
+  group_memory:
+    similarity_threshold: 0.7
+    min_cases_for_group: 5
+    update_frequency_days: 7
+  
+  # 时间演化参数
+  evolution:
+    lab_evolution_rate: 0.02
+    vital_fluctuation: 0.05
+    symptom_progression: 0.1
+    quality_of_life_decay: 0.005
+
+# ===== 共识系统配置 (姚刚模块) =====
+consensus:
+  # 角色权重配置
+  role_weights:
+    oncologist: 1.0
+    radiologist: 0.9
+    nurse: 0.8
+    psychologist: 0.7
+    patient_advocate: 0.8
+  
+  # 共识阈值
+  thresholds:
+    conflict_variance: 0.5
+    agreement_consensus: 0.3
+    convergence_threshold: 0.8
+  
+  # 对话参数
+  dialogue:
+    max_rounds: 5
+    max_messages_per_round: 10
+    timeout_seconds: 300
+
+# ===== 多智能体对话配置 =====
+agents:
+  # 角色专业化参数
+  oncologist:
+    primary_concerns: ["survival", "treatment_efficacy", "disease_progression"]
+    weight_factors:
+      survival_rate: 0.4
+      side_effects: 0.2
+      quality_of_life: 0.4
+    communication_style: "evidence-based"
+    
+  radiologist:
+    primary_concerns: ["imaging_findings", "treatment_response", "anatomical_feasibility"]
+    weight_factors:
+      tumor_size: 0.5
+      metastasis: 0.3
+      response: 0.2
+    communication_style: "precise"
+    
+  nurse:
+    primary_concerns: ["feasibility", "patient_compliance", "care_management"]
+    weight_factors:
+      complexity: 0.3
+      side_effects: 0.4
+      adherence: 0.3
+    communication_style: "practical"
+    
+  psychologist:
+    primary_concerns: ["mental_health", "coping_ability", "family_dynamics"]
+    weight_factors:
+      anxiety: 0.3
+      depression: 0.3
+      social_support: 0.4
+    communication_style: "empathetic"
+    
+  patient_advocate:
+    primary_concerns: ["patient_preferences", "quality_of_life", "autonomy"]
+    weight_factors:
+      autonomy: 0.4
+      comfort: 0.3
+      family_impact: 0.3
+    communication_style: "patient-focused"
+
+# ===== 强化学习配置 (姚刚模块) =====
+reinforcement_learning:
+  # 环境参数
+  environment:
+    state_dimension: 13
+    action_dimension: 6  # 6种治疗选项
+    reward_range: [-2.0, 2.0]
+  
+  # 奖励函数权重
+  reward_weights:
+    consensus_score: 0.4
+    consistency_bonus: 0.2
+    conflict_penalty: 0.2
+    patient_suitability: 0.2
+  
+  # 训练参数
+  training:
+    algorithm: "DQN"  # DQN, PPO, A2C
+    learning_rate: 0.001
+    batch_size: 32
+    memory_size: 10000
+    epsilon_start: 1.0
+    epsilon_end: 0.01
+    epsilon_decay: 0.995
+    target_update_frequency: 100
+    
+  # 网络架构
+  network:
+    hidden_layers: [128, 64, 32]
+    activation: "relu"
+    dropout_rate: 0.2
+
+# ===== RAG系统配置 =====
+knowledge:
+  # 知识库配置
+  databases:
+    medical_guidelines: true
+    pubmed_abstracts: false  # 需要API密钥
+    clinical_trials: false
+    drug_database: true
+  
+  # 检索参数
+  retrieval:
+    max_results: 10
+    similarity_threshold: 0.6
+    search_timeout: 30
+    
+  # 知识源配置
+  sources:
+    nccn_guidelines: 
+      enabled: true
+      priority: 1
+      file_path: "data/knowledge_base/nccn_guidelines.json"
+    
+    esmo_guidelines:
+      enabled: true 
+      priority: 2
+      file_path: "data/knowledge_base/esmo_guidelines.json"
+      
+    local_protocols:
+      enabled: true
+      priority: 3
+      file_path: "data/knowledge_base/local_protocols.json"
+
+# ===== 可视化配置 =====
+visualization:
+  # 图表配置
+  theme: "medical"  # medical, default, dark
+  figure_size: [12, 8]
+  dpi: 300
+  
+  # 颜色配置
+  colors:
+    primary: "#2E86C1"
+    secondary: "#E74C3C"
+    success: "#27AE60"
+    warning: "#F39C12"
+    info: "#8E44AD"
+  
+  # 字体配置
+  fonts:
+    title_size: 16
+    label_size: 12
+    tick_size: 10
+
+# ===== 实验配置 =====
+experiments:
+  # 基线对比实验
+  baseline_comparison:
+    models: ["random", "rule_based", "single_agent", "langchain_rag", "med_palm_like"]
+    num_patients: 100
+    num_trials: 50
+    metrics: ["accuracy", "consistency", "response_time", "explanation_quality"]
+    
+  # 消融实验
+  ablation_studies:
+    components: ["memory", "dialogue", "rl", "rag"]
+    test_scenarios: 20
+    
+  # 性能评估
+  performance:
+    benchmark_datasets: ["synthetic", "mimic_iii"]
+    evaluation_metrics: ["precision", "recall", "f1_score", "auc"]
+
+# ===== 部署配置 =====
+deployment:
+  # API配置
+  api:
+    host: "localhost"
+    port: 8000
+    workers: 4
+    timeout: 300
+    
+  # 数据库配置
+  database:
+    type: "sqlite"  # sqlite, postgresql, mongodb
+    host: "localhost"
+    port: 5432
+    name: "mdt_system"
+    
+  # 缓存配置
+  cache:
+    type: "redis"  # redis, memory
+    host: "localhost"
+    port: 6379
+    ttl: 3600
+
+# ===== 安全配置 =====
+security:
+  # API安全
+  api_key_required: false
+  rate_limiting: true
+  max_requests_per_minute: 60
+  
+  # 数据保护
+  encrypt_patient_data: true
+  anonymize_exports: true
+  
+  # 访问控制
+  enable_authentication: false
+  session_timeout: 1800
+
+# ===== 监控配置 =====
+monitoring:
+  # 日志配置
+  logging:
+    file_path: "logs/mdt_system.log"
+    max_file_size: "10MB"
+    backup_count: 5
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+  # 性能监控
+  metrics:
+    enable_prometheus: false
+    enable_wandb: false
+    track_gpu_usage: false
+    
+  # 健康检查
+  health_check:
+    enable: true
+    interval_seconds: 60
+    endpoints: ["/health", "/metrics"]
+
+# ===== 医学专业配置 =====
+medical:
+  # 疾病类型
+  supported_diseases:
+    - "breast_cancer"
+    - "lung_cancer"  # 未来扩展
+    - "colon_cancer"  # 未来扩展
+    
+  # 治疗分期
+  staging_systems:
+    - "TNM"
+    - "AJCC"
+    - "FIGO"
+  
+  # 医学术语
+  terminology:
+    primary_language: "en"
+    supported_languages: ["en", "zh"]
+    use_medical_abbreviations: true
+
+# ===== 开发配置 =====
+development:
+  # 测试配置
+  testing:
+    test_data_size: 100
+    mock_external_apis: true
+    enable_code_coverage: true
+    
+  # 调试配置
+  debug:
+    verbose_logging: true
+    save_intermediate_results: true
+    enable_profiling: false
+    
+  # 代码质量
+  code_quality:
+    enable_linting: true
+    enable_type_checking: true
+    max_line_length: 88
