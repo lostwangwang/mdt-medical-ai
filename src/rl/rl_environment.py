@@ -11,8 +11,8 @@ from typing import Dict, List, Any, Tuple, Optional
 from dataclasses import dataclass
 from datetime import datetime
 import logging
-import gym
-from gym import spaces
+import gymnasium as gym
+from gymnasium import spaces
 
 from ..core.data_models import (
     RoleType,

@@ -1,0 +1,132 @@
+# (将上面 .gitignore 的内容粘贴到这里)
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtualenv / envs
+.env
+.venv/
+venv/
+env/
+ENV/
+pip-wheel-metadata/
+
+# Distribution / build
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+
+# Installer / packaging logs
+pip-log.txt
+
+# Test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# VSCode / JetBrains
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Data, processed outputs, results, logs (do NOT commit large/raw data or derivations)
+data/raw/
+data/processed/
+data/knowledge_base/
+data/*.csv
+data/*.tsv
+data/*.parquet
+data/*.ndjson
+data/*.h5
+data/*.pkl
+data/*.json
+data/*.jsonl
+data/*.xlsx
+data/*.xls
+data/*.db
+data/*.txt
+data/*.sqlite
+data/*.sqlite3
+data/*.db-journal
+data/images/
+data/videos/
+results/
+results/**
+logs/
+logs/**
+*.log
+
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.sql
+
+# Model checkpoints / weights / artifacts
+models/
+checkpoints/
+saved_models/
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.h5
+*.onnx
+
+# Secrets, keys, credentials, env overrides
+.env*
+secrets.json
+credentials.json
+*.pem
+*.key
+*.crt
+*.cert
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ML tools / experiment tracking
+mlruns/
+wandb/
+weights/
+outputs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.swp
+*.swo
+
+# C extensions / compiled
+*.so
+
+# Sphinx build
+docs/_build/
+
+# Node (if frontend)
+node_modules/
+
+# Local config / IDE specific
+local_settings.py
+.vagrant/
+
+# Ignore large archives / binary blobs
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+
+# Others
+coverage/
+.prof
+

@@ -55,10 +55,8 @@ git clone https://github.com/your-team/mdt-medical-ai.git
 cd mdt-medical-ai
 
 # 创建虚拟环境
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# 或
-venv\Scripts\activate  # Windows
+conda create -n mdt-agent-ai python=3.12
+conda activate mdt-agent-ai
 
 # 安装依赖
 pip install -r requirements.txt
@@ -324,4 +322,4 @@ mdt_medical_ai/
 
 **联系我们**: [team@mdt-medical-ai.com](mailto:team@mdt-medical-ai.com)
 
-*最后更新: 2024年10月*
+*最后更新: 2025年10月*
