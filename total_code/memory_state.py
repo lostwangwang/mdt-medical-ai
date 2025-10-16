@@ -118,7 +118,13 @@ class MemoryControllerInterface:
 
     def _should_update_group_memory(self, memory_state: MemoryState) -> bool:
         """判断是否应该更新群体记忆"""
-        days_since_update = (datetime.now() - memory_state.last_updated).days
+        # Handle both datetime objects and ISO strings
+        if isinstance(memory_state.last_updated, str):
+            last_updated = datetime.fromisoformat(memory_state.last_updated.replace('Z', '+00:00'))
+        else:
+            last_updated = memory_state.last_updated
+        
+        days_since_update = (datetime.now() - last_updated).days
         return days_since_update >= 7
 
     def _update_group_memory(self, memory_state: MemoryState) -> None:

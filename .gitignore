@@ -91,6 +91,9 @@ credentials.json
 *.crt
 *.cert
 
+# think.md
+think.md
+
 # Jupyter
 .ipynb_checkpoints/
 
@@ -129,4 +132,4 @@ local_settings.py
 # Others
 coverage/
 .prof
-
+test*

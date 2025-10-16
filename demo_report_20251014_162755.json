@@ -1,0 +1,1107 @@
+{
+  "scenarios_tested": [
+    {
+      "scenario_name": "早期肺癌患者",
+      "patient_id": "DEMO_001",
+      "episodes": [
+        {
+          "episode": 0,
+          "rl_guidance": {
+            "recommended_treatment": "surgery",
+            "confidence": 0.5850575668220395,
+            "reasoning": "基于1轮训练数据，考虑患者年龄65岁、分期I等因素"
+          },
+          "consensus_result": {
+            "recommended_treatment": "TreatmentOption.SURGERY",
+            "consensus_score": 0.7170115133644079,
+            "confidence_level": 0.4016896878531375,
+            "discussion_rounds": 6
+          },
+          "final_decision": {
+            "treatment": "palliative_care",
+            "confidence": 0.675,
+            "decision_rationale": "No rationale provided"
+          },
+          "reward_info": {
+            "total_reward": 0.7358513805903291,
+            "consensus_quality": 1.0,
+            "expert_agreement": 0.27165599758536696,
+            "safety_assessment": 1.0,
+            "patient_suitability": 0.5,
+            "explanation": "治疗方案: palliative_care | 共识质量: 1.000 | 专家一致性: 0.272 | 角色多样性: 0.796 | 置信度水平: 0.714 | 临床推理: 0.272 | 安全性评估: 1.000 | 治疗适宜性: 0.540 | 患者适用性: 0.500",
+            "rl_action": 4
+          },
+          "agent_analysis": {
+            "role_agreement": {
+              "oncologist": {
+                "recommended_treatment": "surgery",
+                "confidence": 0.3591034540093224,
+                "agrees_with_consensus": true
+              },
+              "radiologist": {
+                "recommended_treatment": "surgery",
+                "confidence": 0.32310345400932244,
+                "agrees_with_consensus": true
+              },
+              "nurse": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.24668569703833568,
+                "agrees_with_consensus": false
+              },
+              "psychologist": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.21068569703833567,
+                "agrees_with_consensus": false
+              },
+              "patient_advocate": {
+                "recommended_treatment": "surgery",
+                "confidence": 0.28710345400932236,
+                "agrees_with_consensus": true
+              }
+            },
+            "confidence_distribution": {
+              "oncologist": 0.3591034540093224,
+              "radiologist": 0.32310345400932244,
+              "nurse": 0.24668569703833568,
+              "psychologist": 0.21068569703833567,
+              "patient_advocate": 0.28710345400932236
+            },
+            "reasoning_quality": {},
+            "consensus_contribution": {},
+            "overall_agreement_rate": 0.6,
+            "average_confidence": 0.28533635122092765
+          }
+        },
+        {
+          "episode": 1,
+          "rl_guidance": {
+            "recommended_treatment": "surgery",
+            "confidence": 0.593081136662272,
+            "reasoning": "基于2轮训练数据，考虑患者年龄65岁、分期I等因素"
+          },
+          "consensus_result": {
+            "recommended_treatment": "TreatmentOption.SURGERY",
+            "consensus_score": 0.7186162273324543,
+            "confidence_level": 0.4044337487384971,
+            "discussion_rounds": 7
+          },
+          "final_decision": {
+            "treatment": "radiotherapy",
+            "confidence": 0.6371621621621621,
+            "decision_rationale": "No rationale provided"
+          },
+          "reward_info": {
+            "total_reward": 0.7519784104293351,
+            "consensus_quality": 1.0,
+            "expert_agreement": 0.2912412498368901,
+            "safety_assessment": 1.0,
+            "patient_suitability": 0.5,
+            "explanation": "治疗方案: radiotherapy | 共识质量: 1.000 | 专家一致性: 0.291 | 角色多样性: 0.796 | 置信度水平: 0.716 | 临床推理: 0.272 | 安全性评估: 1.000 | 治疗适宜性: 0.660 | 患者适用性: 0.500",
+            "rl_action": 2
+          },
+          "agent_analysis": {
+            "role_agreement": {
+              "oncologist": {
+                "recommended_treatment": "surgery",
+                "confidence": 0.3595848681997364,
+                "agrees_with_consensus": true
+              },
+              "radiologist": {
+                "recommended_treatment": "surgery",
+                "confidence": 0.3235848681997364,
+                "agrees_with_consensus": true
+              },
+              "nurse": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.2547127169486078,
+                "agrees_with_consensus": false
+              },
+              "psychologist": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.2187127169486078,
+                "agrees_with_consensus": false
+              },
+              "patient_advocate": {
+                "recommended_treatment": "surgery",
+                "confidence": 0.28758486819973633,
+                "agrees_with_consensus": true
+              }
+            },
+            "confidence_distribution": {
+              "oncologist": 0.3595848681997364,
+              "radiologist": 0.3235848681997364,
+              "nurse": 0.2547127169486078,
+              "psychologist": 0.2187127169486078,
+              "patient_advocate": 0.28758486819973633
+            },
+            "reasoning_quality": {},
+            "consensus_contribution": {},
+            "overall_agreement_rate": 0.6,
+            "average_confidence": 0.28883600769928497
+          }
+        },
+        {
+          "episode": 2,
+          "rl_guidance": {
+            "recommended_treatment": "surgery",
+            "confidence": 0.6965341068702191,
+            "reasoning": "基于3轮训练数据，考虑患者年龄65岁、分期I等因素"
+          },
+          "consensus_result": {
+            "recommended_treatment": "TreatmentOption.SURGERY",
+            "consensus_score": 0.7393068213740438,
+            "confidence_level": 0.43981466454961493,
+            "discussion_rounds": 8
+          },
+          "final_decision": {
+            "treatment": "immunotherapy",
+            "confidence": 0.675,
+            "decision_rationale": "No rationale provided"
+          },
+          "reward_info": {
+            "total_reward": 0.7307923226488618,
+            "consensus_quality": 1.0,
+            "expert_agreement": 0.15657920464122133,
+            "safety_assessment": 1.0,
+            "patient_suitability": 0.5,
+            "explanation": "治疗方案: immunotherapy | 共识质量: 1.000 | 专家一致性: 0.157 | 角色多样性: 0.796 | 置信度水平: 0.714 | 临床推理: 0.272 | 安全性评估: 1.000 | 治疗适宜性: 0.720 | 患者适用性: 0.500",
+            "rl_action": 3
+          },
+          "agent_analysis": {
+            "role_agreement": {
+              "oncologist": {
+                "recommended_treatment": "surgery",
+                "confidence": 0.3657920464122132,
+                "agrees_with_consensus": true
+              },
+              "radiologist": {
+                "recommended_treatment": "surgery",
+                "confidence": 0.32979204641221327,
+                "agrees_with_consensus": true
+              },
+              "nurse": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.2348320020740803,
+                "agrees_with_consensus": false
+              },
+              "psychologist": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.1988320020740803,
+                "agrees_with_consensus": false
+              },
+              "patient_advocate": {
+                "recommended_treatment": "surgery",
+                "confidence": 0.2937920464122131,
+                "agrees_with_consensus": true
+              }
+            },
+            "confidence_distribution": {
+              "oncologist": 0.3657920464122132,
+              "radiologist": 0.32979204641221327,
+              "nurse": 0.2348320020740803,
+              "psychologist": 0.1988320020740803,
+              "patient_advocate": 0.2937920464122131
+            },
+            "reasoning_quality": {},
+            "consensus_contribution": {},
+            "overall_agreement_rate": 0.6,
+            "average_confidence": 0.28460802867696006
+          }
+        }
+      ],
+      "learning_metrics": {
+        "consensus_improvement": 0.02069059404158946,
+        "reward_improvement": -0.02118608778047326,
+        "confidence_improvement": 0.03538091581111785,
+        "is_improving": "False"
+      },
+      "consensus_evolution": []
+    },
+    {
+      "scenario_name": "晚期乳腺癌患者",
+      "patient_id": "DEMO_002",
+      "episodes": [
+        {
+          "episode": 0,
+          "rl_guidance": {
+            "recommended_treatment": "immunotherapy",
+            "confidence": 0.5475915624029375,
+            "reasoning": "基于1轮训练数据，考虑患者年龄52岁、分期IV等因素"
+          },
+          "consensus_result": {
+            "recommended_treatment": "TreatmentOption.IMMUNOTHERAPY",
+            "consensus_score": 0.5095183124805875,
+            "confidence_level": 0.3552763143418046,
+            "discussion_rounds": 9
+          },
+          "final_decision": {
+            "treatment": "watchful_waiting",
+            "confidence": 0.675,
+            "decision_rationale": "No rationale provided"
+          },
+          "reward_info": {
+            "total_reward": 0.7331342180356278,
+            "consensus_quality": 1.0,
+            "expert_agreement": 0.13597366227180915,
+            "safety_assessment": 1.0,
+            "patient_suitability": 0.5,
+            "explanation": "治疗方案: watchful_waiting | 共识质量: 1.000 | 专家一致性: 0.136 | 角色多样性: 1.000 | 置信度水平: 0.701 | 临床推理: 0.272 | 安全性评估: 1.000 | 治疗适宜性: 0.600 | 患者适用性: 0.500",
+            "rl_action": 5
+          },
+          "agent_analysis": {
+            "role_agreement": {
+              "oncologist": {
+                "recommended_treatment": "surgery",
+                "confidence": 0.28457125415525053,
+                "agrees_with_consensus": false
+              },
+              "radiologist": {
+                "recommended_treatment": "immunotherapy",
+                "confidence": 0.2888554937441763,
+                "agrees_with_consensus": true
+              },
+              "nurse": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.2316707783976143,
+                "agrees_with_consensus": false
+              },
+              "psychologist": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.19967077839761432,
+                "agrees_with_consensus": false
+              },
+              "patient_advocate": {
+                "recommended_treatment": "immunotherapy",
+                "confidence": 0.2568554937441762,
+                "agrees_with_consensus": true
+              }
+            },
+            "confidence_distribution": {
+              "oncologist": 0.28457125415525053,
+              "radiologist": 0.2888554937441763,
+              "nurse": 0.2316707783976143,
+              "psychologist": 0.19967077839761432,
+              "patient_advocate": 0.2568554937441762
+            },
+            "reasoning_quality": {},
+            "consensus_contribution": {},
+            "overall_agreement_rate": 0.4,
+            "average_confidence": 0.25232475968776635
+          }
+        },
+        {
+          "episode": 1,
+          "rl_guidance": {
+            "recommended_treatment": "immunotherapy",
+            "confidence": 0.5603855962051149,
+            "reasoning": "基于2轮训练数据，考虑患者年龄52岁、分期IV等因素"
+          },
+          "consensus_result": {
+            "recommended_treatment": "TreatmentOption.IMMUNOTHERAPY",
+            "consensus_score": 0.512077119241023,
+            "confidence_level": 0.35965187390214926,
+            "discussion_rounds": 10
+          },
+          "final_decision": {
+            "treatment": "radiotherapy",
+            "confidence": 0.6371621621621621,
+            "decision_rationale": "No rationale provided"
+          },
+          "reward_info": {
+            "total_reward": 0.7686866896646524,
+            "consensus_quality": 1.0,
+            "expert_agreement": 0.2833825112810175,
+            "safety_assessment": 1.0,
+            "patient_suitability": 0.5,
+            "explanation": "治疗方案: radiotherapy | 共识质量: 1.000 | 专家一致性: 0.283 | 角色多样性: 1.000 | 置信度水平: 0.701 | 临床推理: 0.272 | 安全性评估: 1.000 | 治疗适宜性: 0.660 | 患者适用性: 0.500",
+            "rl_action": 2
+          },
+          "agent_analysis": {
+            "role_agreement": {
+              "oncologist": {
+                "recommended_treatment": "surgery",
+                "confidence": 0.29734901294619426,
+                "agrees_with_consensus": false
+              },
+              "radiologist": {
+                "recommended_treatment": "immunotherapy",
+                "confidence": 0.28962313577230697,
+                "agrees_with_consensus": true
+              },
+              "nurse": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.2274601664399681,
+                "agrees_with_consensus": false
+              },
+              "psychologist": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.19546016643996814,
+                "agrees_with_consensus": false
+              },
+              "patient_advocate": {
+                "recommended_treatment": "immunotherapy",
+                "confidence": 0.2576231357723069,
+                "agrees_with_consensus": true
+              }
+            },
+            "confidence_distribution": {
+              "oncologist": 0.29734901294619426,
+              "radiologist": 0.28962313577230697,
+              "nurse": 0.2274601664399681,
+              "psychologist": 0.19546016643996814,
+              "patient_advocate": 0.2576231357723069
+            },
+            "reasoning_quality": {},
+            "consensus_contribution": {},
+            "overall_agreement_rate": 0.4,
+            "average_confidence": 0.2535031234741489
+          }
+        },
+        {
+          "episode": 2,
+          "rl_guidance": {
+            "recommended_treatment": "watchful_waiting",
+            "confidence": 0.673550320238136,
+            "reasoning": "基于3轮训练数据，考虑患者年龄52岁、分期IV等因素"
+          },
+          "consensus_result": {
+            "recommended_treatment": "TreatmentOption.WATCHFUL_WAITING",
+            "consensus_score": 0.7347100640476272,
+            "confidence_level": 0.3871542095214425,
+            "discussion_rounds": 11
+          },
+          "final_decision": {
+            "treatment": "surgery",
+            "confidence": 0.675,
+            "decision_rationale": "No rationale provided"
+          },
+          "reward_info": {
+            "total_reward": 0.7477250992321828,
+            "consensus_quality": 1.0,
+            "expert_agreement": 0.14735642460655768,
+            "safety_assessment": 1.0,
+            "patient_suitability": 0.49999999999999994,
+            "explanation": "治疗方案: surgery | 共识质量: 1.000 | 专家一致性: 0.147 | 角色多样性: 1.000 | 置信度水平: 0.703 | 临床推理: 0.272 | 安全性评估: 1.000 | 治疗适宜性: 0.720 | 患者适用性: 0.500",
+            "rl_action": 0
+          },
+          "agent_analysis": {
+            "role_agreement": {
+              "oncologist": {
+                "recommended_treatment": "surgery",
+                "confidence": 0.27356424606557667,
+                "agrees_with_consensus": false
+              },
+              "radiologist": {
+                "recommended_treatment": "watchful_waiting",
+                "confidence": 0.2964130192142882,
+                "agrees_with_consensus": true
+              },
+              "nurse": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.22101455553082677,
+                "agrees_with_consensus": false
+              },
+              "psychologist": {
+                "recommended_treatment": "watchful_waiting",
+                "confidence": 0.23241301921428817,
+                "agrees_with_consensus": true
+              },
+              "patient_advocate": {
+                "recommended_treatment": "watchful_waiting",
+                "confidence": 0.26441301921428817,
+                "agrees_with_consensus": true
+              }
+            },
+            "confidence_distribution": {
+              "oncologist": 0.27356424606557667,
+              "radiologist": 0.2964130192142882,
+              "nurse": 0.22101455553082677,
+              "psychologist": 0.23241301921428817,
+              "patient_advocate": 0.26441301921428817
+            },
+            "reasoning_quality": {},
+            "consensus_contribution": {},
+            "overall_agreement_rate": 0.6,
+            "average_confidence": 0.2575635718478536
+          }
+        }
+      ],
+      "learning_metrics": {
+        "consensus_improvement": 0.22263294480660423,
+        "reward_improvement": -0.02096159043246959,
+        "confidence_improvement": 0.027502335619293272,
+        "is_improving": "True"
+      },
+      "consensus_evolution": []
+    },
+    {
+      "scenario_name": "高龄前列腺癌患者",
+      "patient_id": "DEMO_003",
+      "episodes": [
+        {
+          "episode": 0,
+          "rl_guidance": {
+            "recommended_treatment": "palliative_care",
+            "confidence": 0.4651602137317443,
+            "reasoning": "基于1轮训练数据，考虑患者年龄78岁、分期II等因素"
+          },
+          "consensus_result": {
+            "recommended_treatment": "TreatmentOption.PALLIATIVE_CARE",
+            "consensus_score": 0.893032042746349,
+            "confidence_level": 0.29628479309625655,
+            "discussion_rounds": 12
+          },
+          "final_decision": {
+            "treatment": "chemotherapy",
+            "confidence": 0.675,
+            "decision_rationale": "No rationale provided"
+          },
+          "reward_info": {
+            "total_reward": 0.7077793274969247,
+            "consensus_quality": 1.0,
+            "expert_agreement": 0.14697395650430412,
+            "safety_assessment": 1.0,
+            "patient_suitability": 0.5,
+            "explanation": "治疗方案: chemotherapy | 共识质量: 1.000 | 专家一致性: 0.147 | 角色多样性: 0.796 | 置信度水平: 0.693 | 临床推理: 0.272 | 安全性评估: 1.000 | 治疗适宜性: 0.540 | 患者适用性: 0.500",
+            "rl_action": 1
+          },
+          "agent_analysis": {
+            "role_agreement": {
+              "oncologist": {
+                "recommended_treatment": "radiotherapy",
+                "confidence": 0.2697395650430412,
+                "agrees_with_consensus": false
+              },
+              "radiologist": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.25190961282390467,
+                "agrees_with_consensus": true
+              },
+              "nurse": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.22390961282390465,
+                "agrees_with_consensus": true
+              },
+              "psychologist": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.19590961282390465,
+                "agrees_with_consensus": true
+              },
+              "patient_advocate": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.22390961282390465,
+                "agrees_with_consensus": true
+              }
+            },
+            "confidence_distribution": {
+              "oncologist": 0.2697395650430412,
+              "radiologist": 0.25190961282390467,
+              "nurse": 0.22390961282390465,
+              "psychologist": 0.19590961282390465,
+              "patient_advocate": 0.22390961282390465
+            },
+            "reasoning_quality": {},
+            "consensus_contribution": {},
+            "overall_agreement_rate": 0.8,
+            "average_confidence": 0.23307560326773197
+          }
+        },
+        {
+          "episode": 1,
+          "rl_guidance": {
+            "recommended_treatment": "watchful_waiting",
+            "confidence": 0.5030206212513226,
+            "reasoning": "基于2轮训练数据，考虑患者年龄78岁、分期II等因素"
+          },
+          "consensus_result": {
+            "recommended_treatment": "TreatmentOption.WATCHFUL_WAITING",
+            "consensus_score": 0.5006041242502646,
+            "confidence_level": 0.3190330524679523,
+            "discussion_rounds": 13
+          },
+          "final_decision": {
+            "treatment": "surgery",
+            "confidence": 0.675,
+            "decision_rationale": "No rationale provided"
+          },
+          "reward_info": {
+            "total_reward": 0.7638467283888432,
+            "consensus_quality": 1.0,
+            "expert_agreement": 0.0,
+            "safety_assessment": 1.0,
+            "patient_suitability": 0.8,
+            "explanation": "治疗方案: surgery | 共识质量: 1.000 | 专家一致性: 0.000 | 角色多样性: 1.000 | 置信度水平: 0.687 | 临床推理: 0.272 | 安全性评估: 1.000 | 治疗适宜性: 0.600 | 患者适用性: 0.800",
+            "rl_action": 0
+          },
+          "agent_analysis": {
+            "role_agreement": {
+              "oncologist": {
+                "recommended_treatment": "radiotherapy",
+                "confidence": 0.2543023280362731,
+                "agrees_with_consensus": false
+              },
+              "radiologist": {
+                "recommended_treatment": "watchful_waiting",
+                "confidence": 0.2541812372750794,
+                "agrees_with_consensus": true
+              },
+              "nurse": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.19028128157524477,
+                "agrees_with_consensus": false
+              },
+              "psychologist": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.16228128157524477,
+                "agrees_with_consensus": false
+              },
+              "patient_advocate": {
+                "recommended_treatment": "watchful_waiting",
+                "confidence": 0.22618123727507933,
+                "agrees_with_consensus": true
+              }
+            },
+            "confidence_distribution": {
+              "oncologist": 0.2543023280362731,
+              "radiologist": 0.2541812372750794,
+              "nurse": 0.19028128157524477,
+              "psychologist": 0.16228128157524477,
+              "patient_advocate": 0.22618123727507933
+            },
+            "reasoning_quality": {},
+            "consensus_contribution": {},
+            "overall_agreement_rate": 0.4,
+            "average_confidence": 0.21744547314738427
+          }
+        },
+        {
+          "episode": 2,
+          "rl_guidance": {
+            "recommended_treatment": "palliative_care",
+            "confidence": 0.7754642020474005,
+            "reasoning": "基于3轮训练数据，考虑患者年龄78岁、分期II等因素"
+          },
+          "consensus_result": {
+            "recommended_treatment": "TreatmentOption.PALLIATIVE_CARE",
+            "consensus_score": 0.9550928404094802,
+            "confidence_level": 0.40240875710021096,
+            "discussion_rounds": 14
+          },
+          "final_decision": {
+            "treatment": "watchful_waiting",
+            "confidence": 0.675,
+            "decision_rationale": "No rationale provided"
+          },
+          "reward_info": {
+            "total_reward": 0.6850972076708025,
+            "consensus_quality": 1.0,
+            "expert_agreement": 0.0,
+            "safety_assessment": 1.0,
+            "patient_suitability": 0.5,
+            "explanation": "治疗方案: watchful_waiting | 共识质量: 1.000 | 专家一致性: 0.000 | 角色多样性: 0.796 | 置信度水平: 0.698 | 临床推理: 0.272 | 安全性评估: 1.000 | 治疗适宜性: 0.600 | 患者适用性: 0.500",
+            "rl_action": 5
+          },
+          "agent_analysis": {
+            "role_agreement": {
+              "oncologist": {
+                "recommended_treatment": "radiotherapy",
+                "confidence": 0.2546558974088351,
+                "agrees_with_consensus": false
+              },
+              "radiologist": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.2705278521228441,
+                "agrees_with_consensus": true
+              },
+              "nurse": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.242527852122844,
+                "agrees_with_consensus": true
+              },
+              "psychologist": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.214527852122844,
+                "agrees_with_consensus": true
+              },
+              "patient_advocate": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.242527852122844,
+                "agrees_with_consensus": true
+              }
+            },
+            "confidence_distribution": {
+              "oncologist": 0.2546558974088351,
+              "radiologist": 0.2705278521228441,
+              "nurse": 0.242527852122844,
+              "psychologist": 0.214527852122844,
+              "patient_advocate": 0.242527852122844
+            },
+            "reasoning_quality": {},
+            "consensus_contribution": {},
+            "overall_agreement_rate": 0.8,
+            "average_confidence": 0.24495346118004221
+          }
+        }
+      ],
+      "learning_metrics": {
+        "consensus_improvement": 0.4544887161592156,
+        "reward_improvement": -0.07874952071804064,
+        "confidence_improvement": 0.08337570463225863,
+        "is_improving": "True"
+      },
+      "consensus_evolution": []
+    }
+  ],
+  "interaction_modes_tested": [
+    {
+      "mode": "training",
+      "test_results": [
+        {
+          "episode": 0,
+          "rl_guidance": {
+            "recommended_treatment": "chemotherapy",
+            "confidence": 0.41596350460969406,
+            "reasoning": "基于1轮训练数据，考虑患者年龄65岁、分期I等因素"
+          },
+          "consensus_result": {
+            "recommended_treatment": "TreatmentOption.CHEMOTHERAPY",
+            "consensus_score": 0.48319270092193883,
+            "confidence_level": 0.33125951857651537,
+            "discussion_rounds": 15
+          },
+          "final_decision": {
+            "treatment": "radiotherapy",
+            "confidence": 0.6371621621621621,
+            "decision_rationale": "No rationale provided"
+          },
+          "reward_info": {
+            "total_reward": 0.7707482954978465,
+            "consensus_quality": 1.0,
+            "expert_agreement": 0.2872688974175145,
+            "safety_assessment": 1.0,
+            "patient_suitability": 0.5,
+            "explanation": "治疗方案: radiotherapy | 共识质量: 1.000 | 专家一致性: 0.287 | 角色多样性: 1.000 | 置信度水平: 0.710 | 临床推理: 0.272 | 安全性评估: 1.000 | 治疗适宜性: 0.660 | 患者适用性: 0.500",
+            "rl_action": 2
+          },
+          "agent_analysis": {
+            "role_agreement": {
+              "oncologist": {
+                "recommended_treatment": "surgery",
+                "confidence": 0.32357251426071765,
+                "agrees_with_consensus": false
+              },
+              "radiologist": {
+                "recommended_treatment": "chemotherapy",
+                "confidence": 0.31295781027658176,
+                "agrees_with_consensus": true
+              },
+              "nurse": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.24852743319071188,
+                "agrees_with_consensus": false
+              },
+              "psychologist": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.21252743319071188,
+                "agrees_with_consensus": false
+              },
+              "patient_advocate": {
+                "recommended_treatment": "chemotherapy",
+                "confidence": 0.2769578102765816,
+                "agrees_with_consensus": true
+              }
+            },
+            "confidence_distribution": {
+              "oncologist": 0.32357251426071765,
+              "radiologist": 0.31295781027658176,
+              "nurse": 0.24852743319071188,
+              "psychologist": 0.21252743319071188,
+              "patient_advocate": 0.2769578102765816
+            },
+            "reasoning_quality": {},
+            "consensus_contribution": {},
+            "overall_agreement_rate": 0.4,
+            "average_confidence": 0.27490860023906094
+          }
+        },
+        {
+          "episode": 1,
+          "rl_guidance": {
+            "recommended_treatment": "watchful_waiting",
+            "confidence": 0.6452114902320264,
+            "reasoning": "基于2轮训练数据，考虑患者年龄65岁、分期I等因素"
+          },
+          "consensus_result": {
+            "recommended_treatment": "TreatmentOption.WATCHFUL_WAITING",
+            "consensus_score": 0.5290422980464053,
+            "confidence_level": 0.409662329659353,
+            "discussion_rounds": 16
+          },
+          "final_decision": {
+            "treatment": "watchful_waiting",
+            "confidence": 0.675,
+            "decision_rationale": "No rationale provided"
+          },
+          "reward_info": {
+            "total_reward": 0.7699155348437535,
+            "consensus_quality": 1.0,
+            "expert_agreement": 0.1370904378854566,
+            "safety_assessment": 1.0,
+            "patient_suitability": 0.6,
+            "explanation": "治疗方案: watchful_waiting | 共识质量: 1.000 | 专家一致性: 0.137 | 角色多样性: 1.000 | 置信度水平: 0.711 | 临床推理: 0.272 | 安全性评估: 1.000 | 治疗适宜性: 0.750 | 患者适用性: 0.600",
+            "rl_action": 5
+          },
+          "agent_analysis": {
+            "role_agreement": {
+              "oncologist": {
+                "recommended_treatment": "surgery",
+                "confidence": 0.31076761292424593,
+                "agrees_with_consensus": false
+              },
+              "radiologist": {
+                "recommended_treatment": "watchful_waiting",
+                "confidence": 0.3267126894139217,
+                "agrees_with_consensus": true
+              },
+              "nurse": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.24963047356820775,
+                "agrees_with_consensus": false
+              },
+              "psychologist": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.21363047356820775,
+                "agrees_with_consensus": false
+              },
+              "patient_advocate": {
+                "recommended_treatment": "watchful_waiting",
+                "confidence": 0.2907126894139216,
+                "agrees_with_consensus": true
+              }
+            },
+            "confidence_distribution": {
+              "oncologist": 0.31076761292424593,
+              "radiologist": 0.3267126894139217,
+              "nurse": 0.24963047356820775,
+              "psychologist": 0.21363047356820775,
+              "patient_advocate": 0.2907126894139216
+            },
+            "reasoning_quality": {},
+            "consensus_contribution": {},
+            "overall_agreement_rate": 0.4,
+            "average_confidence": 0.27829078777770094
+          }
+        }
+      ],
+      "performance_metrics": {
+        "avg_consensus_score": 0.5061174994841721,
+        "avg_confidence_level": 0.3704609241179342,
+        "avg_total_reward": 0.7703319151708,
+        "avg_agreement_rate": 0.4,
+        "consensus_score_std": 0.022924798562233256,
+        "reward_consistency": 0.9995836196729535
+      }
+    },
+    {
+      "mode": "inference",
+      "test_results": [
+        {
+          "episode": 0,
+          "rl_guidance": {
+            "recommended_treatment": "palliative_care",
+            "confidence": 0.4368360544670419,
+            "reasoning": "基于1轮训练数据，考虑患者年龄65岁、分期I等因素"
+          },
+          "consensus_result": {
+            "recommended_treatment": "TreatmentOption.PALLIATIVE_CARE",
+            "consensus_score": 0.8873672108934084,
+            "confidence_level": 0.3257979306277283,
+            "discussion_rounds": 17
+          },
+          "final_decision": {
+            "treatment": "palliative_care",
+            "confidence": 0.675,
+            "decision_rationale": "No rationale provided"
+          },
+          "reward_info": {
+            "total_reward": 0.7518126126848916,
+            "consensus_quality": 1.0,
+            "expert_agreement": 0.2760694228575231,
+            "safety_assessment": 1.0,
+            "patient_suitability": 0.5,
+            "explanation": "治疗方案: palliative_care | 共识质量: 1.000 | 专家一致性: 0.276 | 角色多样性: 0.796 | 置信度水平: 0.715 | 临床推理: 0.272 | 安全性评估: 1.000 | 治疗适宜性: 0.690 | 患者适用性: 0.500",
+            "rl_action": 4
+          },
+          "agent_analysis": {
+            "role_agreement": {
+              "oncologist": {
+                "recommended_treatment": "surgery",
+                "confidence": 0.32038668971016715,
+                "agrees_with_consensus": false
+              },
+              "radiologist": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.3142101632680226,
+                "agrees_with_consensus": true
+              },
+              "nurse": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.2782101632680225,
+                "agrees_with_consensus": true
+              },
+              "psychologist": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.24221016326802253,
+                "agrees_with_consensus": true
+              },
+              "patient_advocate": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.2782101632680225,
+                "agrees_with_consensus": true
+              }
+            },
+            "confidence_distribution": {
+              "oncologist": 0.32038668971016715,
+              "radiologist": 0.3142101632680226,
+              "nurse": 0.2782101632680225,
+              "psychologist": 0.24221016326802253,
+              "patient_advocate": 0.2782101632680225
+            },
+            "reasoning_quality": {},
+            "consensus_contribution": {},
+            "overall_agreement_rate": 0.8,
+            "average_confidence": 0.28664546855645145
+          }
+        },
+        {
+          "episode": 1,
+          "rl_guidance": {
+            "recommended_treatment": "surgery",
+            "confidence": 0.5914219431020603,
+            "reasoning": "基于2轮训练数据，考虑患者年龄65岁、分期I等因素"
+          },
+          "consensus_result": {
+            "recommended_treatment": "TreatmentOption.SURGERY",
+            "consensus_score": 0.718284388620412,
+            "confidence_level": 0.40386630454090466,
+            "discussion_rounds": 18
+          },
+          "final_decision": {
+            "treatment": "watchful_waiting",
+            "confidence": 0.675,
+            "decision_rationale": "No rationale provided"
+          },
+          "reward_info": {
+            "total_reward": 0.707557580074429,
+            "consensus_quality": 1.0,
+            "expert_agreement": 0.0,
+            "safety_assessment": 1.0,
+            "patient_suitability": 0.6,
+            "explanation": "治疗方案: watchful_waiting | 共识质量: 1.000 | 专家一致性: 0.000 | 角色多样性: 0.796 | 置信度水平: 0.714 | 临床推理: 0.272 | 安全性评估: 1.000 | 治疗适宜性: 0.600 | 患者适用性: 0.600",
+            "rl_action": 5
+          },
+          "agent_analysis": {
+            "role_agreement": {
+              "oncologist": {
+                "recommended_treatment": "surgery",
+                "confidence": 0.3594853165861237,
+                "agrees_with_consensus": true
+              },
+              "radiologist": {
+                "recommended_treatment": "surgery",
+                "confidence": 0.32348531658612373,
+                "agrees_with_consensus": true
+              },
+              "nurse": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.24767119488868605,
+                "agrees_with_consensus": false
+              },
+              "psychologist": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.21167119488868605,
+                "agrees_with_consensus": false
+              },
+              "patient_advocate": {
+                "recommended_treatment": "surgery",
+                "confidence": 0.28748531658612364,
+                "agrees_with_consensus": true
+              }
+            },
+            "confidence_distribution": {
+              "oncologist": 0.3594853165861237,
+              "radiologist": 0.32348531658612373,
+              "nurse": 0.24767119488868605,
+              "psychologist": 0.21167119488868605,
+              "patient_advocate": 0.28748531658612364
+            },
+            "reasoning_quality": {},
+            "consensus_contribution": {},
+            "overall_agreement_rate": 0.6,
+            "average_confidence": 0.2859596679071486
+          }
+        }
+      ],
+      "performance_metrics": {
+        "avg_consensus_score": 0.8028257997569102,
+        "avg_confidence_level": 0.3648321175843165,
+        "avg_total_reward": 0.7296850963796604,
+        "avg_agreement_rate": 0.7,
+        "consensus_score_std": 0.08454141113649821,
+        "reward_consistency": 0.9778724836947688
+      }
+    },
+    {
+      "mode": "collaborative",
+      "test_results": [
+        {
+          "episode": 0,
+          "rl_guidance": {
+            "recommended_treatment": "surgery",
+            "confidence": 0.5174938315973927,
+            "reasoning": "基于1轮训练数据，考虑患者年龄65岁、分期I等因素"
+          },
+          "consensus_result": {
+            "recommended_treatment": "TreatmentOption.SURGERY",
+            "consensus_score": 0.7034987663194785,
+            "confidence_level": 0.3785828904063083,
+            "discussion_rounds": 19
+          },
+          "final_decision": {
+            "treatment": "chemotherapy",
+            "confidence": 0.675,
+            "decision_rationale": "No rationale provided"
+          },
+          "reward_info": {
+            "total_reward": 0.7447559279856014,
+            "consensus_quality": 1.0,
+            "expert_agreement": 0.15550496298958436,
+            "safety_assessment": 1.0,
+            "patient_suitability": 0.6,
+            "explanation": "治疗方案: chemotherapy | 共识质量: 1.000 | 专家一致性: 0.156 | 角色多样性: 0.796 | 置信度水平: 0.715 | 临床推理: 0.272 | 安全性评估: 1.000 | 治疗适宜性: 0.660 | 患者适用性: 0.600",
+            "rl_action": 1
+          },
+          "agent_analysis": {
+            "role_agreement": {
+              "oncologist": {
+                "recommended_treatment": "surgery",
+                "confidence": 0.35504962989584365,
+                "agrees_with_consensus": true
+              },
+              "radiologist": {
+                "recommended_treatment": "surgery",
+                "confidence": 0.3190496298958436,
+                "agrees_with_consensus": true
+              },
+              "nurse": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.2583811963097526,
+                "agrees_with_consensus": false
+              },
+              "psychologist": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.2223811963097526,
+                "agrees_with_consensus": false
+              },
+              "patient_advocate": {
+                "recommended_treatment": "surgery",
+                "confidence": 0.2830496298958436,
+                "agrees_with_consensus": true
+              }
+            },
+            "confidence_distribution": {
+              "oncologist": 0.35504962989584365,
+              "radiologist": 0.3190496298958436,
+              "nurse": 0.2583811963097526,
+              "psychologist": 0.2223811963097526,
+              "patient_advocate": 0.2830496298958436
+            },
+            "reasoning_quality": {},
+            "consensus_contribution": {},
+            "overall_agreement_rate": 0.6,
+            "average_confidence": 0.2875822564614072
+          }
+        },
+        {
+          "episode": 1,
+          "rl_guidance": {
+            "recommended_treatment": "palliative_care",
+            "confidence": 0.5326467064994252,
+            "reasoning": "基于2轮训练数据，考虑患者年龄65岁、分期I等因素"
+          },
+          "consensus_result": {
+            "recommended_treatment": "TreatmentOption.PALLIATIVE_CARE",
+            "consensus_score": 0.9065293412998852,
+            "confidence_level": 0.3585651736228034,
+            "discussion_rounds": 20
+          },
+          "final_decision": {
+            "treatment": "immunotherapy",
+            "confidence": 0.675,
+            "decision_rationale": "No rationale provided"
+          },
+          "reward_info": {
+            "total_reward": 0.7307242583846173,
+            "consensus_quality": 1.0,
+            "expert_agreement": 0.15341948709343423,
+            "safety_assessment": 1.0,
+            "patient_suitability": 0.5,
+            "explanation": "治疗方案: immunotherapy | 共识质量: 1.000 | 专家一致性: 0.153 | 角色多样性: 0.796 | 置信度水平: 0.718 | 临床推理: 0.272 | 安全性评估: 1.000 | 治疗适宜性: 0.720 | 患者适用性: 0.500",
+            "rl_action": 3
+          },
+          "agent_analysis": {
+            "role_agreement": {
+              "oncologist": {
+                "recommended_treatment": "surgery",
+                "confidence": 0.33419487093434214,
+                "agrees_with_consensus": false
+              },
+              "radiologist": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.3199588023899656,
+                "agrees_with_consensus": true
+              },
+              "nurse": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.2839588023899655,
+                "agrees_with_consensus": true
+              },
+              "psychologist": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.2479588023899655,
+                "agrees_with_consensus": true
+              },
+              "patient_advocate": {
+                "recommended_treatment": "palliative_care",
+                "confidence": 0.2839588023899655,
+                "agrees_with_consensus": true
+              }
+            },
+            "confidence_distribution": {
+              "oncologist": 0.33419487093434214,
+              "radiologist": 0.3199588023899656,
+              "nurse": 0.2839588023899655,
+              "psychologist": 0.2479588023899655,
+              "patient_advocate": 0.2839588023899655
+            },
+            "reasoning_quality": {},
+            "consensus_contribution": {},
+            "overall_agreement_rate": 0.8,
+            "average_confidence": 0.29400601609884086
+          }
+        }
+      ],
+      "performance_metrics": {
+        "avg_consensus_score": 0.8050140538096818,
+        "avg_confidence_level": 0.36857403201455585,
+        "avg_total_reward": 0.7377400931851094,
+        "avg_agreement_rate": 0.7,
+        "consensus_score_std": 0.10151528749020333,
+        "reward_consistency": 0.9929841651995079
+      }
+    }
+  ],
+  "performance_metrics": {},
+  "learning_progress": [],
+  "consensus_quality": []
+}

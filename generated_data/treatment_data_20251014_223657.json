@@ -1,0 +1,31 @@
+{
+  "patients": [
+    {
+      "patient_id": "PATIENT_0001",
+      "basic_info": {
+        "patient_id": "PATIENT_0001",
+        "age": 63,
+        "diagnosis": "Breast Cancer",
+        "stage": "II",
+        "lab_results": {
+          "hemoglobin": 8.175933799112297,
+          "white_blood_cell": 8966.087401544948,
+          "platelet": 346203.643839706,
+          "creatinine": 1.1896743050957215,
+          "bilirubin": 0.6488285346835057
+        },
+        "vital_signs": {
+          "blood_pressure_systolic": 124.07727784253174,
+          "blood_pressure_diastolic": 95.48191188981761,
+          "heart_rate": 67.21513075580128,
+          "temperature": 36.40762921813246,
+          "respiratory_rate": 16.176155870430836
+        },
+        "symptoms": [],
+        "comorbidities": [
+          "COPD",
+          "Liver Disease"
+        ],
+        "psychological_status": "stable",
+        "quality_of_life_score": 0.7,
+        "timestamp": 

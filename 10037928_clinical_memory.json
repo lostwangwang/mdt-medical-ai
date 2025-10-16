@@ -1,0 +1,36 @@
+{
+  "subject_id": 10037928,
+  "age": 55,
+  "gender": "F",
+  "chronic_diseases": [
+    "diabetes",
+    "hypertension"
+  ],
+  "lab_results": [
+    {
+      "lab_name": "Hemoglobin",
+      "lab_value": 10.5
+    },
+    {
+      "lab_name": "Creatinine",
+      "lab_value": 1.2
+    }
+  ],
+  "baseline_vitals": {
+    "blood_pressure": "140/90",
+    "heart_rate": 80
+  },
+  "discharge_medications": [
+    {
+      "medication": "Metformin"
+    },
+    {
+      "medication": "Lisinopril"
+    }
+  ],
+  "daily_summaries": [
+    {
+      "summary": "Patient reports fatigue and mild anxiety"
+    }
+  ]
+}

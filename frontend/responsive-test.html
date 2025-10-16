@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MDT医疗AI - 响应式设计测试</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .test-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #1f2937;
+            margin-bottom: 30px;
+            font-size: 28px;
+            font-weight: 700;
+        }
+        
+        .test-section {
+            margin-bottom: 40px;
+            padding: 20px;
+            border: 2px solid #e5e7eb;
+            border-radius: 15px;
+            background: #f9fafb;
+        }
+        
+        .test-section h2 {
+            color: #374151;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+        
+        .viewport-info {
+            background: #3b82f6;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: 600;
+        }
+        
+        .breakpoint-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .breakpoint-item {
+            padding: 15px;
+            background: white;
+            border-radius: 10px;
+            border-left: 4px solid #10b981;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .breakpoint-item h3 {
+            margin: 0 0 10px 0;
+            color: #1f2937;
+            font-size: 16px;
+        }
+        
+        .breakpoint-item p {
+            margin: 0;
+            color: #6b7280;
+            font-size: 14px;
+        }
+        
+        .test-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .test-card {
+            background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            border: 1px solid #e2e8f0;
+            transition: transform 0.3s ease;
+        }
+        
+        .test-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.15);
+        }
+        
+        .test-card h4 {
+            margin: 0 0 10px 0;
+            color: #1f2937;
+            font-size: 16px;
+        }
+        
+        .test-card p {
+            margin: 0;
+            color: #64748b;
+            font-size: 14px;
+        }
+        
+        .instructions {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        .instructions h3 {
+            color: #92400e;
+            margin: 0 0 15px 0;
+            font-size: 18px;
+        }
+        
+        .instructions ul {
+            color: #92400e;
+            margin: 0;
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+        }
+        
+        /* 响应式测试样式 */
+        @media (max-width: 1200px) {
+            .test-container {
+                padding: 25px;
+            }
+            
+            h1 {
+                font-size: 24px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            .test-container {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 22px;
+            }
+            
+            .test-section {
+                padding: 15px;
+            }
+            
+            .breakpoint-list {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .test-container {
+                padding: 15px;
+            }
+            
+            h1 {
+                font-size: 20px;
+            }
+            
+            .test-section {
+                padding: 12px;
+            }
+            
+            .test-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>📱 MDT医疗AI 响应式设计测试</h1>
+        
+        <div class="viewport-info" id="viewportInfo">
+            当前视口尺寸: <span id="viewportSize"></span>
+        </div>
+        
+        <div class="test-section">
+            <h2>🎯 响应式断点说明</h2>
+            <div class="breakpoint-list">
+                <div class="breakpoint-item">
+                    <h3>🖥️ 大屏幕 (≥1200px)</h3>
+                    <p>完整的三栏布局，所有功能面板都可见，最佳的用户体验</p>
+                </div>
+                <div class="breakpoint-item">
+                    <h3>💻 中等屏幕 (992px-1199px)</h3>
+                    <p>调整间距和侧边栏宽度，保持良好的可读性</p>
+                </div>
+                <div class="breakpoint-item">
+                    <h3>📱 平板 (768px-991px)</h3>
+                    <p>统计网格变为单列，优化触摸交互体验</p>
+                </div>
+                <div class="breakpoint-item">
+                    <h3>📱 手机 (≤767px)</h3>
+                    <p>垂直布局，侧边栏移至底部，按钮全宽显示</p>
+                </div>
+                <div class="breakpoint-item">
+                    <h3>📱 小屏手机 (≤480px)</h3>
+                    <p>进一步优化字体大小和间距，确保最小屏幕的可用性</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h2>🧪 响应式功能测试</h2>
+            <div class="test-grid">
+                <div class="test-card">
+                    <h4>🔄 布局切换</h4>
+                    <p>在不同屏幕尺寸下，布局会自动从横向切换到纵向</p>
+                </div>
+                <div class="test-card">
+                    <h4>📊 统计面板</h4>
+                    <p>统计网格在小屏幕上变为单列显示</p>
+                </div>
+                <div class="test-card">
+                    <h4>🎛️ 控制按钮</h4>
+                    <p>按钮在移动设备上变为全宽，便于触摸操作</p>
+                </div>
+                <div class="test-card">
+                    <h4>📱 侧边栏</h4>
+                    <p>侧边栏在小屏幕上移至主内容下方</p>
+                </div>
+                <div class="test-card">
+                    <h4>🔤 字体大小</h4>
+                    <p>字体大小根据屏幕尺寸自动调整</p>
+                </div>
+                <div class="test-card">
+                    <h4>📏 间距优化</h4>
+                    <p>内边距和外边距在小屏幕上减少以节省空间</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="instructions">
+            <h3>📋 测试说明</h3>
+            <ul>
+                <li>调整浏览器窗口大小，观察布局变化</li>
+                <li>使用开发者工具的设备模拟器测试不同设备</li>
+                <li>检查所有交互元素在触摸设备上的可用性</li>
+                <li>验证文本在所有屏幕尺寸下的可读性</li>
+                <li>确保没有水平滚动条出现</li>
+                <li>测试横屏和竖屏模式的显示效果</li>
+            </ul>
+        </div>
+    </div>
+    
+    <script>
+        function updateViewportInfo() {
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            const viewportSize = document.getElementById('viewportSize');
+            
+            let deviceType = '';
+            if (width >= 1200) {
+                deviceType = '🖥️ 大屏幕';
+            } else if (width >= 992) {
+                deviceType = '💻 中等屏幕';
+            } else if (width >= 768) {
+                deviceType = '📱 平板';
+            } else if (width >= 480) {
+                deviceType = '📱 手机';
+            } else {
+                deviceType = '📱 小屏手机';
+            }
+            
+            viewportSize.textContent = `${width} × ${height}px (${deviceType})`;
+        }
+        
+        // 初始化
+        updateViewportInfo();
+        
+        // 监听窗口大小变化
+        window.addEventListener('resize', updateViewportInfo);
+        
+        // 添加一些交互效果
+        document.querySelectorAll('.test-card').forEach(card => {
+            card.addEventListener('click', function() {
+                this.style.transform = 'scale(0.95)';
+                setTimeout(() => {
+                    this.style.transform = '';
+                }, 150);
+            });
+        });
+    </script>
+</body>
+</html>

@@ -76,6 +76,22 @@ class TestConsensusMatrix:
             concerns=["surgical_risks", "chemotherapy_toxicity"],
         )
 
+        # 放射科医生：关注放射治疗
+        opinions[RoleType.RADIOLOGIST] = RoleOpinion(
+            role=RoleType.RADIOLOGIST,
+            treatment_preferences={
+                TreatmentOption.SURGERY: 0.0,
+                TreatmentOption.CHEMOTHERAPY: 0.0,
+                TreatmentOption.RADIOTHERAPY: 0.9,
+                TreatmentOption.IMMUNOTHERAPY: 0.0,
+                TreatmentOption.PALLIATIVE_CARE: 0.0,
+                TreatmentOption.WATCHFUL_WAITING: 0.0,
+            },
+            reasoning="Radiotherapy is my specialty and offers targeted treatment",
+            confidence=0.95,
+            concerns=["radiation_side_effects"],
+        )
+
         # 护士：关注可行性
         opinions[RoleType.NURSE] = RoleOpinion(
             role=RoleType.NURSE,
@@ -106,6 +122,22 @@ class TestConsensusMatrix:
             reasoning="Minimize psychological burden and maintain quality of life",
             confidence=0.7,
             concerns=["anxiety", "depression", "family_stress"],
+        )
+
+        # 患者代言人：关注患者权益
+        opinions[RoleType.PATIENT_ADVOCATE] = RoleOpinion(
+            role=RoleType.PATIENT_ADVOCATE,
+            treatment_preferences={
+                TreatmentOption.SURGERY: 0.0,
+                TreatmentOption.CHEMOTHERAPY: 0.0,
+                TreatmentOption.RADIOTHERAPY: 0.0,
+                TreatmentOption.IMMUNOTHERAPY: 0.0,
+                TreatmentOption.PALLIATIVE_CARE: 0.7,
+                TreatmentOption.WATCHFUL_WAITING: 0.6,
+            },
+            reasoning="Focus on patient rights and quality of life",
+            confidence=0.6,
+            concerns=["patient_autonomy", "informed_consent"],
         )
 
         return opinions
@@ -596,10 +628,13 @@ class TestDialogueManager:
                 TreatmentOption.CHEMOTHERAPY: 0.7,
             }
 
-        # 创建模拟对话轮次
+        # 创建模拟对话轮次 - 需要至少2个轮次才能收敛
         from src.core.data_models import DialogueRound
 
-        dialogue_manager.dialogue_rounds = [DialogueRound(0, [], None, "discussing")]
+        dialogue_manager.dialogue_rounds = [
+            DialogueRound(0, [], None, "discussing"),
+            DialogueRound(1, [], None, "discussing")
+        ]
 
         # 现在应该收敛
         assert dialogue_manager._check_convergence()

@@ -1,0 +1,102 @@
+{
+    "patient_id": "BC_001",
+    "age": 58,
+    "diagnosis": "breast_cancer",
+    "stage": "IIB",
+    "lab_results": {
+        "creatinine": 0.9,
+        "hemoglobin": 12.3,
+        "white_blood_cell_count": 6.8,
+        "platelet_count": 285,
+        "liver_enzymes_alt": 28,
+        "liver_enzymes_ast": 32,
+        "bilirubin_total": 0.8,
+        "albumin": 4.1,
+        "ca_15_3": 45.2,
+        "cea": 3.1,
+        "estrogen_receptor": 85,
+        "progesterone_receptor": 70,
+        "her2_neu": 1
+    },
+    "vital_signs": {
+        "bp_systolic": 128,
+        "bp_diastolic": 82,
+        "heart_rate": 74,
+        "respiratory_rate": 16,
+        "temperature": 36.8,
+        "oxygen_saturation": 98,
+        "weight": 68.5,
+        "height": 165,
+        "bmi": 25.2
+    },
+    "symptoms": [
+        "breast_lump",
+        "mild_fatigue",
+        "occasional_pain",
+        "sleep_disturbance"
+    ],
+    "comorbidities": [
+        "hypertension",
+        "osteoporosis"
+    ],
+    "psychological_status": "mildly_anxious",
+    "quality_of_life_score": 0.75,
+    "medical_history": {
+        "family_history": [
+            "maternal_breast_cancer",
+            "paternal_diabetes"
+        ],
+        "previous_surgeries": [
+            "appendectomy_2010"
+        ],
+        "allergies": [
+            "penicillin"
+        ],
+        "current_medications": [
+            "lisinopril_10mg",
+            "calcium_carbonate_500mg",
+            "vitamin_d3_1000iu"
+        ]
+    },
+    "tumor_characteristics": {
+        "size_cm": 3.2,
+        "location": "upper_outer_quadrant_left",
+        "histology": "invasive_ductal_carcinoma",
+        "grade": "2",
+        "lymph_nodes_positive": 2,
+        "lymph_nodes_examined": 15,
+        "margins": "clear",
+        "lymphovascular_invasion": false,
+        "ki67_index": 25
+    },
+    "imaging_results": {
+        "mammography": "BIRADS_5",
+        "ultrasound": "solid_mass_3.2cm",
+        "mri": "no_additional_lesions",
+        "ct_chest": "no_metastases",
+        "bone_scan": "negative"
+    },
+    "performance_status": {
+        "ecog": 0,
+        "karnofsky": 90
+    },
+    "social_factors": {
+        "marital_status": "married",
+        "employment": "part_time",
+        "insurance": "private",
+        "support_system": "strong",
+        "distance_to_hospital_km": 15
+    },
+    "treatment_preferences": {
+        "patient_priorities": [
+            "cure",
+            "quality_of_life",
+            "minimal_side_effects"
+        ],
+        "concerns": [
+            "hair_loss",
+            "work_impact",
+            "family_responsibilities"
+        ]
+    }
+}

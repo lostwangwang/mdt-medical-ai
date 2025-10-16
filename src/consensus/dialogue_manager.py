@@ -28,12 +28,25 @@ class MultiAgentDialogueManager:
     """多智能体对话管理器"""
 
     def __init__(self, rag_system: MedicalKnowledgeRAG):
+        """
+        初始化多智能体对话管理器
+
+        Args:
+            rag_system (MedicalKnowledgeRAG): 医学知识RAG系统实例
+            agents (Dict[RoleType, RoleAgent]): 各角色智能体映射，键为角色枚举，值为对应智能体实例
+            rag_system (MedicalKnowledgeRAG): 医学知识检索与生成系统，用于提供循证支持
+            dialogue_rounds (List[DialogueRound]): 已完成的对话轮次列表，每轮包含多条消息与焦点治疗方案
+            current_round (int): 当前对话轮次编号，从0开始计数
+            max_rounds (int): 允许的最大对话轮次上限，超过则强制终止
+            convergence_threshold (float): 立场收敛阈值，超过此比例的角色立场稳定即视为达成共识
+        """
         self.agents = {role: RoleAgent(role) for role in RoleType}
         self.rag_system = rag_system
         self.dialogue_rounds = []
         self.current_round = 0
         self.max_rounds = 5
         self.convergence_threshold = 0.8
+
 
     def conduct_mdt_discussion(self, patient_state: PatientState) -> ConsensusResult:
         """进行MDT讨论"""
@@ -66,12 +79,13 @@ class MultiAgentDialogueManager:
 
     def _initialize_discussion(self, patient_state: PatientState) -> None:
         """初始化讨论"""
-        # 获取相关医学知识
+        # 获取相关医学知识 这里怎么检索? 从RAG系统中检索与患者状态相关的初始评估知识
         initial_knowledge = self.rag_system.retrieve_relevant_knowledge(
             patient_state, "initial_assessment"
         )
 
         # 生成各角色的初始意见
+        # 这里怎么生成? 调用每个智能体的generate_initial_opinion方法，传入患者状态和初始知识
         initial_round = DialogueRound(
             round_number=0,
             messages=[],
@@ -79,6 +93,7 @@ class MultiAgentDialogueManager:
             consensus_status="discussing",
         )
 
+        # 遍历每个角色智能体，生成其初始意见并构建首轮对话消息
         for role, agent in self.agents.items():
             opinion = agent.generate_initial_opinion(patient_state, initial_knowledge)
 

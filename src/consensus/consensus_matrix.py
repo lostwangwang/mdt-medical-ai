@@ -114,8 +114,8 @@ class ConsensusMatrix:
             index=[t.value for t in treatments],
             columns=[r.value for r in roles],
         )
-
-        logger.debug("Consensus matrix generated successfully")
+        print("共识矩阵", consensus_matrix)
+        logger.info("Consensus matrix generated successfully", consensus_matrix)
         return consensus_matrix
 
     def _aggregate_scores(
@@ -135,8 +135,14 @@ class ConsensusMatrix:
                 weights.append(weight)
 
             if scores:
-                # 加权平均
-                weighted_score = np.average(scores, weights=weights)
+                # 检查权重和是否为零，如果是则使用简单平均
+                if sum(weights) == 0:
+                    weighted_score = np.mean(scores)
+                    logger.warning(f"All weights are zero for {treatment.value}, using simple average")
+                else:
+                    # 加权平均
+                    weighted_score = np.average(scores, weights=weights)
+                
                 aggregated[treatment] = weighted_score
 
                 logger.debug(
@@ -287,7 +293,30 @@ class ConsensusMatrix:
     def analyze_consensus_patterns(
         self, consensus_result: ConsensusResult
     ) -> Dict[str, Any]:
-        """分析共识模式"""
+        """分析共识模式
+        1. 计算整体共识水平
+        2. 分析各角色的影响力
+        3. 评估治疗方案的极化程度
+        4. 评估决策的复杂性
+        5. 评估推荐的强度
+
+        overall_consensus_level是什么意思？
+        1. 0.0 表示完全不一致
+        2. 0.5 表示不一致
+        3. 1.0 表示完全一致
+        role_influence_analysis是什么意思？
+        1. 分析各角色在共识中的影响力
+        2. 评估每个角色对共识的贡献程度
+        3. 识别哪些角色在共识中扮演了关键角色
+        decision_complexity是什么意思？
+        1. 评估决策的复杂性
+        2. 考虑决策中涉及的角色数量和交互
+        3. 评估决策是否过于复杂，是否需要简化
+        recommendation_strength是什么意思？
+        1. 评估推荐的强度
+        2. 考虑推荐的治疗方案的效果和风险
+        3. 评估推荐是否符合患者的需求和健康状态
+        """
         analysis = {
             "overall_consensus_level": self._calculate_overall_consensus(
                 consensus_result

@@ -17,8 +17,11 @@ from ..consensus.consensus_matrix import ConsensusMatrix
 from ..consensus.dialogue_manager import MultiAgentDialogueManager
 from ..knowledge.rag_system import MedicalKnowledgeRAG
 from ..rl.rl_environment import MDTReinforcementLearning
+from ..utils.system_optimizer import get_system_optimizer, optimized_function
 
-logger = logging.getLogger(__name__)
+# 获取系统优化器实例
+system_optimizer = get_system_optimizer()
+logger = system_optimizer.get_logger(__name__)
 
 
 @dataclass
@@ -169,6 +172,7 @@ class IntegratedWorkflowManager:
 
         logger.info(f"Patient {patient_id} registered in workflow")
 
+    @optimized_function
     def run_temporal_simulation(self, patient_id: str, days: int) -> Dict[str, Any]:
         """运行时序模拟"""
         logger.info(f"Starting temporal simulation for {patient_id}, {days} days")
@@ -317,6 +321,7 @@ class IntegratedWorkflowManager:
 
         return False
 
+    @optimized_function
     def _trigger_mdt_discussion(self, patient_id: str, day: int) -> Dict[str, Any]:
         """触发MDT讨论"""
         logger.info(f"Triggering MDT discussion for {patient_id} on day {day}")

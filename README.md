@@ -316,6 +316,31 @@ mdt_medical_ai/
 - [API文档](https://docs.mdt-medical-ai.com)
 - [论文预印版](https://arxiv.org/abs/xxxx.xxxxx)
 
+## 🧾 论文编译与导出
+
+项目提供两份顶会级论文稿件（Markdown 与 Typst）位于 `docs/`：
+
+- `docs/paper_top_conference.md`
+- `docs/paper_top_conference.typ`
+
+一键编译 PDF：
+
+```bash
+python scripts/build_papers.py               # 同时编译 MD 与 Typst
+python scripts/build_papers.py --md-only     # 仅编译 Markdown
+python scripts/build_papers.py --typ-only    # 仅编译 Typst
+```
+
+生成结果：
+
+- `docs/paper_top_conference_md.pdf`
+- `docs/paper_top_conference_typst.pdf`
+
+编译依赖：
+
+- Markdown → PDF：`pandoc`（推荐）与 `xelatex` 或 `wkhtmltopdf`
+- Typst → PDF：`typst`（已采用自包含样式，无需外部模板）
+
 ## ⭐ 如果本项目对您有帮助，请给个星星支持！
 
 ---

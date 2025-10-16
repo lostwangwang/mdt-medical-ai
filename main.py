@@ -22,39 +22,42 @@ from src.knowledge.rag_system import MedicalKnowledgeRAG
 from src.rl.rl_environment import MDTReinforcementLearning, RLTrainer
 from src.integration.workflow_manager import IntegratedWorkflowManager
 from src.utils.visualization import SystemVisualizer
+from src.utils.system_optimizer import get_system_optimizer, optimized_function
 from experiments.baseline_comparison import ComparisonExperiment
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("logs/mdt_system.log"),
-        logging.StreamHandler(sys.stdout),
-    ],
-)
+# 初始化系统优化器
+system_optimizer = get_system_optimizer()
 
-logger = logging.getLogger(__name__)
+# 使用优化的日志系统
+logger = system_optimizer.get_logger(__name__)
 
 
 class MDTSystemInterface:
     """MDT系统主接口"""
 
     def __init__(self):
+        # 初始化系统优化器
+        self.system_optimizer = get_system_optimizer()
+        self.logger = self.system_optimizer.get_logger(self.__class__.__name__)
+        
+        # 初始化系统组件
         self.rag_system = MedicalKnowledgeRAG()
         self.consensus_system = ConsensusMatrix()
         self.dialogue_manager = MultiAgentDialogueManager(self.rag_system)
         self.rl_environment = MDTReinforcementLearning(self.consensus_system)
         self.workflow_manager = IntegratedWorkflowManager()
         self.visualizer = SystemVisualizer()
+        
+        self.logger.info("MDT系统接口初始化完成")
 
         logger.info("MDT System initialized successfully")
 
+    @optimized_function
     def run_single_patient_analysis(
         self, patient_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """运行单个患者的完整分析"""
-        logger.info(
+        self.logger.info(
             f"Starting analysis for patient {patient_data.get('patient_id', 'unknown')}"
         )
 
@@ -62,11 +65,11 @@ class MDTSystemInterface:
         patient_state = self._create_patient_state(patient_data)
 
         # 运行多智能体对话与共识
-        logger.info("Running multi-agent dialogue...")
+        self.logger.info("Running multi-agent dialogue...")
         consensus_result = self.dialogue_manager.conduct_mdt_discussion(patient_state)
 
         # 生成可视化
-        logger.info("Generating visualizations...")
+        self.logger.info("Generating visualizations...")
         visualizations = self.visualizer.create_patient_analysis_dashboard(
             patient_state, consensus_result
         )
@@ -94,12 +97,13 @@ class MDTSystemInterface:
             "analysis_timestamp": datetime.now().isoformat(),
         }
 
-        logger.info("Single patient analysis completed successfully")
+        self.logger.info("Single patient analysis completed successfully")
         return analysis_result
 
+    @optimized_function
     def run_training_experiment(self, episodes: int = 1000) -> Dict[str, Any]:
         """运行RL训练实验"""
-        logger.info(f"Starting RL training with {episodes} episodes")
+        self.logger.info(f"Starting RL training with {episodes} episodes")
 
         trainer = RLTrainer(self.rl_environment)
         training_results = trainer.train_dqn(episodes=episodes)
@@ -272,6 +276,11 @@ def main():
     # 初始化系统
     print("=== MDT医疗智能体系统 ===")
     print("初始化系统组件...")
+    
+    # 启动系统优化器
+    print("启动系统优化器...")
+    system_optimizer.initialize()
+    logger.info("系统优化器已启动")
 
     system = MDTSystemInterface()
 
@@ -392,6 +401,19 @@ def main():
         print(f"模拟结果已保存到: {output_file}")
 
     print(f"\n所有输出文件保存在: {args.output_dir}/")
+    
+    # 生成系统性能报告
+    print("生成系统性能报告...")
+    try:
+        report_path = system_optimizer.generate_report(args.output_dir)
+        print(f"系统性能报告已保存到: {report_path}")
+    except Exception as e:
+        logger.error(f"生成性能报告失败: {e}")
+    
+    # 关闭系统优化器
+    print("关闭系统优化器...")
+    system_optimizer.shutdown()
+    
     print("系统运行完成!")
 
 

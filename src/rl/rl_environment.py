@@ -23,6 +23,7 @@ from ..core.data_models import (
     RLAction,
     RLReward,
 )
+from .consensus_reward_mapper import ConsensusRewardMapper, RewardBreakdown
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +31,17 @@ logger = logging.getLogger(__name__)
 class MDTReinforcementLearning(gym.Env):
     """医疗决策强化学习环境"""
 
-    def __init__(self, consensus_system=None):
+    def __init__(self, consensus_system=None, reward_mapper_config=None):
+        """
+        初始化医疗决策强化学习环境
+        参数:
+        - consensus_system: 共识系统实例 (可选)
+        - reward_mapper_config: 奖励映射器配置 (可选)
+        """
         super(MDTReinforcementLearning, self).__init__()
 
         self.consensus_system = consensus_system
+        self.reward_mapper = ConsensusRewardMapper(reward_mapper_config)
         self.state_history = []
         self.action_history = []
         self.reward_history = []
@@ -171,38 +179,33 @@ class MDTReinforcementLearning(gym.Env):
         action: TreatmentOption,
         consensus_result: ConsensusResult,
         patient_state: PatientState,
+        context: Optional[Dict[str, Any]] = None
     ) -> RLReward:
         """计算奖励函数"""
-
-        # 1. 基础奖励：共识得分
-        consensus_score = consensus_result.aggregated_scores.get(action, 0.0)
-
-        # 2. 一致性奖励
-        consensus_bonus = 0.0
-        for agreement in consensus_result.agreements:
-            if agreement["treatment"] == action:
-                consensus_bonus = (
-                    agreement["consensus_score"] * agreement["agreement_strength"]
-                )
-                break
-
-        # 3. 冲突惩罚
-        conflict_penalty = 0.0
-        for conflict in consensus_result.conflicts:
-            if conflict["treatment"] == action:
-                conflict_penalty = conflict["variance"]
-                break
-
-        # 4. 患者适应性奖励
-        patient_suitability = self._calculate_patient_suitability(action, patient_state)
-
-        # 5. 综合奖励计算
-        total_reward = (
-            consensus_score * self.reward_weights["consensus_score"]
-            + consensus_bonus * self.reward_weights["consistency_bonus"]
-            - conflict_penalty * self.reward_weights["conflict_penalty"]
-            + patient_suitability * self.reward_weights["patient_suitability"]
+        
+        # 使用新的奖励映射器计算详细奖励
+        reward_breakdown = self.reward_mapper.map_consensus_to_reward(
+            consensus_result=consensus_result,
+            patient_state=patient_state,
+            selected_action=action,
+            context=context
         )
+        
+        # 保持向后兼容性，同时提供增强的奖励信息
+        # 1. 基础奖励：共识得分 (使用映射器的共识质量)
+        consensus_score = reward_breakdown.consensus_quality
+
+        # 2. 一致性奖励 (使用映射器的专家一致性)
+        consensus_bonus = reward_breakdown.expert_agreement
+
+        # 3. 冲突惩罚 (基于角色多样性的反向指标)
+        conflict_penalty = max(0.0, 1.0 - reward_breakdown.role_diversity)
+
+        # 4. 患者适应性奖励 (使用映射器的治疗适宜性)
+        patient_suitability = reward_breakdown.treatment_appropriateness
+
+        # 5. 综合奖励计算 (使用映射器的总奖励)
+        total_reward = reward_breakdown.total_reward
 
         return RLReward(
             consensus_score=consensus_score,
@@ -346,10 +349,10 @@ class MDTReinforcementLearning(gym.Env):
                 "heart_rate": np.random.randint(60, 100),
             },
             symptoms=np.random.choice(
-                [["fatigue"], ["pain"], ["fatigue", "pain"], []], 1
-            )[0],
+                ["fatigue", "pain", "fatigue,pain", "none"]
+            ),
             comorbidities=np.random.choice(
-                [[], ["diabetes"], ["hypertension"], ["diabetes", "hypertension"]]
+                ["none", "diabetes", "hypertension", "diabetes,hypertension"]
             ),
             psychological_status=np.random.choice(["stable", "anxious", "depressed"]),
             quality_of_life_score=np.random.uniform(0.3, 0.9),

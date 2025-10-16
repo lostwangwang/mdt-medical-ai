@@ -1,0 +1,325 @@
+{
+  "subject_id": 10037928,
+  "gender": "F",
+  "anchor_age": 78,
+  "allergies": [
+    ""
+  ],
+  "cancer_history": [],
+  "chronic_diseases": [
+    {
+      "icd9": "5849",
+      "desc": "Acute kidney failure, unspecified"
+    },
+    {
+      "icd9": "25080",
+      "desc": "Diabetes with other specified manifestations, type II or unspecified type, not stated as uncontrolled"
+    },
+    {
+      "icd9": "2724",
+      "desc": "Other and unspecified hyperlipidemia"
+    },
+    {
+      "icd9": "311",
+      "desc": "Depressive disorder, not elsewhere classified"
+    },
+    {
+      "icd9": "53081",
+      "desc": "Esophageal reflux"
+    },
+    {
+      "icd9": "5989",
+      "desc": "Urethral stricture, unspecified"
+    },
+    {
+      "icd9": "30000",
+      "desc": "Anxiety state, unspecified"
+    },
+    {
+      "icd9": "2809",
+      "desc": "Iron deficiency anemia, unspecified"
+    },
+    {
+      "icd9": "5859",
+      "desc": "Chronic kidney disease, unspecified"
+    },
+    {
+      "icd9": "40390",
+      "desc": "Hypertensive chronic kidney disease, unspecified, with chronic kidney disease stage I through stage IV, or unspecified"
+    }
+  ],
+  "baseline_labs": {
+    "mch": 27.2,
+    "anion_gap": 17,
+    "mchc": 31.9,
+    "mcv": 85,
+    "platelet_count": 248,
+    "white_blood_cells": 5.4,
+    "bicarbonate": 22,
+    "chloride": 101,
+    "potassium": 4.6,
+    "sodium": 135,
+    "bacteria": null,
+    "bilirubin": null,
+    "ph": 6,
+    "protein": null,
+    "rbc": 0,
+    "specific_gravity": 1.013,
+    "urine_appearance": null,
+    "urine_color": null,
+    "urine_mucous": null,
+    "urobilinogen": null,
+    "wbc": 3,
+    "yeast": null,
+    "urine_tube,_held": null,
+    "length_of_urine_collection": null,
+    "nitrite": null,
+    "leukocytes": null,
+    "ketone": null,
+    "glucose": null,
+    "epithelial_cells": null,
+    "blood": null,
+    "urea_nitrogen": 20,
+    "calcium,_total": 9.1,
+    "phosphate": 2.8,
+    "magnesium": 2,
+    "thyroid_stimulating_hormone": 1.6
+  },
+  "baseline_vitals": {
+    "heart_rate": 75,
+    "sbp": 120,
+    "dbp": 80,
+    "spo2": 98
+  },
+  "discharge_medications": [
+    {
+      "drug": "Insulin",
+      "dose": "2",
+      "route": "SC"
+    },
+    {
+      "drug": "Docusate Sodium (Liquid)",
+      "dose": "100",
+      "route": "PO/NG"
+    },
+    {
+      "drug": "Insulin",
+      "dose": "20",
+      "route": "SC"
+    },
+    {
+      "drug": "Insulin",
+      "dose": "0",
+      "route": "SC"
+    },
+    {
+      "drug": "Insulin",
+      "dose": "20",
+      "route": "SC"
+    },
+    {
+      "drug": "Albuterol Inhaler",
+      "dose": "2",
+      "route": "IH"
+    },
+    {
+      "drug": "Insulin",
+      "dose": "20",
+      "route": "SC"
+    },
+    {
+      "drug": "Insulin",
+      "dose": "16",
+      "route": "SC"
+    },
+    {
+      "drug": "Insulin",
+      "dose": "0",
+      "route": "SC"
+    },
+    {
+      "drug": "Insulin",
+      "dose": "0",
+      "route": "SC"
+    },
+    {
+      "drug": "Ranitidine",
+      "dose": "150",
+      "route": "PO/NG"
+    },
+    {
+      "drug": "Insulin",
+      "dose": "20",
+      "route": "SC"
+    },
+    {
+      "drug": "Insulin",
+      "dose": "20",
+      "route": "SC"
+    },
+    {
+      "drug": "Magnesium Sulfate",
+      "dose": "2",
+      "route": "IV"
+    },
+    {
+      "drug": "Bag",
+      "dose": "50",
+      "route": "IV"
+    },
+    {
+      "drug": "Insulin",
+      "dose": "0",
+      "route": "SC"
+    },
+    {
+      "drug": "Hydrocodone-Acetaminophen (5mg-500mg)",
+      "dose": "1-2",
+      "route": "PO"
+    },
+    {
+      "drug": "Docusate Sodium (Liquid)",
+      "dose": "100",
+      "route": "PO/NG"
+    },
+    {
+      "drug": "0.9% Sodium Chloride",
+      "dose": "1000",
+      "route": "IV"
+    },
+    {
+      "drug": "Dextrose 50%",
+      "dose": "12.5",
+      "route": "IV"
+    },
+    {
+      "drug": "Sodium Chloride 0.9%  Flush",
+      "dose": "3",
+      "route": "IV"
+    },
+    {
+      "drug": "Glucagon",
+      "dose": "1",
+      "route": "IM"
+    },
+    {
+      "drug": "Hydrocodone-Acetaminophen (5mg-500mg)",
+      "dose": "1-2",
+      "route": "PO"
+    },
+    {
+      "drug": "PNEUMOcoccal 23-valent polysaccharide vaccine",
+      "dose": "0.5",
+      "route": "IM"
+    },
+    {
+      "drug": "Glucose Gel",
+      "dose": "15",
+      "route": "PO"
+    },
+    {
+      "drug": "Insulin",
+      "dose": "0",
+      "route": "SC"
+    },
+    {
+      "drug": "Propranolol",
+      "dose": "20",
+      "route": "PO/NG"
+    },
+    {
+      "drug": "BusPIRone",
+      "dose": "10",
+      "route": "PO"
+    },
+    {
+      "drug": "Heparin",
+      "dose": "5000",
+      "route": "SC"
+    },
+    {
+      "drug": "Insulin",
+      "dose": "25",
+      "route": "SC"
+    },
+    {
+      "drug": "Losartan Potassium",
+      "dose": "100",
+      "route": "PO/NG"
+    },
+    {
+      "drug": "Hydrochlorothiazide",
+      "dose": "25",
+      "route": "PO/NG"
+    },
+    {
+      "drug": "Hydrocortisone Cream 2.5%",
+      "dose": "1",
+      "route": "TP"
+    },
+    {
+      "drug": "Atorvastatin",
+      "dose": "20",
+      "route": "PO/NG"
+    },
+    {
+      "drug": "Paroxetine",
+      "dose": "40",
+      "route": "PO/NG"
+    },
+    {
+      "drug": "Amlodipine",
+      "dose": "10",
+      "route": "PO/NG"
+    },
+    {
+      "drug": "Ferrous Sulfate",
+      "dose": "325",
+      "route": "PO/NG"
+    },
+    {
+      "drug": "Hydrochlorothiazide",
+      "dose": "25",
+      "route": "PO/NG"
+    },
+    {
+      "drug": "Amlodipine",
+      "dose": "10",
+      "route": "PO/NG"
+    },
+    {
+      "drug": "Omeprazole",
+      "dose": "40",
+      "route": "PO"
+    },
+    {
+      "drug": "Fluticasone Propionate NASAL",
+      "dose": "1",
+      "route": "NU"
+    },
+    {
+      "drug": "Multivitamins W/minerals",
+      "dose": "1",
+      "route": "PO"
+    },
+    {
+      "drug": "Cyanocobalamin",
+      "dose": "1000",
+      "route": "PO/NG"
+    },
+    {
+      "drug": "Insulin",
+      "dose": "25",
+      "route": "SC"
+    },
+    {
+      "drug": "Insulin",
+      "dose": "30",
+      "route": "SC"
+    }
+  ],
+  "daily_summaries": {
+    "summary": "患者住院期间病情总体趋于稳定，肾功能指标（肌酐、尿素氮）和电解质波动较小，血糖明显下降。最关键异常为持续性高阴离子间隙代谢性酸中毒（最高达17）伴低钠血症，提示存在急性肾损伤叠加代谢紊乱。",
+    "trend": "stable"
+  }
+}
