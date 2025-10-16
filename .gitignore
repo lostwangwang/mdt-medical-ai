@@ -132,4 +132,6 @@ local_settings.py
 # Others
 coverage/
 .prof
-test*
+*test*
+*.png
+*.txt
