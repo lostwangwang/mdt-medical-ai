@@ -79,7 +79,7 @@ class MultiAgentDialogueManager:
 
     def _initialize_discussion(self, patient_state: PatientState) -> None:
         """初始化讨论"""
-        # 获取相关医学知识 这里怎么检索? 从RAG系统中检索与患者状态相关的初始评估知识
+        # 获取相关医学知识 这里怎么检索? 从RAG系统中检索与患者状态相关的初始评估知识,要这里检索
         initial_knowledge = self.rag_system.retrieve_relevant_knowledge(
             patient_state, "initial_assessment"
         )

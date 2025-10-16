@@ -132,6 +132,9 @@ local_settings.py
 # Others
 coverage/
 .prof
+*.json
 *test*
 *.png
 *.txt
+*.faiss
+*.pkl

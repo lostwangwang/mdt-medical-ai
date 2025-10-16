@@ -291,8 +291,8 @@ class MemoryManager:
         """检查内存使用情况"""
         stats = self.get_memory_stats()
         
-        # 记录内存统计
-        self.logger.info(
+        # 记录内存统计 (改为DEBUG级别，避免在对话时显示)
+        self.logger.debug(
             f"Memory usage: {stats.memory_percent:.1f}%, "
             f"Cache memory: {stats.cache_memory / 1024 / 1024:.1f}MB"
         )

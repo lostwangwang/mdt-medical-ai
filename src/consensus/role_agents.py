@@ -141,6 +141,7 @@ class RoleAgent:
         self, patient_state: PatientState, knowledge: Dict[str, Any]
     ) -> RoleOpinion:
         """生成初始意见"""
+        
         # 我可以调用大模型吗? 可以，基于患者状态和相关知识，调用llm_interface.generate_text方法生成初始意见
         # 这个初始意见是怎么生成的? 基于患者状态和相关知识，调用_calculate_treatment_preferences和_generate_reasoning方法
         treatment_prefs = self._calculate_treatment_preferences(

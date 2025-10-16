@@ -395,6 +395,24 @@ class EnhancedFAISSManager:
             logger.error(f"Failed to get patient by ID: {e}")
             return None
     
+    def search_by_patient_id(self, patient_id: str, k: int = 5) -> List[SearchResult]:
+        """根据患者ID搜索患者相关数据"""
+        
+        try:
+            # 搜索特定患者的所有记录
+            results = self.search_by_condition(
+                condition="",  # 空条件，通过过滤器筛选
+                k=k * 2,  # 获取更多结果以便过滤
+                filters={"patient_id": patient_id}
+            )
+            
+            # 限制返回结果数量
+            return results[:k] if results else []
+            
+        except Exception as e:
+            logger.error(f"Failed to search by patient ID: {e}")
+            return []
+    
     def get_treatment_recommendations(
         self, 
         patient_state: PatientState,
