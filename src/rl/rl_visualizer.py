@@ -1,7 +1,7 @@
 """
-强化学习可视化工具
-生成学习曲线、奖励曲线和性能分析图表
-作者: AI Assistant
+Reinforcement Learning Visualization Tool
+Generate learning curves, reward curves and performance analysis charts
+Author: AI Assistant
 """
 
 import numpy as np
@@ -14,78 +14,78 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 import logging
 
-# 设置中文字体
-plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']
+# Set font configuration
+plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial']
 plt.rcParams['axes.unicode_minus'] = False
 
 logger = logging.getLogger(__name__)
 
 class RLVisualizer:
-    """强化学习可视化器"""
+    """Reinforcement Learning Visualizer"""
     
     def __init__(self, figsize: Tuple[int, int] = (15, 10)):
-        """初始化可视化器"""
+        """Initialize visualizer"""
         self.figsize = figsize
         self.colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
         
-        # 设置样式
+        # Set style
         plt.style.use('seaborn-v0_8')
         sns.set_palette("husl")
         
-        logger.info("RL可视化器初始化完成")
+        logger.info("RL Visualizer initialized successfully")
     
     def plot_learning_curve(self, training_history: Dict[str, List], 
                            window_size: int = 100, 
                            save_path: Optional[str] = None) -> plt.Figure:
-        """绘制学习曲线"""
+        """Plot learning curves"""
         fig, axes = plt.subplots(2, 2, figsize=self.figsize)
-        fig.suptitle('强化学习训练曲线', fontsize=16, fontweight='bold')
+        fig.suptitle('Reinforcement Learning Training Curves', fontsize=16, fontweight='bold')
         
         episodes = training_history.get('episodes', [])
         rewards = training_history.get('rewards', [])
         
         if not episodes or not rewards:
-            logger.warning("训练历史数据为空")
+            logger.warning("Training history data is empty")
             return fig
         
-        # 1. 奖励曲线
+        # 1. Reward curve
         ax1 = axes[0, 0]
-        ax1.plot(episodes, rewards, alpha=0.3, color='blue', label='原始奖励')
+        ax1.plot(episodes, rewards, alpha=0.3, color='blue', label='Raw Rewards')
         
-        # 移动平均
+        # Moving average
         if len(rewards) >= window_size:
             moving_avg = pd.Series(rewards).rolling(window=window_size).mean()
-            ax1.plot(episodes, moving_avg, color='red', linewidth=2, label=f'{window_size}期移动平均')
+            ax1.plot(episodes, moving_avg, color='red', linewidth=2, label=f'{window_size}-Episode Moving Average')
         
         ax1.set_xlabel('Episode')
-        ax1.set_ylabel('奖励')
-        ax1.set_title('奖励变化曲线')
+        ax1.set_ylabel('Reward')
+        ax1.set_title('Reward Change Curve')
         ax1.legend()
         ax1.grid(True, alpha=0.3)
         
-        # 2. 奖励分布
+        # 2. Reward distribution
         ax2 = axes[0, 1]
         ax2.hist(rewards, bins=50, alpha=0.7, color='green', edgecolor='black')
-        ax2.axvline(np.mean(rewards), color='red', linestyle='--', linewidth=2, label=f'平均值: {np.mean(rewards):.3f}')
-        ax2.set_xlabel('奖励值')
-        ax2.set_ylabel('频次')
-        ax2.set_title('奖励分布直方图')
+        ax2.axvline(np.mean(rewards), color='red', linestyle='--', linewidth=2, label=f'Mean: {np.mean(rewards):.3f}')
+        ax2.set_xlabel('Reward Value')
+        ax2.set_ylabel('Frequency')
+        ax2.set_title('Reward Distribution Histogram')
         ax2.legend()
         ax2.grid(True, alpha=0.3)
         
-        # 3. 累积奖励
+        # 3. Cumulative rewards
         ax3 = axes[1, 0]
         cumulative_rewards = np.cumsum(rewards)
         ax3.plot(episodes, cumulative_rewards, color='purple', linewidth=2)
         ax3.set_xlabel('Episode')
-        ax3.set_ylabel('累积奖励')
-        ax3.set_title('累积奖励曲线')
+        ax3.set_ylabel('Cumulative Reward')
+        ax3.set_title('Cumulative Reward Curve')
         ax3.grid(True, alpha=0.3)
         
-        # 4. 奖励改进趋势
+        # 4. Reward improvement trend
         ax4 = axes[1, 1]
         if len(rewards) >= 200:
-            # 计算每100个episode的平均奖励
+            # Calculate average reward per 100 episodes
             chunk_size = 100
             chunk_rewards = []
             chunk_episodes = []
@@ -96,70 +96,70 @@ class RLVisualizer:
             
             ax4.plot(chunk_episodes, chunk_rewards, marker='o', linewidth=2, markersize=6)
             ax4.set_xlabel('Episode')
-            ax4.set_ylabel(f'平均奖励 (每{chunk_size}期)')
-            ax4.set_title('学习进展趋势')
+            ax4.set_ylabel(f'Average Reward (per {chunk_size} episodes)')
+            ax4.set_title('Learning Progress Trend')
             ax4.grid(True, alpha=0.3)
         else:
-            ax4.text(0.5, 0.5, '数据不足\n(需要至少200个episodes)', 
+            ax4.text(0.5, 0.5, 'Insufficient Data\n(Need at least 200 episodes)', 
                     ha='center', va='center', transform=ax4.transAxes, fontsize=12)
-            ax4.set_title('学习进展趋势')
+            ax4.set_title('Learning Progress Trend')
         
         plt.tight_layout()
         
         if save_path:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            logger.info(f"学习曲线已保存到: {save_path}")
+            logger.info(f"Learning curve saved to: {save_path}")
         
         return fig
     
     def plot_algorithm_comparison(self, results: Dict[str, Dict], 
                                 save_path: Optional[str] = None) -> plt.Figure:
-        """比较不同算法的性能"""
+        """Compare performance of different algorithms"""
         fig, axes = plt.subplots(2, 2, figsize=self.figsize)
-        fig.suptitle('算法性能对比', fontsize=16, fontweight='bold')
+        fig.suptitle('Algorithm Performance Comparison', fontsize=16, fontweight='bold')
         
         algorithms = list(results.keys())
         colors = self.colors[:len(algorithms)]
         
-        # 1. 平均奖励对比
+        # 1. Average reward comparison
         ax1 = axes[0, 0]
         avg_rewards = [results[alg]['final_stats']['average_reward'] for alg in algorithms]
         bars1 = ax1.bar(algorithms, avg_rewards, color=colors, alpha=0.7)
-        ax1.set_ylabel('平均奖励')
-        ax1.set_title('平均奖励对比')
+        ax1.set_ylabel('Average Reward')
+        ax1.set_title('Average Reward Comparison')
         ax1.grid(True, alpha=0.3)
         
-        # 添加数值标签
+        # Add value labels
         for bar, value in zip(bars1, avg_rewards):
             ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01,
                     f'{value:.3f}', ha='center', va='bottom')
         
-        # 2. 学习曲线对比
+        # 2. Learning curve comparison
         ax2 = axes[0, 1]
         for i, alg in enumerate(algorithms):
             rewards = results[alg]['training_history']['rewards']
             episodes = results[alg]['training_history']['episodes']
             
-            # 移动平均
+            # Moving average
             window_size = min(100, len(rewards) // 10)
             if window_size > 1:
                 moving_avg = pd.Series(rewards).rolling(window=window_size).mean()
                 ax2.plot(episodes, moving_avg, color=colors[i], linewidth=2, label=alg)
         
         ax2.set_xlabel('Episode')
-        ax2.set_ylabel('奖励 (移动平均)')
-        ax2.set_title('学习曲线对比')
+        ax2.set_ylabel('Reward (Moving Average)')
+        ax2.set_title('Learning Curve Comparison')
         ax2.legend()
         ax2.grid(True, alpha=0.3)
         
-        # 3. 收敛速度对比
+        # 3. Convergence speed comparison
         ax3 = axes[1, 0]
         convergence_episodes = []
         for alg in algorithms:
             rewards = results[alg]['training_history']['rewards']
-            # 简单的收敛检测：找到奖励稳定的点
-            target_reward = np.mean(rewards[-100:]) * 0.9  # 90%的最终性能
-            convergence_ep = len(rewards)  # 默认值
+            # Simple convergence detection: find point where reward stabilizes
+            target_reward = np.mean(rewards[-100:]) * 0.9  # 90% of final performance
+            convergence_ep = len(rewards)  # Default value
             
             window_size = 50
             for i in range(window_size, len(rewards)):
@@ -170,30 +170,30 @@ class RLVisualizer:
             convergence_episodes.append(convergence_ep)
         
         bars3 = ax3.bar(algorithms, convergence_episodes, color=colors, alpha=0.7)
-        ax3.set_ylabel('收敛Episode数')
-        ax3.set_title('收敛速度对比')
+        ax3.set_ylabel('Convergence Episodes')
+        ax3.set_title('Convergence Speed Comparison')
         ax3.grid(True, alpha=0.3)
         
-        # 添加数值标签
+        # Add value labels
         for bar, value in zip(bars3, convergence_episodes):
             ax3.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 10,
                     f'{value}', ha='center', va='bottom')
         
-        # 4. 稳定性对比
+        # 4. Stability comparison
         ax4 = axes[1, 1]
         stabilities = []
         for alg in algorithms:
             rewards = results[alg]['training_history']['rewards']
-            # 计算最后100个episode的标准差作为稳定性指标
+            # Calculate standard deviation of last 100 episodes as stability metric
             stability = np.std(rewards[-100:]) if len(rewards) >= 100 else np.std(rewards)
             stabilities.append(stability)
         
         bars4 = ax4.bar(algorithms, stabilities, color=colors, alpha=0.7)
-        ax4.set_ylabel('奖励标准差')
-        ax4.set_title('性能稳定性对比 (越小越稳定)')
+        ax4.set_ylabel('Reward Standard Deviation')
+        ax4.set_title('Performance Stability Comparison (Lower is Better)')
         ax4.grid(True, alpha=0.3)
         
-        # 添加数值标签
+        # Add value labels
         for bar, value in zip(bars4, stabilities):
             ax4.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.001,
                     f'{value:.3f}', ha='center', va='bottom')
@@ -202,18 +202,18 @@ class RLVisualizer:
         
         if save_path:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            logger.info(f"算法对比图已保存到: {save_path}")
+            logger.info(f"Algorithm comparison chart saved to: {save_path}")
         
         return fig
     
     def plot_action_analysis(self, training_results: List[Dict], 
                            action_names: List[str],
                            save_path: Optional[str] = None) -> plt.Figure:
-        """分析动作选择模式"""
+        """Analyze action selection patterns"""
         fig, axes = plt.subplots(2, 2, figsize=self.figsize)
-        fig.suptitle('动作选择分析', fontsize=16, fontweight='bold')
+        fig.suptitle('Action Selection Analysis', fontsize=16, fontweight='bold')
         
-        # 收集所有动作
+        # Collect all actions
         all_actions = []
         episode_actions = []
         
@@ -223,26 +223,26 @@ class RLVisualizer:
             episode_actions.append(actions)
         
         if not all_actions:
-            logger.warning("没有动作数据")
+            logger.warning("No action data available")
             return fig
         
-        # 1. 动作分布饼图
+        # 1. Action distribution pie chart
         ax1 = axes[0, 0]
         action_counts = {}
         for action in all_actions:
             action_counts[action] = action_counts.get(action, 0) + 1
         
-        labels = [action_names[i] if i < len(action_names) else f'动作{i}' for i in action_counts.keys()]
+        labels = [action_names[i] if i < len(action_names) else f'Action{i}' for i in action_counts.keys()]
         sizes = list(action_counts.values())
         
         ax1.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90)
-        ax1.set_title('动作选择分布')
+        ax1.set_title('Action Selection Distribution')
         
-        # 2. 动作随时间变化
+        # 2. Action diversity over time
         ax2 = axes[0, 1]
         episodes = list(range(len(episode_actions)))
         
-        # 计算每个episode的动作多样性
+        # Calculate action diversity for each episode
         action_diversity = []
         for actions in episode_actions:
             if actions:
@@ -253,17 +253,17 @@ class RLVisualizer:
         
         ax2.plot(episodes, action_diversity, marker='o', markersize=3, alpha=0.7)
         ax2.set_xlabel('Episode')
-        ax2.set_ylabel('动作多样性')
-        ax2.set_title('动作多样性变化')
+        ax2.set_ylabel('Action Diversity')
+        ax2.set_title('Action Diversity Changes')
         ax2.grid(True, alpha=0.3)
         
-        # 3. 动作频次热力图
+        # 3. Action frequency heatmap
         ax3 = axes[1, 0]
         
-        # 创建动作-episode矩阵
+        # Create action-episode matrix
         num_actions = len(action_names)
         num_episodes = len(episode_actions)
-        action_matrix = np.zeros((num_actions, min(num_episodes, 100)))  # 限制显示最近100个episodes
+        action_matrix = np.zeros((num_actions, min(num_episodes, 100)))  # Limit to recent 100 episodes
         
         start_ep = max(0, num_episodes - 100)
         for i, actions in enumerate(episode_actions[start_ep:]):
@@ -272,17 +272,17 @@ class RLVisualizer:
                     action_matrix[action, i] += 1
         
         im = ax3.imshow(action_matrix, cmap='YlOrRd', aspect='auto')
-        ax3.set_xlabel('Episode (最近100个)')
-        ax3.set_ylabel('动作类型')
+        ax3.set_xlabel('Episode (Recent 100)')
+        ax3.set_ylabel('Action Type')
         ax3.set_yticks(range(num_actions))
-        ax3.set_yticklabels([action_names[i] if i < len(action_names) else f'动作{i}' for i in range(num_actions)])
-        ax3.set_title('动作选择热力图')
+        ax3.set_yticklabels([action_names[i] if i < len(action_names) else f'Action{i}' for i in range(num_actions)])
+        ax3.set_title('Action Selection Heatmap')
         plt.colorbar(im, ax=ax3)
         
-        # 4. 动作转换矩阵
+        # 4. Action transition matrix
         ax4 = axes[1, 1]
         
-        # 计算动作转换概率
+        # Calculate action transition probabilities
         transition_matrix = np.zeros((num_actions, num_actions))
         
         for actions in episode_actions:
@@ -290,37 +290,37 @@ class RLVisualizer:
                 if actions[i] < num_actions and actions[i+1] < num_actions:
                     transition_matrix[actions[i], actions[i+1]] += 1
         
-        # 归一化
+        # Normalize
         row_sums = transition_matrix.sum(axis=1, keepdims=True)
         transition_matrix = np.divide(transition_matrix, row_sums, 
                                     out=np.zeros_like(transition_matrix), 
                                     where=row_sums!=0)
         
         im2 = ax4.imshow(transition_matrix, cmap='Blues', vmin=0, vmax=1)
-        ax4.set_xlabel('下一个动作')
-        ax4.set_ylabel('当前动作')
+        ax4.set_xlabel('Next Action')
+        ax4.set_ylabel('Current Action')
         ax4.set_xticks(range(num_actions))
         ax4.set_yticks(range(num_actions))
-        ax4.set_xticklabels([action_names[i] if i < len(action_names) else f'动作{i}' for i in range(num_actions)], rotation=45)
-        ax4.set_yticklabels([action_names[i] if i < len(action_names) else f'动作{i}' for i in range(num_actions)])
-        ax4.set_title('动作转换概率矩阵')
+        ax4.set_xticklabels([action_names[i] if i < len(action_names) else f'Action{i}' for i in range(num_actions)], rotation=45)
+        ax4.set_yticklabels([action_names[i] if i < len(action_names) else f'Action{i}' for i in range(num_actions)])
+        ax4.set_title('Action Transition Probability Matrix')
         plt.colorbar(im2, ax=ax4)
         
         plt.tight_layout()
         
         if save_path:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            logger.info(f"动作分析图已保存到: {save_path}")
+            logger.info(f"Action analysis chart saved to: {save_path}")
         
         return fig
     
     def plot_reward_components(self, training_results: List[Dict],
                              save_path: Optional[str] = None) -> plt.Figure:
-        """分析奖励组件"""
+        """Analyze reward components"""
         fig, axes = plt.subplots(2, 2, figsize=self.figsize)
-        fig.suptitle('奖励组件分析', fontsize=16, fontweight='bold')
+        fig.suptitle('Reward Components Analysis', fontsize=16, fontweight='bold')
         
-        # 提取奖励组件数据
+        # Extract reward component data
         episodes = []
         consensus_scores = []
         stability_scores = []
@@ -337,47 +337,47 @@ class RLVisualizer:
                 effectiveness_scores.append(breakdown.get('effectiveness_score', 0))
         
         if not episodes:
-            logger.warning("没有奖励组件数据")
+            logger.warning("No reward component data available")
             return fig
         
-        # 1. 奖励组件时间序列
+        # 1. Reward component time series
         ax1 = axes[0, 0]
-        ax1.plot(episodes, consensus_scores, label='共识得分', alpha=0.7)
-        ax1.plot(episodes, stability_scores, label='稳定性得分', alpha=0.7)
-        ax1.plot(episodes, safety_scores, label='安全性得分', alpha=0.7)
-        ax1.plot(episodes, effectiveness_scores, label='有效性得分', alpha=0.7)
+        ax1.plot(episodes, consensus_scores, label='Consensus Score', alpha=0.7)
+        ax1.plot(episodes, stability_scores, label='Stability Score', alpha=0.7)
+        ax1.plot(episodes, safety_scores, label='Safety Score', alpha=0.7)
+        ax1.plot(episodes, effectiveness_scores, label='Effectiveness Score', alpha=0.7)
         ax1.set_xlabel('Episode')
-        ax1.set_ylabel('得分')
-        ax1.set_title('奖励组件变化')
+        ax1.set_ylabel('Score')
+        ax1.set_title('Reward Component Changes')
         ax1.legend()
         ax1.grid(True, alpha=0.3)
         
-        # 2. 奖励组件分布
+        # 2. Reward component distribution
         ax2 = axes[0, 1]
         components_data = [consensus_scores, stability_scores, safety_scores, effectiveness_scores]
-        component_names = ['共识得分', '稳定性得分', '安全性得分', '有效性得分']
+        component_names = ['Consensus Score', 'Stability Score', 'Safety Score', 'Effectiveness Score']
         
         ax2.boxplot(components_data, labels=component_names)
-        ax2.set_ylabel('得分')
-        ax2.set_title('奖励组件分布')
+        ax2.set_ylabel('Score')
+        ax2.set_title('Reward Component Distribution')
         ax2.tick_params(axis='x', rotation=45)
         ax2.grid(True, alpha=0.3)
         
-        # 3. 奖励组件相关性
+        # 3. Reward component correlation
         ax3 = axes[1, 0]
         
-        # 创建相关性矩阵
+        # Create correlation matrix
         data_df = pd.DataFrame({
-            '共识得分': consensus_scores,
-            '稳定性得分': stability_scores,
-            '安全性得分': safety_scores,
-            '有效性得分': effectiveness_scores
+            'Consensus Score': consensus_scores,
+            'Stability Score': stability_scores,
+            'Safety Score': safety_scores,
+            'Effectiveness Score': effectiveness_scores
         })
         
         correlation_matrix = data_df.corr()
         im = ax3.imshow(correlation_matrix, cmap='RdBu', vmin=-1, vmax=1)
         
-        # 添加文本标注
+        # Add text annotations
         for i in range(len(component_names)):
             for j in range(len(component_names)):
                 text = ax3.text(j, i, f'{correlation_matrix.iloc[i, j]:.2f}',
@@ -387,10 +387,10 @@ class RLVisualizer:
         ax3.set_yticks(range(len(component_names)))
         ax3.set_xticklabels(component_names, rotation=45)
         ax3.set_yticklabels(component_names)
-        ax3.set_title('奖励组件相关性')
+        ax3.set_title('Reward Component Correlation')
         plt.colorbar(im, ax=ax3)
         
-        # 4. 奖励组件贡献度
+        # 4. Reward component contribution
         ax4 = axes[1, 1]
         
         avg_contributions = [
@@ -401,12 +401,12 @@ class RLVisualizer:
         ]
         
         bars = ax4.bar(component_names, avg_contributions, color=self.colors[:4], alpha=0.7)
-        ax4.set_ylabel('平均得分')
-        ax4.set_title('平均奖励组件贡献')
+        ax4.set_ylabel('Average Score')
+        ax4.set_title('Average Reward Component Contribution')
         ax4.tick_params(axis='x', rotation=45)
         ax4.grid(True, alpha=0.3)
         
-        # 添加数值标签
+        # Add value labels
         for bar, value in zip(bars, avg_contributions):
             ax4.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01,
                     f'{value:.3f}', ha='center', va='bottom')
@@ -415,16 +415,16 @@ class RLVisualizer:
         
         if save_path:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            logger.info(f"奖励组件分析图已保存到: {save_path}")
+            logger.info(f"Reward components analysis chart saved to: {save_path}")
         
         return fig
     
     def create_interactive_dashboard(self, results: Dict[str, Any]) -> go.Figure:
-        """创建交互式仪表板"""
-        # 创建子图
+        """Create interactive dashboard"""
+        # Create subplots
         fig = make_subplots(
             rows=2, cols=2,
-            subplot_titles=('学习曲线', '奖励分布', '动作分布', '性能指标'),
+            subplot_titles=('Learning Curve', 'Reward Distribution', 'Action Distribution', 'Performance Metrics'),
             specs=[[{"secondary_y": False}, {"secondary_y": False}],
                    [{"type": "pie"}, {"type": "bar"}]]
         )
@@ -434,21 +434,21 @@ class RLVisualizer:
         rewards = training_history.get('rewards', [])
         
         if episodes and rewards:
-            # 1. 学习曲线
+            # 1. Learning curve
             fig.add_trace(
-                go.Scatter(x=episodes, y=rewards, mode='lines', name='奖励',
+                go.Scatter(x=episodes, y=rewards, mode='lines', name='Rewards',
                           line=dict(color='blue', width=2)),
                 row=1, col=1
             )
             
-            # 2. 奖励分布
+            # 2. Reward distribution
             fig.add_trace(
-                go.Histogram(x=rewards, name='奖励分布', nbinsx=30,
+                go.Histogram(x=rewards, name='Reward Distribution', nbinsx=30,
                            marker_color='green', opacity=0.7),
                 row=1, col=2
             )
             
-            # 3. 动作分布 (如果有动作数据)
+            # 3. Action distribution (if action data available)
             if 'training_results' in results:
                 all_actions = []
                 for result in results['training_results']:
@@ -462,14 +462,14 @@ class RLVisualizer:
                     fig.add_trace(
                         go.Pie(labels=list(action_counts.keys()),
                               values=list(action_counts.values()),
-                              name="动作分布"),
+                              name="Action Distribution"),
                         row=2, col=1
                     )
             
-            # 4. 性能指标
+            # 4. Performance metrics
             final_stats = results.get('final_stats', {})
             if final_stats:
-                metrics = ['平均奖励', '最大奖励', '最小奖励', '标准差']
+                metrics = ['Average Reward', 'Max Reward', 'Min Reward', 'Std Deviation']
                 values = [
                     final_stats.get('average_reward', 0),
                     final_stats.get('max_reward', 0),
@@ -478,13 +478,13 @@ class RLVisualizer:
                 ]
                 
                 fig.add_trace(
-                    go.Bar(x=metrics, y=values, name='性能指标',
+                    go.Bar(x=metrics, y=values, name='Performance Metrics',
                           marker_color='orange'),
                     row=2, col=2
                 )
         
         fig.update_layout(
-            title_text="强化学习训练仪表板",
+            title_text="Reinforcement Learning Training Dashboard",
             showlegend=True,
             height=800
         )
@@ -492,11 +492,11 @@ class RLVisualizer:
         return fig
     
     def save_all_plots(self, results: Dict[str, Any], output_dir: str):
-        """保存所有图表"""
+        """Save all plots"""
         import os
         os.makedirs(output_dir, exist_ok=True)
         
-        # 学习曲线
+        # Learning curve
         if 'training_history' in results:
             fig1 = self.plot_learning_curve(
                 results['training_history'],
@@ -504,17 +504,17 @@ class RLVisualizer:
             )
             plt.close(fig1)
         
-        # 动作分析
+        # Action analysis
         if 'training_results' in results:
-            action_names = ['保守治疗', '药物强化', '介入治疗', '手术治疗', '综合治疗', '紧急处理']
+            action_names = ['Conservative Treatment', 'Drug Enhancement', 'Intervention', 'Surgery', 'Comprehensive Treatment', 'Emergency Treatment']
             fig2 = self.plot_action_analysis(
                 results['training_results'],
-                action_names,
+                action_names=action_names,
                 save_path=os.path.join(output_dir, 'action_analysis.png')
             )
             plt.close(fig2)
         
-        # 奖励组件分析
+        # Reward components analysis
         if 'training_results' in results:
             fig3 = self.plot_reward_components(
                 results['training_results'],
@@ -522,4 +522,4 @@ class RLVisualizer:
             )
             plt.close(fig3)
         
-        logger.info(f"所有图表已保存到: {output_dir}")
+        logger.info(f"All plots saved to: {output_dir}")

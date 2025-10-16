@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 class DataGenerationConfig:
     """数据生成配置"""
     # LLM配置
-    llm_model: str = "gpt-3.5-turbo"
+    llm_model: str = os.getenv("LLM_MODEL")
     llm_temperature: float = 0.7
     llm_max_tokens: int = 1000
     

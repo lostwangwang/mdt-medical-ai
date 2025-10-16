@@ -1,8 +1,8 @@
 """
-系统可视化工具
-文件路径: src/utils/visualization.py
-作者: 团队共同维护 (姚刚主要贡献可视化逻辑)
-功能: 提供MDT系统的各种可视化功能
+System Visualization Tools
+File path: src/utils/visualization.py
+Author: Team maintenance (Yao Gang main contributor for visualization logic)
+Function: Provide various visualization functions for MDT system
 """
 
 import matplotlib.pyplot as plt
@@ -23,48 +23,48 @@ from ..core.data_models import PatientState, ConsensusResult, TreatmentOption, R
 
 logger = logging.getLogger(__name__)
 
-# 设置中文字体支持
-plt.rcParams["font.sans-serif"] = ["SimHei", "Arial Unicode MS", "DejaVu Sans"]
+# Set matplotlib parameters for better display
+plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "sans-serif"]
 plt.rcParams["axes.unicode_minus"] = False
 
-# 颜色主题
+# Color themes
 COLOR_THEMES = {
     "medical": {
-        "primary": "#2E86C1",  # 医疗蓝
-        "secondary": "#E74C3C",  # 急诊红
-        "success": "#27AE60",  # 健康绿
-        "warning": "#F39C12",  # 警告橙
-        "info": "#8E44AD",  # 信息紫
-        "light": "#ECF0F1",  # 浅灰
-        "dark": "#2C3E50",  # 深蓝灰
+        "primary": "#2E86C1",  # Medical blue
+        "secondary": "#E74C3C",  # Emergency red
+        "success": "#27AE60",  # Health green
+        "warning": "#F39C12",  # Warning orange
+        "info": "#8E44AD",  # Info purple
+        "light": "#ECF0F1",  # Light gray
+        "dark": "#2C3E50",  # Dark blue-gray
     },
     "roles": {
-        "oncologist": "#E74C3C",  # 红色
-        "radiologist": "#3498DB",  # 蓝色
-        "nurse": "#2ECC71",  # 绿色
-        "psychologist": "#9B59B6",  # 紫色
-        "patient_advocate": "#F39C12",  # 橙色
+        "oncologist": "#E74C3C",  # Red
+        "radiologist": "#3498DB",  # Blue
+        "nurse": "#2ECC71",  # Green
+        "psychologist": "#9B59B6",  # Purple
+        "patient_advocate": "#F39C12",  # Orange
     },
     "treatments": {
-        "surgery": "#E74C3C",  # 红色
-        "chemotherapy": "#8E44AD",  # 紫色
-        "radiotherapy": "#3498DB",  # 蓝色
-        "immunotherapy": "#2ECC71",  # 绿色
-        "palliative_care": "#F39C12",  # 橙色
-        "watchful_waiting": "#95A5A6",  # 灰色
+        "surgery": "#E74C3C",  # Red
+        "chemotherapy": "#8E44AD",  # Purple
+        "radiotherapy": "#3498DB",  # Blue
+        "immunotherapy": "#2ECC71",  # Green
+        "palliative_care": "#F39C12",  # Orange
+        "watchful_waiting": "#95A5A6",  # Gray
     },
 }
 
 
 class SystemVisualizer:
-    """系统可视化器"""
+    """System Visualizer"""
 
     def __init__(self, theme: str = "medical"):
         self.theme = COLOR_THEMES.get(theme, COLOR_THEMES["medical"])
         self.figure_size = (12, 8)
         self.dpi = 300
 
-        # 设置默认样式
+        # Set default style
         plt.style.use("seaborn-v0_8")
         sns.set_palette("husl")
 
@@ -73,37 +73,37 @@ class SystemVisualizer:
     def create_patient_analysis_dashboard(
         self, patient_state: PatientState, consensus_result: ConsensusResult
     ) -> Dict[str, Any]:
-        """创建患者分析仪表板"""
+        """Create patient analysis dashboard"""
         logger.info(
             f"Creating patient analysis dashboard for {patient_state.patient_id}"
         )
 
         dashboard = {}
 
-        # 1. 患者基本信息卡片
+        # 1. Patient basic information card
         dashboard["patient_info"] = self._create_patient_info_card(patient_state)
 
-        # 2. 共识矩阵热力图
+        # 2. Consensus matrix heatmap
         dashboard["consensus_heatmap"] = self._create_consensus_heatmap(
             consensus_result
         )
 
-        # 3. 治疗方案雷达图
+        # 3. Treatment plan radar chart
         dashboard["treatment_radar"] = self._create_treatment_radar_chart(
             consensus_result
         )
 
-        # 4. 角色意见对比图
+        # 4. Role opinion comparison chart
         dashboard["role_comparison"] = self._create_role_comparison_chart(
             consensus_result
         )
 
-        # 5. 冲突与一致性分析
+        # 5. Conflict and consistency analysis
         dashboard["conflict_analysis"] = self._create_conflict_analysis_chart(
             consensus_result
         )
 
-        # 6. 对话流程图
+        # 6. Dialogue flow chart
         if (
             hasattr(consensus_result, "dialogue_summary")
             and consensus_result.dialogue_summary
@@ -118,25 +118,25 @@ class SystemVisualizer:
     def create_training_dashboard(
         self, training_results: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """创建训练结果仪表板"""
+        """Create training results dashboard"""
         logger.info("Creating training dashboard")
 
         dashboard = {}
 
-        # 1. 学习曲线
+        # 1. Learning curve
         dashboard["learning_curve"] = self._create_learning_curve(training_results)
 
-        # 2. 奖励分布
+        # 2. Reward distribution
         dashboard["reward_distribution"] = self._create_reward_distribution(
             training_results
         )
 
-        # 3. 性能指标趋势
+        # 3. Performance metrics trends
         dashboard["performance_trends"] = self._create_performance_trends(
             training_results
         )
 
-        # 4. 收敛分析
+        # 4. Convergence analysis
         dashboard["convergence_analysis"] = self._create_convergence_analysis(
             training_results
         )
@@ -147,27 +147,27 @@ class SystemVisualizer:
     def create_temporal_analysis_dashboard(
         self, simulation_results: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """创建时序分析仪表板"""
+        """Create temporal analysis dashboard"""
         logger.info("Creating temporal analysis dashboard")
 
         dashboard = {}
 
-        # 1. 时序决策轨迹
+        # 1. Decision timeline
         dashboard["decision_timeline"] = self._create_decision_timeline(
             simulation_results
         )
 
-        # 2. 患者状态演化
+        # 2. Patient state evolution
         dashboard["patient_evolution"] = self._create_patient_evolution_chart(
             simulation_results
         )
 
-        # 3. 共识得分趋势
+        # 3. Consensus score trends
         dashboard["consensus_trends"] = self._create_consensus_trends(
             simulation_results
         )
 
-        # 4. 系统性能指标
+        # 4. System performance metrics
         dashboard["system_metrics"] = self._create_system_metrics_chart(
             simulation_results
         )
@@ -176,31 +176,31 @@ class SystemVisualizer:
         return dashboard
 
     def _create_patient_info_card(self, patient_state: PatientState) -> plt.Figure:
-        """创建患者信息卡片"""
+        """Create patient information card"""
         fig, ax = plt.subplots(1, 1, figsize=(10, 6))
         ax.axis("off")
 
-        # 患者基本信息
+        # Patient basic information
         info_text = f"""
-        患者ID: {patient_state.patient_id}
-        年龄: {patient_state.age}岁
-        诊断: {patient_state.diagnosis}
-        分期: {patient_state.stage}期
-        生活质量评分: {patient_state.quality_of_life_score:.2f}
-        心理状态: {patient_state.psychological_status}
+        Patient ID: {patient_state.patient_id}
+        Age: {patient_state.age} years
+        Diagnosis: {patient_state.diagnosis}
+        Stage: Stage {patient_state.stage}
+        Quality of Life Score: {patient_state.quality_of_life_score:.2f}
+        Psychological Status: {patient_state.psychological_status}
         
-        实验室结果:
+        Laboratory Results:
         {self._format_dict_as_text(patient_state.lab_results, indent=2)}
         
-        生命体征:
+        Vital Signs:
         {self._format_dict_as_text(patient_state.vital_signs, indent=2)}
         
-        症状: {', '.join(patient_state.symptoms) if patient_state.symptoms else '无'}
+        Symptoms: {', '.join(patient_state.symptoms) if patient_state.symptoms else 'None'}
         
-        并发症: {', '.join(patient_state.comorbidities) if patient_state.comorbidities else '无'}
+        Comorbidities: {', '.join(patient_state.comorbidities) if patient_state.comorbidities else 'None'}
         """
 
-        # 添加背景色和边框
+        # Add background color and border
         bbox_props = dict(
             boxstyle="round,pad=0.5", facecolor=self.theme["light"], alpha=0.8
         )
@@ -216,7 +216,7 @@ class SystemVisualizer:
         )
 
         ax.set_title(
-            f"患者信息卡片 - {patient_state.patient_id}",
+            f"Patient Information Card - {patient_state.patient_id}",
             fontsize=16,
             fontweight="bold",
             color=self.theme["primary"],
@@ -228,24 +228,24 @@ class SystemVisualizer:
     def _create_consensus_heatmap(
         self, consensus_result: ConsensusResult
     ) -> plt.Figure:
-        """创建共识矩阵热力图"""
+        """Create consensus matrix heatmap"""
         fig, ax = plt.subplots(1, 1, figsize=self.figure_size)
 
-        # 获取共识矩阵数据
+        # Get consensus matrix data
         consensus_matrix = consensus_result.consensus_matrix
 
-        # 创建热力图
+        # Create heatmap
         im = ax.imshow(
             consensus_matrix.values, cmap="RdYlGn", aspect="auto", vmin=-1, vmax=1
         )
 
-        # 设置坐标轴标签
+        # Set axis labels
         ax.set_xticks(range(len(consensus_matrix.columns)))
         ax.set_xticklabels(consensus_matrix.columns, rotation=45, ha="right")
         ax.set_yticks(range(len(consensus_matrix.index)))
         ax.set_yticklabels(consensus_matrix.index)
 
-        # 添加数值标注
+        # Add value annotations
         for i in range(len(consensus_matrix.index)):
             for j in range(len(consensus_matrix.columns)):
                 value = consensus_matrix.iloc[i, j]
@@ -260,18 +260,18 @@ class SystemVisualizer:
                     fontweight="bold",
                 )
 
-        # 添加颜色条
+        # Add colorbar
         cbar = plt.colorbar(im, ax=ax)
-        cbar.set_label("支持度 (-1: 强烈反对, +1: 强烈支持)", rotation=270, labelpad=15)
+        cbar.set_label("Support Level (-1: Strongly Oppose, +1: Strongly Support)", rotation=270, labelpad=15)
 
         ax.set_title(
-            "医疗团队共识矩阵",
+            "Medical Team Consensus Matrix",
             fontsize=16,
             fontweight="bold",
             color=self.theme["primary"],
         )
-        ax.set_xlabel("医疗团队角色", fontsize=12)
-        ax.set_ylabel("治疗方案", fontsize=12)
+        ax.set_xlabel("Medical Team Roles", fontsize=12)
+        ax.set_ylabel("Treatment Options", fontsize=12)
 
         plt.tight_layout()
         return fig
@@ -279,12 +279,12 @@ class SystemVisualizer:
     def _create_treatment_radar_chart(
         self, consensus_result: ConsensusResult
     ) -> go.Figure:
-        """创建治疗方案雷达图"""
-        # 准备数据
+        """Create treatment options radar chart"""
+        # Prepare data
         treatments = list(consensus_result.aggregated_scores.keys())
         scores = list(consensus_result.aggregated_scores.values())
 
-        # 创建雷达图
+        # Create radar chart
         fig = go.Figure()
 
         fig.add_trace(
@@ -292,7 +292,7 @@ class SystemVisualizer:
                 r=scores,
                 theta=[t.value for t in treatments],
                 fill="toself",
-                name="共识评分",
+                name="Consensus Score",
                 line_color=self.theme["primary"],
             )
         )
@@ -300,7 +300,7 @@ class SystemVisualizer:
         fig.update_layout(
             polar=dict(radialaxis=dict(visible=True, range=[-1, 1])),
             title={
-                "text": "治疗方案共识雷达图",
+                "text": "Treatment Options Consensus Radar Chart",
                 "x": 0.5,
                 "xanchor": "center",
                 "font": {"size": 16, "color": self.theme["primary"]},
@@ -313,14 +313,14 @@ class SystemVisualizer:
     def _create_role_comparison_chart(
         self, consensus_result: ConsensusResult
     ) -> plt.Figure:
-        """创建角色意见对比图"""
+        """Create role opinion comparison chart"""
         fig, ax = plt.subplots(1, 1, figsize=(14, 8))
 
-        # 准备数据
+        # Prepare data
         roles = list(consensus_result.role_opinions.keys())
         treatments = list(TreatmentOption)
 
-        # 创建分组条形图
+        # Create grouped bar chart
         x = np.arange(len(treatments))
         width = 0.15
 
@@ -342,9 +342,9 @@ class SystemVisualizer:
                     alpha=0.8,
                 )
 
-                # 添加数值标签
+                # Add value labels
                 for bar, score in zip(bars, scores):
-                    if abs(score) > 0.1:  # 只显示显著的值
+                    if abs(score) > 0.1:  # Only show significant values
                         height = bar.get_height()
                         ax.text(
                             bar.get_x() + bar.get_width() / 2.0,
@@ -355,11 +355,11 @@ class SystemVisualizer:
                             fontsize=8,
                         )
 
-        # 设置图表属性
-        ax.set_xlabel("治疗方案", fontsize=12)
-        ax.set_ylabel("支持度评分", fontsize=12)
+        # Set chart properties
+        ax.set_xlabel("Treatment Options", fontsize=12)
+        ax.set_ylabel("Support Score", fontsize=12)
         ax.set_title(
-            "各角色治疗方案偏好对比",
+            "Treatment Preference Comparison by Role",
             fontsize=16,
             fontweight="bold",
             color=self.theme["primary"],
@@ -376,10 +376,10 @@ class SystemVisualizer:
     def _create_conflict_analysis_chart(
         self, consensus_result: ConsensusResult
     ) -> plt.Figure:
-        """创建冲突与一致性分析图"""
+        """Create conflict and consistency analysis chart"""
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
 
-        # 左图：冲突分析
+        # Left chart: Conflict analysis
         if consensus_result.conflicts:
             conflicts_df = pd.DataFrame(consensus_result.conflicts)
             treatments = [
@@ -392,12 +392,12 @@ class SystemVisualizer:
             bars1 = ax1.bar(
                 treatments, variances, color=self.theme["secondary"], alpha=0.7
             )
-            ax1.set_title("治疗方案分歧程度", fontsize=14, fontweight="bold")
-            ax1.set_xlabel("治疗方案")
-            ax1.set_ylabel("分歧程度（方差）")
+            ax1.set_title("Treatment Option Disagreement Level", fontsize=14, fontweight="bold")
+            ax1.set_xlabel("Treatment Options")
+            ax1.set_ylabel("Disagreement Level (Variance)")
             ax1.tick_params(axis="x", rotation=45)
 
-            # 添加数值标签
+            # Add value labels
             for bar, variance in zip(bars1, variances):
                 height = bar.get_height()
                 ax1.text(
@@ -411,16 +411,16 @@ class SystemVisualizer:
             ax1.text(
                 0.5,
                 0.5,
-                "无显著冲突",
+                "No Significant Conflicts",
                 ha="center",
                 va="center",
                 transform=ax1.transAxes,
                 fontsize=16,
                 color=self.theme["success"],
             )
-            ax1.set_title("治疗方案分歧程度", fontsize=14, fontweight="bold")
+            ax1.set_title("Treatment Option Disagreement Level", fontsize=14, fontweight="bold")
 
-        # 右图：一致性分析
+        # Right chart: Consistency analysis
         if consensus_result.agreements:
             agreements_df = pd.DataFrame(consensus_result.agreements)
             treatments = [
@@ -435,12 +435,12 @@ class SystemVisualizer:
             bars2 = ax2.bar(
                 treatments, strengths, color=self.theme["success"], alpha=0.7
             )
-            ax2.set_title("治疗方案一致性强度", fontsize=14, fontweight="bold")
-            ax2.set_xlabel("治疗方案")
-            ax2.set_ylabel("一致性强度")
+            ax2.set_title("Treatment Option Agreement Strength", fontsize=14, fontweight="bold")
+            ax2.set_xlabel("Treatment Options")
+            ax2.set_ylabel("Agreement Strength")
             ax2.tick_params(axis="x", rotation=45)
 
-            # 添加数值标签
+            # Add value labels
             for bar, strength in zip(bars2, strengths):
                 height = bar.get_height()
                 ax2.text(
@@ -454,14 +454,14 @@ class SystemVisualizer:
             ax2.text(
                 0.5,
                 0.5,
-                "无强一致性",
+                "No Strong Agreement",
                 ha="center",
                 va="center",
                 transform=ax2.transAxes,
                 fontsize=16,
                 color=self.theme["warning"],
             )
-            ax2.set_title("治疗方案一致性强度", fontsize=14, fontweight="bold")
+            ax2.set_title("Treatment Option Agreement Strength", fontsize=14, fontweight="bold")
 
         plt.tight_layout()
         return fig
@@ -469,17 +469,17 @@ class SystemVisualizer:
     def _create_dialogue_flow_chart(
         self, consensus_result: ConsensusResult
     ) -> go.Figure:
-        """创建对话流程图"""
+        """Create dialogue flow chart"""
         dialogue_summary = consensus_result.dialogue_summary
 
-        # 创建网络图表示对话流程
+        # Create network graph representing dialogue flow
         fig = go.Figure()
 
-        # 模拟对话节点和连接
+        # Simulate dialogue nodes and connections
         if dialogue_summary and "key_topics" in dialogue_summary:
             topics = [topic[0].value for topic in dialogue_summary["key_topics"][:5]]
 
-            # 创建桑基图显示话题流转
+            # Create Sankey diagram showing topic flow
             source = []
             target = []
             value = []
@@ -504,7 +504,7 @@ class SystemVisualizer:
 
         fig.update_layout(
             title={
-                "text": "MDT对话流程图",
+                "text": "MDT Dialogue Flow Chart",
                 "x": 0.5,
                 "xanchor": "center",
                 "font": {"size": 16, "color": self.theme["primary"]},
@@ -514,7 +514,7 @@ class SystemVisualizer:
         return fig
 
     def _create_learning_curve(self, training_results: Dict[str, Any]) -> plt.Figure:
-        """创建学习曲线"""
+        """Create learning curve"""
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
 
         learning_curve = training_results.get("learning_curve", [])
@@ -523,12 +523,12 @@ class SystemVisualizer:
 
         episodes = list(range(len(learning_curve)))
 
-        # 原始学习曲线
+        # Original learning curve
         ax1.plot(
             episodes, learning_curve, alpha=0.6, color=self.theme["info"], linewidth=1
         )
 
-        # 移动平均
+        # Moving average
         window_size = max(1, len(learning_curve) // 20)
         if window_size > 1:
             moving_avg = pd.Series(learning_curve).rolling(window=window_size).mean()
@@ -537,16 +537,16 @@ class SystemVisualizer:
                 moving_avg,
                 color=self.theme["primary"],
                 linewidth=2,
-                label=f"移动平均({window_size})",
+                label=f"Moving Average ({window_size})",
             )
 
-        ax1.set_xlabel("训练轮次")
-        ax1.set_ylabel("奖励值")
-        ax1.set_title("强化学习训练曲线", fontweight="bold")
+        ax1.set_xlabel("Training Episodes")
+        ax1.set_ylabel("Reward Value")
+        ax1.set_title("Reinforcement Learning Training Curve", fontweight="bold")
         ax1.grid(True, alpha=0.3)
         ax1.legend()
 
-        # 奖励分布直方图
+        # Reward distribution histogram
         ax2.hist(
             learning_curve,
             bins=50,
@@ -554,9 +554,9 @@ class SystemVisualizer:
             color=self.theme["secondary"],
             edgecolor="black",
         )
-        ax2.set_xlabel("奖励值")
-        ax2.set_ylabel("频次")
-        ax2.set_title("奖励分布直方图", fontweight="bold")
+        ax2.set_xlabel("Reward Value")
+        ax2.set_ylabel("Frequency")
+        ax2.set_title("Reward Distribution Histogram", fontweight="bold")
         ax2.grid(True, alpha=0.3)
 
         plt.tight_layout()
@@ -565,7 +565,7 @@ class SystemVisualizer:
     def _create_reward_distribution(
         self, training_results: Dict[str, Any]
     ) -> plt.Figure:
-        """创建奖励分布图"""
+        """Create reward distribution chart"""
         fig, ax = plt.subplots(1, 1, figsize=self.figure_size)
 
         learning_curve = training_results.get("learning_curve", [])
@@ -573,7 +573,7 @@ class SystemVisualizer:
             ax.text(
                 0.5,
                 0.5,
-                "无训练数据",
+                "No Training Data",
                 ha="center",
                 va="center",
                 transform=ax.transAxes,
@@ -581,27 +581,27 @@ class SystemVisualizer:
             )
             return fig
 
-        # 创建箱线图和violin图的组合
+        # Create combination of box plot and violin plot
         parts = ax.violinplot(
             [learning_curve], positions=[1], widths=0.8, showmeans=True
         )
 
-        # 自定义颜色
+        # Customize colors
         for pc in parts["bodies"]:
             pc.set_facecolor(self.theme["primary"])
             pc.set_alpha(0.6)
 
-        # 添加统计信息
+        # Add statistical information
         mean_reward = np.mean(learning_curve)
         std_reward = np.std(learning_curve)
         max_reward = np.max(learning_curve)
         min_reward = np.min(learning_curve)
 
         stats_text = f"""
-        平均奖励: {mean_reward:.3f}
-        标准差: {std_reward:.3f}
-        最大奖励: {max_reward:.3f}
-        最小奖励: {min_reward:.3f}
+        Mean Reward: {mean_reward:.3f}
+        Std Dev: {std_reward:.3f}
+        Max Reward: {max_reward:.3f}
+        Min Reward: {min_reward:.3f}
         """
 
         ax.text(
@@ -614,10 +614,10 @@ class SystemVisualizer:
             bbox=dict(boxstyle="round,pad=0.3", facecolor=self.theme["light"]),
         )
 
-        ax.set_title("训练奖励分布分析", fontsize=16, fontweight="bold")
-        ax.set_ylabel("奖励值")
+        ax.set_title("Training Reward Distribution Analysis", fontsize=16, fontweight="bold")
+        ax.set_ylabel("Reward Value")
         ax.set_xticks([1])
-        ax.set_xticklabels(["奖励分布"])
+        ax.set_xticklabels(["Reward Distribution"])
         ax.grid(True, alpha=0.3)
 
         plt.tight_layout()
@@ -626,31 +626,31 @@ class SystemVisualizer:
     def _create_performance_trends(
         self, training_results: Dict[str, Any]
     ) -> plt.Figure:
-        """创建性能指标趋势图"""
+        """Create performance metrics trend chart"""
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
         axes = axes.flatten()
 
-        # 模拟性能指标数据
+        # Simulate performance metrics data
         episodes = len(training_results.get("learning_curve", []))
         if episodes == 0:
             return fig
 
-        # 准备模拟的性能指标
+        # Prepare simulated performance metrics
         metrics = {
-            "平均奖励": (
+            "Average Reward": (
                 np.cumsum(np.random.normal(0.01, 0.1, episodes // 100))
                 if episodes >= 100
                 else [0]
             ),
-            "收敛度": (
+            "Convergence": (
                 1 - np.exp(-np.linspace(0, 3, episodes // 100))
                 if episodes >= 100
                 else [0]
             ),
-            "探索率": (
+            "Exploration Rate": (
                 np.exp(-np.linspace(0, 2, episodes // 100)) if episodes >= 100 else [1]
             ),
-            "损失函数": (
+            "Loss Function": (
                 np.exp(-np.linspace(0, 4, episodes // 100))
                 + np.random.normal(0, 0.05, episodes // 100)
                 if episodes >= 100
@@ -665,10 +665,10 @@ class SystemVisualizer:
             x_axis = np.linspace(0, episodes, len(values))
             axes[i].plot(x_axis, values, color=self.theme["primary"], linewidth=2)
             axes[i].set_title(metric_name, fontweight="bold")
-            axes[i].set_xlabel("训练轮次")
+            axes[i].set_xlabel("Training Episodes")
             axes[i].grid(True, alpha=0.3)
 
-            # 添加趋势线
+            # Add trend line
             if len(values) > 1:
                 z = np.polyfit(x_axis, values, 1)
                 p = np.poly1d(z)
@@ -676,21 +676,21 @@ class SystemVisualizer:
                     x_axis, p(x_axis), "--", color=self.theme["secondary"], alpha=0.8
                 )
 
-        plt.suptitle("训练性能指标趋势", fontsize=16, fontweight="bold")
+        plt.suptitle("Training Performance Metrics Trends", fontsize=16, fontweight="bold")
         plt.tight_layout()
         return fig
 
     def _create_convergence_analysis(
         self, training_results: Dict[str, Any]
     ) -> plt.Figure:
-        """创建收敛分析图"""
+        """Create convergence analysis chart"""
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
 
         learning_curve = training_results.get("learning_curve", [])
         if not learning_curve:
             return fig
 
-        # 左图：收敛趋势
+        # Left chart: Convergence trend
         window_sizes = [10, 50, 100]
         colors = [self.theme["primary"], self.theme["secondary"], self.theme["info"]]
 
@@ -701,36 +701,36 @@ class SystemVisualizer:
                 ax1.plot(
                     episodes,
                     rolling_std,
-                    label=f"滑动标准差({window})",
+                    label=f"Rolling Std ({window})",
                     color=color,
                     linewidth=2,
                 )
 
-        ax1.set_xlabel("训练轮次")
-        ax1.set_ylabel("标准差")
-        ax1.set_title("收敛趋势分析", fontweight="bold")
+        ax1.set_xlabel("Training Episodes")
+        ax1.set_ylabel("Standard Deviation")
+        ax1.set_title("Convergence Trend Analysis", fontweight="bold")
         ax1.legend()
         ax1.grid(True, alpha=0.3)
 
-        # 右图：最后1000个episode的稳定性分析
+        # Right chart: Stability analysis of last 1000 episodes
         if len(learning_curve) > 1000:
             recent_rewards = learning_curve[-1000:]
 
-            # 计算滑动方差
+            # Calculate rolling variance
             rolling_var = pd.Series(recent_rewards).rolling(window=50).var()
             ax2.plot(rolling_var, color=self.theme["primary"], linewidth=2)
-            ax2.set_title("近期稳定性分析(最后1000轮次)", fontweight="bold")
-            ax2.set_xlabel("轮次(相对位置)")
-            ax2.set_ylabel("方差")
+            ax2.set_title("Recent Stability Analysis (Last 1000 Episodes)", fontweight="bold")
+            ax2.set_xlabel("Episodes (Relative Position)")
+            ax2.set_ylabel("Variance")
             ax2.grid(True, alpha=0.3)
 
-            # 添加稳定性阈值线
+            # Add stability threshold line
             stable_threshold = np.percentile(rolling_var.dropna(), 25)
             ax2.axhline(
                 y=stable_threshold,
                 color=self.theme["success"],
                 linestyle="--",
-                label=f"稳定阈值: {stable_threshold:.3f}",
+                label=f"Stability Threshold: {stable_threshold:.3f}",
             )
             ax2.legend()
 
@@ -740,25 +740,25 @@ class SystemVisualizer:
     def _create_decision_timeline(
         self, simulation_results: Dict[str, Any]
     ) -> go.Figure:
-        """创建决策时间线"""
+        """Create decision timeline"""
         mdt_discussions = simulation_results.get("mdt_discussions", [])
 
         if not mdt_discussions:
             fig = go.Figure()
-            fig.add_annotation(text="无MDT讨论数据", x=0.5, y=0.5, showarrow=False)
+            fig.add_annotation(text="No MDT Discussion Data", x=0.5, y=0.5, showarrow=False)
             return fig
 
-        # 准备时间线数据
+        # Prepare timeline data
         days = [d["day"] for d in mdt_discussions]
         treatments = [
             d["decision"]["recommended_treatment"].value for d in mdt_discussions
         ]
         consensus_scores = [d["decision"]["consensus_score"] for d in mdt_discussions]
 
-        # 创建时间线图
+        # Create timeline chart
         fig = go.Figure()
 
-        # 添加决策点
+        # Add decision points
         fig.add_trace(
             go.Scatter(
                 x=days,
@@ -769,21 +769,21 @@ class SystemVisualizer:
                     color=consensus_scores,
                     colorscale="RdYlGn",
                     showscale=True,
-                    colorbar=dict(title="共识得分"),
+                    colorbar=dict(title="Consensus Score"),
                 ),
                 text=[
                     f"Day {day}: {treatment}<br>Score: {score:.3f}"
                     for day, treatment, score in zip(days, treatments, consensus_scores)
                 ],
                 hovertemplate="%{text}<extra></extra>",
-                name="MDT决策",
+                name="MDT Decisions",
             )
         )
 
         fig.update_layout(
-            title="MDT决策时间线",
-            xaxis_title="天数",
-            yaxis_title="共识得分",
+            title="MDT Decision Timeline",
+            xaxis_title="Days",
+            yaxis_title="Consensus Score",
             hovermode="closest",
         )
 
@@ -792,7 +792,7 @@ class SystemVisualizer:
     def _create_patient_evolution_chart(
         self, simulation_results: Dict[str, Any]
     ) -> plt.Figure:
-        """创建患者状态演化图"""
+        """Create patient state evolution chart"""
         daily_events = simulation_results.get("daily_events", [])
 
         if not daily_events:
@@ -800,7 +800,7 @@ class SystemVisualizer:
             ax.text(
                 0.5,
                 0.5,
-                "无患者演化数据",
+                "No Patient Evolution Data",
                 ha="center",
                 va="center",
                 transform=ax.transAxes,
@@ -808,7 +808,7 @@ class SystemVisualizer:
             )
             return fig
 
-        # 提取时序数据
+        # Extract time series data
         days = [event["day"] for event in daily_events]
         quality_scores = [
             event["patient_state"].get("quality_of_life_score", 0.5)
@@ -819,11 +819,11 @@ class SystemVisualizer:
             for event in daily_events
         ]
 
-        # 创建双y轴图
+        # Create dual y-axis chart
         fig, ax1 = plt.subplots(1, 1, figsize=self.figure_size)
         ax2 = ax1.twinx()
 
-        # 生活质量评分
+        # Quality of life score
         line1 = ax1.plot(
             days,
             quality_scores,
@@ -831,12 +831,12 @@ class SystemVisualizer:
             linewidth=2,
             marker="o",
             markersize=4,
-            label="生活质量评分",
+            label="Quality of Life Score",
         )
-        ax1.set_ylabel("生活质量评分", color=self.theme["primary"])
+        ax1.set_ylabel("Quality of Life Score", color=self.theme["primary"])
         ax1.tick_params(axis="y", labelcolor=self.theme["primary"])
 
-        # 肌酐水平
+        # Creatinine level
         line2 = ax2.plot(
             days,
             creatinine_levels,
@@ -844,32 +844,32 @@ class SystemVisualizer:
             linewidth=2,
             marker="s",
             markersize=4,
-            label="肌酐水平",
+            label="Creatinine Level",
         )
-        ax2.set_ylabel("肌酐水平 (mg/dL)", color=self.theme["secondary"])
+        ax2.set_ylabel("Creatinine Level (mg/dL)", color=self.theme["secondary"])
         ax2.tick_params(axis="y", labelcolor=self.theme["secondary"])
 
-        # 设置x轴
-        ax1.set_xlabel("天数")
-        ax1.set_title("患者状态演化轨迹", fontsize=16, fontweight="bold")
+        # Set x-axis
+        ax1.set_xlabel("Days")
+        ax1.set_title("Patient State Evolution Trajectory", fontsize=16, fontweight="bold")
 
-        # 添加参考线
+        # Add reference lines
         ax1.axhline(
             y=0.5,
             color=self.theme["warning"],
             linestyle="--",
             alpha=0.7,
-            label="生活质量警戒线",
+            label="Quality of Life Alert Line",
         )
         ax2.axhline(
             y=1.5,
             color=self.theme["warning"],
             linestyle="--",
             alpha=0.7,
-            label="肌酐警戒线",
+            label="Creatinine Alert Line",
         )
 
-        # 图例
+        # Legend
         lines1, labels1 = ax1.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
         ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper right")
@@ -881,7 +881,7 @@ class SystemVisualizer:
     def _create_consensus_trends(
         self, simulation_results: Dict[str, Any]
     ) -> plt.Figure:
-        """创建共识得分趋势"""
+        """Create consensus score trends"""
         mdt_discussions = simulation_results.get("mdt_discussions", [])
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
@@ -890,7 +890,7 @@ class SystemVisualizer:
             ax1.text(
                 0.5,
                 0.5,
-                "无MDT讨论数据",
+                "No MDT Discussion Data",
                 ha="center",
                 va="center",
                 transform=ax1.transAxes,
@@ -899,7 +899,7 @@ class SystemVisualizer:
             ax2.text(
                 0.5,
                 0.5,
-                "无讨论轮数数据",
+                "No Discussion Rounds Data",
                 ha="center",
                 va="center",
                 transform=ax2.transAxes,
@@ -913,7 +913,7 @@ class SystemVisualizer:
             d["consensus_result"].total_rounds for d in mdt_discussions
         ]
 
-        # 上图：共识得分趋势
+        # Top chart: Consensus score trends
         ax1.plot(
             days,
             consensus_scores,
@@ -922,12 +922,12 @@ class SystemVisualizer:
             color=self.theme["primary"],
             markersize=6,
         )
-        ax1.set_ylabel("共识得分")
-        ax1.set_title("MDT共识得分趋势", fontweight="bold")
+        ax1.set_ylabel("Consensus Score")
+        ax1.set_title("MDT Consensus Score Trends", fontweight="bold")
         ax1.grid(True, alpha=0.3)
         ax1.set_ylim(-0.1, 1.1)
 
-        # 添加趋势线
+        # Add trend line
         if len(days) > 1:
             z = np.polyfit(days, consensus_scores, 1)
             p = np.poly1d(z)
@@ -937,18 +937,18 @@ class SystemVisualizer:
                 "--",
                 color=self.theme["secondary"],
                 alpha=0.8,
-                label=f"趋势线(斜率: {z[0]:.4f})",
+                label=f"Trend Line (Slope: {z[0]:.4f})",
             )
             ax1.legend()
 
-        # 下图：讨论轮数趋势
+        # Bottom chart: Discussion rounds trends
         bars = ax2.bar(days, discussion_rounds, alpha=0.7, color=self.theme["info"])
-        ax2.set_ylabel("讨论轮数")
-        ax2.set_xlabel("天数")
-        ax2.set_title("MDT讨论轮数变化", fontweight="bold")
+        ax2.set_ylabel("Discussion Rounds")
+        ax2.set_xlabel("Days")
+        ax2.set_title("MDT Discussion Rounds Changes", fontweight="bold")
         ax2.grid(True, alpha=0.3, axis="y")
 
-        # 添加数值标签
+        # Add value labels
         for bar, rounds in zip(bars, discussion_rounds):
             height = bar.get_height()
             ax2.text(
@@ -965,7 +965,7 @@ class SystemVisualizer:
     def _create_system_metrics_chart(
         self, simulation_results: Dict[str, Any]
     ) -> plt.Figure:
-        """创建系统性能指标图"""
+        """Create system performance metrics chart"""
         performance_metrics = simulation_results.get("performance_metrics", {})
 
         if not performance_metrics:
@@ -973,7 +973,7 @@ class SystemVisualizer:
             ax.text(
                 0.5,
                 0.5,
-                "无性能指标数据",
+                "No Performance Metrics Data",
                 ha="center",
                 va="center",
                 transform=ax.transAxes,
@@ -981,18 +981,18 @@ class SystemVisualizer:
             )
             return fig
 
-        # 准备指标数据
+        # Prepare metrics data
         metrics = {
-            "平均共识得分": performance_metrics.get("avg_consensus_score", 0),
-            "平均讨论轮数": performance_metrics.get("avg_discussion_rounds", 0)
-            / 5,  # 归一化
-            "收敛率": performance_metrics.get("convergence_rate", 0),
-            "决策一致性": performance_metrics.get("decision_consistency", 0),
-            "平均RL奖励": (performance_metrics.get("avg_rl_reward", 0) + 1)
-            / 2,  # 归一化到[0,1]
+            "Avg Consensus Score": performance_metrics.get("avg_consensus_score", 0),
+            "Avg Discussion Rounds": performance_metrics.get("avg_discussion_rounds", 0)
+            / 5,  # Normalized
+            "Convergence Rate": performance_metrics.get("convergence_rate", 0),
+            "Decision Consistency": performance_metrics.get("decision_consistency", 0),
+            "Avg RL Reward": (performance_metrics.get("avg_rl_reward", 0) + 1)
+            / 2,  # Normalized to [0,1]
         }
 
-        # 创建雷达图
+        # Create radar chart
         fig, ax = plt.subplots(
             1, 1, figsize=(10, 10), subplot_kw=dict(projection="polar")
         )
@@ -1000,15 +1000,15 @@ class SystemVisualizer:
         angles = np.linspace(0, 2 * np.pi, len(metrics), endpoint=False).tolist()
         values = list(metrics.values())
 
-        # 闭合雷达图
+        # Close radar chart
         angles += angles[:1]
         values += values[:1]
 
-        # 绘制雷达图
+        # Draw radar chart
         ax.plot(angles, values, "o-", linewidth=2, color=self.theme["primary"])
         ax.fill(angles, values, alpha=0.25, color=self.theme["primary"])
 
-        # 设置标签
+        # Set labels
         ax.set_xticks(angles[:-1])
         ax.set_xticklabels(list(metrics.keys()))
         ax.set_ylim(0, 1)
@@ -1016,7 +1016,7 @@ class SystemVisualizer:
         ax.set_yticklabels(["0.2", "0.4", "0.6", "0.8", "1.0"])
         ax.grid(True)
 
-        # 添加数值标注
+        # Add value annotations
         for angle, value, metric in zip(angles[:-1], values[:-1], metrics.keys()):
             ax.text(
                 angle,
@@ -1028,7 +1028,7 @@ class SystemVisualizer:
             )
 
         ax.set_title(
-            "系统综合性能指标",
+            "System Comprehensive Performance Metrics",
             fontsize=16,
             fontweight="bold",
             color=self.theme["primary"],
