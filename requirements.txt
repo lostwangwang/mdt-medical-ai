@@ -151,4 +151,6 @@ jieba>=0.42.1
 
 # 生产环境部署
 gunicorn>=21.2.0
-supervisor>=4.2.5
+supervisor>=4.2.5langgraph>=0.0.40
+langchain-core>=0.1.0
+langchain-community>=0.0.20
