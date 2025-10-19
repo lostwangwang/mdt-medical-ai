@@ -16,11 +16,26 @@ import os
 
 from ..knowledge.dialogue_memory_manager import DialogueMemoryManager
 from ..knowledge.enhanced_faiss_integration import EnhancedFAISSManager
+from ..utils.llm_interface import LLMInterface, LLMConfig
 
 
 @dataclass
 class TreatmentOption:
-    """治疗选项数据类"""
+    """
+    治疗选项数据类
+    
+    参数:
+    option_id: 治疗选项的唯一标识符
+    name: 治疗选项的名称
+    description: 治疗选项的详细描述
+    confidence_score: 治疗选项的置信度分数（0-1之间）
+    evidence_sources: 支持治疗选项的证据来源列表
+    contraindications: 治疗选项的禁忌条件列表
+    expected_outcomes: 治疗选项的预期结果列表
+    risk_level: 治疗选项的风险等级（"low", "medium", "high"）
+    cost_estimate: 治疗选项的成本估计（可选）
+    duration_estimate: 治疗选项的持续时间估计（可选）
+    """
     option_id: str
     name: str
     description: str
@@ -35,7 +50,21 @@ class TreatmentOption:
 
 @dataclass
 class TreatmentPlan:
-    """治疗方案数据类"""
+    """治疗方案数据类
+    参数:
+    plan_id: 治疗方案的唯一标识符
+    patient_id: 患者ID
+    primary_options: 主要治疗选项列表
+    alternative_options: 替代治疗选项列表
+    contraindications: 治疗选项的禁忌条件列表
+    monitoring_requirements: 治疗过程中需要监控的指标列表
+    follow_up_schedule: 后续治疗计划的时间 schedule
+    confidence_score: 治疗方案的置信度分数（0-1之间）
+    consensus_score: 治疗选项的共识分数（0-1之间）
+    generated_timestamp: 治疗方案生成的时间戳
+    dialogue_context_used: 是否使用了对话上下文
+    historical_patterns_considered: 考虑的历史治疗模式列表
+    """
     plan_id: str
     patient_id: str
     primary_options: List[TreatmentOption]
@@ -56,11 +85,13 @@ class ConsensusMatrix:
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.expert_weights = {
-            "oncologist": 0.3,
-            "surgeon": 0.25,
-            "radiologist": 0.2,
-            "pathologist": 0.15,
-            "pharmacist": 0.1
+            "oncologist": 0.25,
+            "surgeon": 0.20,
+            "radiologist": 0.18,
+            "pathologist": 0.12,
+            "pharmacist": 0.08,
+            "nutritionist": 0.09,
+            "rehabilitation_therapist": 0.08
         }
     
     def calculate_consensus(self, 
@@ -310,11 +341,13 @@ class EnhancedTreatmentPlanner:
     
     def __init__(self, 
                  dialogue_memory_manager: DialogueMemoryManager,
-                 faiss_manager: EnhancedFAISSManager):
+                 faiss_manager: EnhancedFAISSManager,
+                 llm_config: LLMConfig = None):
         self.dialogue_memory = dialogue_memory_manager
         self.faiss_manager = faiss_manager
         self.consensus_matrix = ConsensusMatrix()
         self.rl_optimizer = ReinforcementLearningOptimizer()
+        self.llm_interface = LLMInterface(llm_config)
         self.logger = logging.getLogger(self.__class__.__name__)
         
         self.logger.info("增强治疗方案规划器初始化完成")
@@ -419,7 +452,24 @@ class EnhancedTreatmentPlanner:
             )
             
             if search_results:
-                return search_results[0]
+                # 提取患者信息
+                patient_info = search_results[0]["metadata"]
+                return patient_info
+                return patient_info
+                return patient_info
+                return patient_info
+                return patient_info
+                return patient_info
+                return patient_info
+                return patient_info
+                return patient_info
+                return patient_info
+                return patient_info
+                return patient_info
+                return patient_info
+                return patient_info
+                return patient_info
+                return patient_info
             else:
                 # 返回默认患者信息
                 return {
@@ -439,7 +489,57 @@ class EnhancedTreatmentPlanner:
     def _generate_base_treatment_options(self, 
                                        patient_info: Dict[str, Any],
                                        dialogue_context: Dict[str, Any] = None) -> List[TreatmentOption]:
-        """生成基础治疗选项"""
+        """基于LLM生成基础治疗选项"""
+        try:
+            # 首先尝试使用LLM生成治疗选项
+            llm_options = self._generate_llm_treatment_options(patient_info, dialogue_context)
+            
+            if llm_options:
+                self.logger.info(f"LLM成功生成 {len(llm_options)} 个治疗选项")
+                return llm_options
+            else:
+                # 如果LLM失败，回退到传统方法
+                self.logger.warning("LLM生成失败，使用传统方法生成治疗选项")
+                return self._generate_fallback_treatment_options(patient_info, dialogue_context)
+                
+        except Exception as e:
+            self.logger.error(f"生成治疗选项失败: {e}")
+            return self._generate_fallback_treatment_options(patient_info, dialogue_context)
+    
+    def _generate_llm_treatment_options(self, 
+                                      patient_info: Dict[str, Any],
+                                      dialogue_context: Dict[str, Any] = None) -> List[TreatmentOption]:
+        """使用LLM生成治疗选项"""
+        try:
+            # 构建LLM提示词
+            prompt = self._build_treatment_options_prompt(patient_info, dialogue_context)
+            
+            # 调用LLM
+            if self.llm_interface.client:
+                response = self.llm_interface.client.chat.completions.create(
+                    model=self.llm_interface.config.model_name,
+                    messages=[
+                        {"role": "system", "content": "你是一位资深的临床医生，擅长制定个性化治疗方案。请基于患者信息生成详细的治疗选项，以JSON格式返回。"},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.3,  # 降低温度以获得更一致的结果
+                    max_tokens=2000
+                )
+                
+                # 解析LLM响应
+                llm_response = response.choices[0].message.content.strip()
+                return self._parse_llm_treatment_response(llm_response)
+            else:
+                return []
+                
+        except Exception as e:
+            self.logger.error(f"LLM生成治疗选项失败: {e}")
+            return []
+    
+    def _generate_fallback_treatment_options(self, 
+                                           patient_info: Dict[str, Any],
+                                           dialogue_context: Dict[str, Any] = None) -> List[TreatmentOption]:
+        """传统方法生成治疗选项（作为LLM失败时的备选方案）"""
         try:
             treatment_options = []
             
@@ -447,7 +547,8 @@ class EnhancedTreatmentPlanner:
             diagnoses = patient_info.get("diagnoses", [])
             
             # 示例治疗选项（实际应用中应该基于医学知识库）
-            if any("cancer" in str(diag).lower() or "tumor" in str(diag).lower() for diag in diagnoses):
+            if any("cancer" in str(diag).lower() or "tumor" in str(diag).lower() or 
+                   "癌" in str(diag) or "肿瘤" in str(diag) for diag in diagnoses):
                 # 癌症相关治疗
                 treatment_options.extend([
                     TreatmentOption(
@@ -492,7 +593,7 @@ class EnhancedTreatmentPlanner:
             return treatment_options
             
         except Exception as e:
-            self.logger.error(f"生成基础治疗选项失败: {e}")
+            self.logger.error(f"传统方法生成治疗选项失败: {e}")
             return []
     
     def _extract_patient_concerns(self, dialogue_context: Dict[str, Any]) -> List[str]:
@@ -696,3 +797,173 @@ class EnhancedTreatmentPlanner:
             
         except Exception as e:
             self.logger.error(f"更新治疗结果失败: {e}")
+    
+    def _build_treatment_options_prompt(self, 
+                                      patient_info: Dict[str, Any],
+                                      dialogue_context: Dict[str, Any] = None) -> str:
+        """构建LLM治疗选项生成的提示词"""
+        try:
+            # 基础患者信息
+            patient_summary = f"""
+患者基本信息：
+- 患者ID: {patient_info.get('patient_id', '未知')}
+- 年龄: {patient_info.get('age', '未知')}
+- 性别: {patient_info.get('gender', '未知')}
+- 主要诊断: {', '.join(patient_info.get('diagnoses', ['未明确诊断']))}
+- 既往病史: {', '.join(patient_info.get('medical_history', ['无特殊病史']))}
+- 当前症状: {', '.join(patient_info.get('symptoms', ['无明显症状']))}
+- 实验室检查: {patient_info.get('lab_results', '暂无检查结果')}
+- 影像学检查: {patient_info.get('imaging_results', '暂无影像学检查')}
+- 过敏史: {', '.join(patient_info.get('allergies', ['无已知过敏']))}
+- 当前用药: {', '.join(patient_info.get('current_medications', ['无当前用药']))}
+"""
+            
+            # 对话上下文信息
+            context_info = ""
+            if dialogue_context:
+                recent_queries = dialogue_context.get('recent_queries', [])
+                patient_concerns = dialogue_context.get('patient_concerns', [])
+                
+                if recent_queries:
+                    context_info += f"\n最近的咨询问题: {', '.join(recent_queries[-3:])}"
+                if patient_concerns:
+                    context_info += f"\n患者关注点: {', '.join(patient_concerns)}"
+            
+            # 构建完整提示词
+            prompt = f"""
+请基于以下患者信息，生成3-5个个性化的治疗选项。每个治疗选项应该包含详细的医学信息。
+
+{patient_summary}
+{context_info}
+
+请以JSON格式返回治疗选项，格式如下：
+{{
+  "treatment_options": [
+    {{
+      "option_id": "唯一标识符（如：treatment_001）",
+      "name": "治疗方案名称",
+      "description": "详细的治疗描述，包括具体的治疗方法、药物、剂量等",
+      "confidence_score": 0.0-1.0之间的置信度分数,
+      "evidence_sources": ["支持该治疗的证据来源列表"],
+      "contraindications": ["禁忌症列表"],
+      "expected_outcomes": ["预期治疗结果列表"],
+      "risk_level": "low/medium/high",
+      "cost_estimate": 预估费用（数字，可选）,
+      "duration_estimate": "预估治疗时间（字符串，可选）"
+    }}
+  ]
+}}
+
+要求：
+1. 治疗选项应该基于循证医学，符合当前医学指南
+2. 考虑患者的具体情况（年龄、性别、既往病史、过敏史等）
+3. 提供不同风险等级和治疗强度的选项
+4. 置信度分数应该反映治疗的适用性和有效性
+5. 确保返回的是有效的JSON格式
+"""
+            
+            return prompt.strip()
+            
+        except Exception as e:
+            self.logger.error(f"构建LLM提示词失败: {e}")
+            return "请为患者生成治疗选项"
+    
+    def _parse_llm_treatment_response(self, llm_response: str) -> List[TreatmentOption]:
+        """解析LLM响应并构建TreatmentOption对象"""
+        try:
+            # 清理响应文本，移除可能的markdown标记
+            cleaned_response = llm_response.strip()
+            if cleaned_response.startswith("```json"):
+                cleaned_response = cleaned_response[7:]
+            if cleaned_response.endswith("```"):
+                cleaned_response = cleaned_response[:-3]
+            cleaned_response = cleaned_response.strip()
+            
+            # 解析JSON
+            try:
+                response_data = json.loads(cleaned_response)
+            except json.JSONDecodeError:
+                # 如果直接解析失败，尝试提取JSON部分
+                import re
+                json_match = re.search(r'\{.*\}', cleaned_response, re.DOTALL)
+                if json_match:
+                    response_data = json.loads(json_match.group())
+                else:
+                    raise ValueError("无法找到有效的JSON数据")
+            
+            # 构建TreatmentOption对象列表
+            treatment_options = []
+            options_data = response_data.get('treatment_options', [])
+            
+            for i, option_data in enumerate(options_data):
+                try:
+                    # 验证必需字段
+                    option_id = option_data.get('option_id', f'llm_generated_{i+1:03d}')
+                    name = option_data.get('name', f'治疗选项{i+1}')
+                    description = option_data.get('description', '详细描述待补充')
+                    
+                    # 处理置信度分数
+                    confidence_score = float(option_data.get('confidence_score', 0.5))
+                    confidence_score = max(0.0, min(1.0, confidence_score))  # 确保在0-1范围内
+                    
+                    # 处理列表字段
+                    evidence_sources = option_data.get('evidence_sources', [])
+                    if isinstance(evidence_sources, str):
+                        evidence_sources = [evidence_sources]
+                    
+                    contraindications = option_data.get('contraindications', [])
+                    if isinstance(contraindications, str):
+                        contraindications = [contraindications]
+                    
+                    expected_outcomes = option_data.get('expected_outcomes', [])
+                    if isinstance(expected_outcomes, str):
+                        expected_outcomes = [expected_outcomes]
+                    
+                    # 处理风险等级
+                    risk_level = option_data.get('risk_level', 'medium').lower()
+                    if risk_level not in ['low', 'medium', 'high']:
+                        risk_level = 'medium'
+                    
+                    # 处理可选字段
+                    cost_estimate = option_data.get('cost_estimate')
+                    if cost_estimate is not None:
+                        try:
+                            cost_estimate = float(cost_estimate)
+                        except (ValueError, TypeError):
+                            cost_estimate = None
+                    
+                    duration_estimate = option_data.get('duration_estimate')
+                    if duration_estimate and not isinstance(duration_estimate, str):
+                        duration_estimate = str(duration_estimate)
+                    
+                    # 创建TreatmentOption对象
+                    treatment_option = TreatmentOption(
+                        option_id=option_id,
+                        name=name,
+                        description=description,
+                        confidence_score=confidence_score,
+                        evidence_sources=evidence_sources,
+                        contraindications=contraindications,
+                        expected_outcomes=expected_outcomes,
+                        risk_level=risk_level,
+                        cost_estimate=cost_estimate,
+                        duration_estimate=duration_estimate
+                    )
+                    
+                    treatment_options.append(treatment_option)
+                    
+                except Exception as option_error:
+                    self.logger.warning(f"解析治疗选项 {i+1} 失败: {option_error}")
+                    continue
+            
+            if treatment_options:
+                self.logger.info(f"成功解析 {len(treatment_options)} 个LLM生成的治疗选项")
+            else:
+                self.logger.warning("未能解析出任何有效的治疗选项")
+            
+            return treatment_options
+            
+        except Exception as e:
+            self.logger.error(f"解析LLM治疗选项响应失败: {e}")
+            self.logger.debug(f"原始响应: {llm_response}")
+            return []

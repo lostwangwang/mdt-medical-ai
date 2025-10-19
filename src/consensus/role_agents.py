@@ -10,6 +10,8 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 import logging
 
+from ..utils.llm_interface import LLMConfig, LLMInterface
+
 from ..core.data_models import (
     RoleType,
     TreatmentOption,
@@ -26,17 +28,31 @@ class RoleAgent:
     """角色智能体基类"""
 
     def __init__(self, role: RoleType, llm_interface=None):
-        """初始化角色智能体"""
+        """初始化角色智能体
+        Args:
+            role: 角色类型
+            llm_interface: LLM接口实例，用于与LLM交互
+            默认为None，在初始化时会根据角色类型自动创建
+        """
+        llm_config = LLMConfig()
         self.role = role
-        self.llm_interface = llm_interface
-        self.specialization = self._get_specialization()
+        self.llm_interface = LLMInterface(llm_config) # 待优化
+        self.specialization = self._get_specialization() # 通过内部方法获取实例的“专业领域”
         self.dialogue_history = []
         self.current_stance = {}  # 当前立场
         
         # RL指导相关属性
+        # 用于存储RL模型的指导，包括推荐的治疗方案、置信度和解释
+        # 默认为None，在RL训练完成后会被赋值
         self.rl_guidance = None
+        # 用于存储RL模型对当前立场的影响强度
+        # 默认为0.0，在RL训练完成后会被赋值
         self.rl_influence_strength = 0.0
+        # 用于存储RL模型的指导历史记录
+        # 默认为空列表，在RL训练完成后会被填充
         self.rl_guidance_history = []
+        # 用于存储角色的原始偏好
+        # 默认为空字典，在初始化时会被赋值
         self.original_preferences = {}  # 保存原始偏好
         
         logger.info(f"Initialized {role.value} agent")
@@ -134,6 +150,42 @@ class RoleAgent:
                 ],
                 "communication_style": "patient-focused, questioning, protective",
             },
+            RoleType.NUTRITIONIST: {
+                "primary_concerns": [
+                    "nutritional_status",
+                    "dietary_compliance",
+                    "metabolic_support",
+                ],
+                "weight_factors": {
+                    "nutritional_risk": 0.4,
+                    "dietary_compliance": 0.3,
+                    "metabolic_status": 0.3,
+                },
+                "expertise_areas": [
+                    "nutritional_assessment",
+                    "dietary_planning",
+                    "metabolic_monitoring",
+                ],
+                "communication_style": "scientific, data-driven, individualized guidance",
+            },
+            RoleType.REHABILITATION_THERAPIST: {
+                "primary_concerns": [
+                    "functional_recovery",
+                    "exercise_capacity",
+                    "daily_living_independence",
+                ],
+                "weight_factors": {
+                    "functional_recovery": 0.4,
+                    "exercise_tolerance": 0.3,
+                    "self_care_ability": 0.3,
+                },
+                "expertise_areas": [
+                    "functional_assessment",
+                    "exercise_prescription",
+                    "rehabilitation_planning",
+                ],
+                "communication_style": "encouraging, goal-oriented, motivational",
+            },
         }
         return specializations.get(self.role, {})
 
@@ -202,6 +254,22 @@ class RoleAgent:
                 TreatmentOption.IMMUNOTHERAPY: 0.3,
                 TreatmentOption.PALLIATIVE_CARE: 0.6,  # 重视心理支持
                 TreatmentOption.WATCHFUL_WAITING: 0.5,  # 减少心理压力
+            },
+            RoleType.NUTRITIONIST: {
+                TreatmentOption.SURGERY: 0.3,  # 关注术后营养恢复
+                TreatmentOption.CHEMOTHERAPY: 0.5,  # 重视营养支持减轻副作用
+                TreatmentOption.RADIOTHERAPY: 0.4,  # 关注放疗期间营养维持
+                TreatmentOption.IMMUNOTHERAPY: 0.6,  # 强调免疫营养支持
+                TreatmentOption.PALLIATIVE_CARE: 0.7,  # 重视营养舒适护理
+                TreatmentOption.WATCHFUL_WAITING: 0.2,  # 预防性营养干预
+            },
+            RoleType.REHABILITATION_THERAPIST: {
+                TreatmentOption.SURGERY: 0.6,  # 重视术后功能恢复
+                TreatmentOption.CHEMOTHERAPY: 0.2,  # 关注体能维持
+                TreatmentOption.RADIOTHERAPY: 0.4,  # 关注功能保持
+                TreatmentOption.IMMUNOTHERAPY: 0.5,  # 支持免疫治疗期间活动
+                TreatmentOption.PALLIATIVE_CARE: 0.8,  # 强调功能维持和生活质量
+                TreatmentOption.WATCHFUL_WAITING: 0.3,  # 预防性康复训练
             },
         }
 
@@ -278,6 +346,8 @@ class RoleAgent:
             RoleType.PSYCHOLOGIST: f"Considering the patient's psychological status ({patient_state.psychological_status}) and overall well-being, {best_treatment[0].value} provides the best balance of treatment efficacy and mental health impact. The patient's coping ability should be supported throughout treatment.",
             RoleType.RADIOLOGIST: f"Based on imaging findings and anatomical considerations for {patient_state.diagnosis}, {best_treatment[0].value} is technically feasible and appropriate for this patient's disease stage and overall condition.",
             RoleType.PATIENT_ADVOCATE: f"In terms of patient autonomy and quality of life, {best_treatment[0].value} aligns with typical patient preferences while respecting the patient's values and maintaining dignity throughout the treatment process.",
+            RoleType.NUTRITIONIST: f"From a nutritional perspective, {best_treatment[0].value} is optimal considering the patient's current nutritional status and metabolic needs. With quality of life score {patient_state.quality_of_life_score} and comorbidities {patient_state.comorbidities}, targeted nutritional support can enhance treatment tolerance and recovery outcomes.",
+            RoleType.REHABILITATION_THERAPIST: f"Regarding functional recovery and physical rehabilitation, {best_treatment[0].value} provides the best opportunity for maintaining and improving the patient's functional capacity. Considering age {patient_state.age} and current symptoms {patient_state.symptoms}, a comprehensive rehabilitation plan can optimize treatment outcomes and daily living independence.",
         }
 
         template_reasoning = reasoning_templates.get(
@@ -301,6 +371,8 @@ class RoleAgent:
             RoleType.NURSE: 0.7,
             RoleType.PSYCHOLOGIST: 0.6,
             RoleType.PATIENT_ADVOCATE: 0.7,
+            RoleType.NUTRITIONIST: 0.8,  # 营养师在治疗支持中的重要性
+            RoleType.REHABILITATION_THERAPIST: 0.8,  # 康复师在功能恢复中的重要性
         }
 
         base_confidence = role_relevance.get(self.role, 0.7)

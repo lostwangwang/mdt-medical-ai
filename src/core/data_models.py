@@ -14,11 +14,17 @@ from datetime import datetime
 class RoleType(Enum):
     """医疗团队角色类型"""
 
+    SURGEON = "surgeon"  # 外科医生
     ONCOLOGIST = "oncologist"  # 肿瘤科医生
     RADIOLOGIST = "radiologist"  # 影像科医生
     NURSE = "nurse"  # 护士
     PSYCHOLOGIST = "psychologist"  # 心理师
     PATIENT_ADVOCATE = "patient_advocate"  # 患者代表
+    NUTRITIONIST = "nutritionist"  # 营养师
+    REHABILITATION_THERAPIST = "rehabilitation_therapist"  # 康复治疗师
+    # 非医疗角色类型，用于对话消息
+    USER = "user"  # 用户/患者
+    SYSTEM = "system"  # 系统
 
 
 class TreatmentOption(Enum):

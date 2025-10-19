@@ -72,7 +72,16 @@ class PatientDialogueManager:
             self.enhanced_mode = False
         
     def query_patient_info(self, patient_id: str, query: str) -> Dict[str, Any]:
-        """查询患者信息并生成回答 - 增强版本，支持对话记忆和治疗方案生成"""
+        """
+        查询患者信息并生成回答 - 增强版本，支持对话记忆和治疗方案生成
+        
+        参数:
+        patient_id: 患者ID
+        query: 患者的查询语句，怎么查询？
+        
+        返回:
+        Dict[str, Any]: 包含患者ID、查询语句、回答、错误信息（如果有）、时间戳和是否启用增强模式的字典
+        """
         try:
             # 如果启用了增强模式，使用新的工作流
             if self.enhanced_mode and self.workflow_manager:
@@ -92,7 +101,11 @@ class PatientDialogueManager:
             }
     
     def _query_with_enhanced_workflow(self, patient_id: str, query: str) -> Dict[str, Any]:
-        """使用增强工作流处理查询"""
+        """使用增强工作流处理查询
+        query: 患者的查询语句，怎么查询？
+        1. 先从对话记忆中检索相关信息
+        2. 如果记忆中没有，再从FAISS数据库中检索
+        """
         # 如果没有活跃会话，创建新会话
         if not self.current_session_id:
             self.current_session_id, welcome_msg = self.workflow_manager.start_dialogue_session(
@@ -412,11 +425,34 @@ class MDTSystemInterface:
         # 系统可视化工具
         self.visualizer = SystemVisualizer()
         
+        # 🚀 集成智能体协作系统
+        try:
+            from src.utils.llm_interface import LLMInterface, LLMConfig
+            from src.workflow.intelligent_collaboration_manager import IntelligentCollaborationManager
+            
+            # 创建LLM配置
+            llm_config = LLMConfig()
+            
+            self.llm_interface = LLMInterface(llm_config)
+            self.intelligent_collaboration_manager = IntelligentCollaborationManager(
+                llm_interface=self.llm_interface,
+                faiss_db_path="clinical_memory_db",
+                enable_faiss=True,
+                enable_enhanced_roles=True
+            )
+            self.use_intelligent_agents = True
+            self.logger.info("✅ 智能体协作系统已启用")
+            print("✅ 智能体协作系统已启用 - 支持多专家MDT协作决策")
+        except Exception as e:
+            self.logger.warning(f"⚠️ 智能体协作系统初始化失败: {e}")
+            print(f"⚠️ 智能体协作系统初始化失败，将使用基础对话模式: {e}")
+            self.intelligent_collaboration_manager = None
+            self.use_intelligent_agents = False
+        
         self.logger.info("MDT系统接口初始化完成")
-
         logger.info("MDT System initialized successfully")
 
-    def run_patient_dialogue(self, patient_id: str = None) -> Dict[str, Any]:
+    async def run_patient_dialogue(self, patient_id: str = None) -> Dict[str, Any]:
         """运行患者对话模式 - 增强版本，支持对话记忆和治疗方案生成"""
         self.logger.info(f"启动患者对话模式，患者ID: {patient_id}")
         
@@ -437,6 +473,10 @@ class MDTSystemInterface:
             print("输入 'history' 查看对话历史")
             print("输入 'treatment' 生成治疗方案")
             print("输入 'stats' 查看记忆统计")
+        # 🚀 新增智能体协作功能提示
+        if self.use_intelligent_agents:
+            print("🤖 输入 'mdt' 启动多专家MDT协作决策")
+            print("🤖 输入 'agents' 查看可用专家角色")
         print("=" * 50)
         
         # 显示患者历史对话（如果启用增强模式）
@@ -451,10 +491,19 @@ class MDTSystemInterface:
         while True:
             try:
                 # 获取用户输入
-                if patient_id:
-                    user_input = input(f"\n[患者 {patient_id}] 请输入您的问题: ").strip()
-                else:
-                    user_input = input(f"\n[通用查询] 请输入您的问题: ").strip()
+                try:
+                    if patient_id:
+                        user_input = input(f"\n[患者 {patient_id}] 请输入您的问题: ").strip()
+                    else:
+                        user_input = input(f"\n[通用查询] 请输入您的问题: ").strip()
+                except EOFError:
+                    # 处理EOF错误（如管道输入结束）
+                    print("\n检测到输入结束，退出对话模式")
+                    break
+                except KeyboardInterrupt:
+                    # 处理Ctrl+C中断
+                    print("\n\n用户中断，退出对话模式")
+                    break
                 
                 if not user_input:
                     continue
@@ -496,6 +545,19 @@ class MDTSystemInterface:
                 if enhanced_mode and user_input.lower() in ['stats', '统计', 'statistics']:
                     stats = self.dialogue_manager_patient.get_memory_statistics()
                     self._show_memory_statistics(stats)
+                    continue
+                
+                # 🚀 检查MDT协作命令（智能体模式）
+                if self.use_intelligent_agents and user_input.lower() in ['mdt', 'MDT', '协作', 'collaboration']:
+                    if patient_id:
+                        await self._run_mdt_collaboration(patient_id)
+                    else:
+                        print("❌ 请先指定患者ID")
+                    continue
+                
+                # 🚀 检查专家角色查看命令（智能体模式）
+                if self.use_intelligent_agents and user_input.lower() in ['agents', '专家', 'roles', '角色']:
+                    self._show_available_agents()
                     continue
                 
                 # 检查切换患者命令
@@ -585,6 +647,112 @@ class MDTSystemInterface:
             "patient_id": patient_id
         }
     
+    async def _run_mdt_collaboration(self, patient_id: str):
+        """运行MDT多专家协作决策"""
+        try:
+            print(f"\n🚀 启动MDT多专家协作决策 - 患者ID: {patient_id}")
+            print("=" * 60)
+            print("正在进行智能体协作分析...")
+            
+            # 使用智能协作管理器进行综合处理
+            collaboration_result = await self.intelligent_collaboration_manager.process_patient_comprehensive(
+                patient_id=patient_id,
+                use_enhanced_workflow=True
+            )
+            
+            # 显示协作结果
+            self._show_collaboration_result(collaboration_result)
+            
+        except Exception as e:
+            print(f"❌ MDT协作决策失败: {e}")
+            self.logger.error(f"MDT协作决策失败: {e}")
+    
+    def _show_collaboration_result(self, result):
+        """显示协作结果"""
+        print(f"\n📊 MDT协作决策结果")
+        print("=" * 60)
+        
+        # 基本信息
+        print(f"患者ID: {result.patient_id}")
+        print(f"处理时间: {result.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        # 协作指标
+        metrics = result.collaboration_metrics
+        print(f"\n📈 协作指标:")
+        print(f"  • 总处理时间: {metrics.total_processing_time:.2f}秒")
+        print(f"  • 相似患者数量: {metrics.similar_patients_found}")
+        print(f"  • 参与专家角色: {', '.join(metrics.roles_selected)}")
+        print(f"  • 讨论轮次: {metrics.total_discussion_rounds}")
+        print(f"  • 达成共识: {'是' if metrics.consensus_achieved else '否'}")
+        print(f"  • 最终置信度: {metrics.final_confidence:.2f}")
+        
+        # 治疗方案
+        treatment_plan = result.treatment_plan
+        if treatment_plan and 'recommended_treatment' in treatment_plan:
+            recommended = treatment_plan['recommended_treatment']
+            print(f"\n💊 推荐治疗方案:")
+            print(f"  • 治疗类型: {recommended.get('treatment_type', 'N/A')}")
+            print(f"  • 置信度: {recommended.get('confidence_score', 0):.2f}")
+            if 'reasoning' in recommended:
+                print(f"  • 推理依据: {recommended['reasoning'][:100]}...")
+        
+        # 相似患者
+        if result.similar_patients:
+            print(f"\n🔍 相似患者分析 (共{len(result.similar_patients)}例):")
+            for i, patient in enumerate(result.similar_patients[:3], 1):
+                print(f"  {i}. 患者{patient.patient_id} (相似度: {patient.score:.3f})")
+        
+        # 专家建议摘要
+        if result.dialogue_summary:
+            print(f"\n👥 专家协作摘要:")
+            summary = result.dialogue_summary
+            if 'key_considerations' in summary:
+                for consideration in summary['key_considerations'][:3]:
+                    print(f"  • {consideration}")
+        
+        print("=" * 60)
+    
+    def _show_available_agents(self):
+        """显示可用的专家角色"""
+        print(f"\n🤖 可用专家角色")
+        print("=" * 40)
+        
+        try:
+            # 从智能协作管理器获取角色信息
+            if hasattr(self.intelligent_collaboration_manager, 'role_factory') and \
+               self.intelligent_collaboration_manager.role_factory:
+                
+                # 显示扩展角色类型
+                from src.consensus.enhanced_role_definitions import ExtendedRoleType
+                
+                print("专业医疗角色:")
+                roles_info = {
+                    ExtendedRoleType.ONCOLOGIST: "肿瘤科医生 - 肿瘤诊断和治疗专家",
+                    ExtendedRoleType.RADIOLOGIST: "放射科医生 - 影像学诊断专家", 
+                    ExtendedRoleType.PATHOLOGIST: "病理科医生 - 病理诊断专家",
+                    ExtendedRoleType.SURGEON: "外科医生 - 手术治疗专家",
+                    ExtendedRoleType.ANESTHESIOLOGIST: "麻醉科医生 - 麻醉和围术期管理专家",
+                    ExtendedRoleType.NURSE: "护士 - 护理和患者关怀专家",
+                    ExtendedRoleType.CLINICAL_PHARMACIST: "临床药师 - 药物治疗专家",
+                    ExtendedRoleType.NUTRITIONIST: "营养师 - 营养评估和膳食指导专家",
+                    ExtendedRoleType.REHABILITATION_THERAPIST: "康复治疗师 - 康复训练和功能恢复专家",
+                    ExtendedRoleType.PSYCHOLOGIST: "心理医生 - 心理健康专家",
+                    ExtendedRoleType.PATIENT_ADVOCATE: "患者权益代表 - 患者利益保护专家"
+                }
+                
+                for role, description in roles_info.items():
+                    print(f"  • {role.value}: {description}")
+                
+                print(f"\n💡 系统会根据患者情况自动选择最适合的专家团队")
+                
+            else:
+                print("❌ 智能体角色系统未正确初始化")
+                
+        except Exception as e:
+            print(f"❌ 获取专家角色信息失败: {e}")
+        
+        print("=" * 40)
+    
     def _show_dialogue_help(self, enhanced_mode: bool = False):
         """显示对话系统帮助信息"""
         help_text = f"""
@@ -616,6 +784,22 @@ class MDTSystemInterface:
 ✅ 共识矩阵优化的治疗方案生成
 ✅ 强化学习决策优化
 ✅ 持续学习和改进
+"""
+        
+        # 添加智能体协作功能说明
+        if hasattr(self, 'use_intelligent_agents') and self.use_intelligent_agents:
+            help_text += """
+🚀 MDT智能体协作功能:
+• mdt 或 协作 - 启动多专家MDT协作决策
+• agents 或 专家 - 查看可用的专家角色
+
+MDT协作特性:
+🤖 多专业医疗专家智能体协作
+🔍 基于FAISS的相似患者检索
+💡 智能角色选择和任务分配
+🗣️ 增强型多智能体对话机制
+📊 协作决策指标和置信度评估
+🎯 共识驱动的治疗方案生成
 """
         
         help_text += """
@@ -1078,7 +1262,8 @@ def main():
         
         # 启动对话模式
         try:
-            result = system.run_patient_dialogue(args.patient_id)
+            import asyncio
+            result = asyncio.run(system.run_patient_dialogue(args.patient_id))
             
             # 保存对话历史
             if result['dialogue_history']:

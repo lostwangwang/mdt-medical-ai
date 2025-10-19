@@ -54,19 +54,36 @@ class LLMInterface:
         self._setup_client()
     
     def _setup_client(self):
-        """设置LLM客户端"""
+        """设置LLM客户端，支持阿里云百炼和OpenAI"""
         try:
-            if self.config.api_key:
-                openai.api_key = self.config.api_key
-            if self.config.base_url:
-                openai.base_url = self.config.base_url
+            # 初始化变量，避免作用域问题
+            api_key = self.config.api_key
+            base_url = self.config.base_url
+            
+            # 检查API密钥是否有效
+            if not api_key or api_key.strip() == "" or api_key == "test-api-key-for-testing":
+                logger.info("No valid API key provided, LLM client will not be initialized. Using template fallback.")
+                self.client = None
+                return
+            
+            # 根据base_url判断是否为阿里云百炼
+            if base_url and "dashscope" in base_url:
+                logger.info("Detected Alibaba Cloud DashScope (百炼) configuration")
+            elif base_url:
+                logger.info(f"Using custom base URL: {base_url}")
+            else:
+                logger.info("Using OpenAI default endpoint")
+            
+            # 初始化客户端（兼容OpenAI格式的接口）
             self.client = openai.OpenAI(
-                api_key=self.config.api_key,
-                base_url=self.config.base_url
+                api_key=api_key,
+                base_url=base_url
             )
-            logger.info(f"LLM client initialized with model: {self.config.model_name}")
+            logger.info(f"LLM client initialized successfully with model: {self.config.model_name}")
+            
         except Exception as e:
-            logger.warning(f"Failed to initialize OpenAI client: {e}")
+            logger.warning(f"Failed to initialize LLM client: {e}")
+            logger.info("Falling back to template-based responses")
             self.client = None
     
     def generate_treatment_reasoning(

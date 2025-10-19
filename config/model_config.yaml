@@ -66,6 +66,8 @@ consensus:
     nurse: 0.8
     psychologist: 0.7
     patient_advocate: 0.8
+    nutritionist: 0.8
+    rehabilitation_therapist: 0.8
   
   # 共识阈值
   thresholds:
@@ -121,6 +123,22 @@ agents:
       comfort: 0.3
       family_impact: 0.3
     communication_style: "patient-focused"
+    
+  nutritionist:
+    primary_concerns: ["nutritional_status", "dietary_compliance", "metabolic_support"]
+    weight_factors:
+      nutritional_risk: 0.4
+      dietary_compliance: 0.3
+      metabolic_status: 0.3
+    communication_style: "scientific"
+    
+  rehabilitation_therapist:
+    primary_concerns: ["functional_recovery", "exercise_capacity", "daily_living_independence"]
+    weight_factors:
+      functional_recovery: 0.4
+      exercise_tolerance: 0.3
+      self_care_ability: 0.3
+    communication_style: "encouraging"
 
 # ===== 强化学习配置 (姚刚模块) =====
 reinforcement_learning:

@@ -60,7 +60,7 @@ class EnhancedFAISSManager:
         self,
         db_path: str = "clinical_memory_db",
         embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
-        device: str = "cpu",
+        device: str = "cuda",
         dimension: int = 384
     ):
         """初始化FAISS管理器"""
