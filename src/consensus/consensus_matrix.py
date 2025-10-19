@@ -115,7 +115,7 @@ class ConsensusMatrix:
             columns=[r.value for r in roles],
         )
         print("共识矩阵", consensus_matrix)
-        logger.info("Consensus matrix generated successfully", consensus_matrix)
+        logger.info("Consensus matrix generated successfully: %s", consensus_matrix)
         return consensus_matrix
 
     def _aggregate_scores(
@@ -562,3 +562,9 @@ class ConsensusMatrix:
             logger.info(f"Consensus report exported to {filepath}")
 
         return report_text
+
+    def calculate_consensus(
+        self, patient_state: PatientState, use_dialogue: bool = False
+    ) -> ConsensusResult:
+        """计算共识矩阵 - 与generate_consensus方法功能相同"""
+        return self.generate_consensus(patient_state, use_dialogue)

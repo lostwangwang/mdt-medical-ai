@@ -112,19 +112,17 @@ class MultiAgentDialogueManager:
         self, agent: RoleAgent, opinion, patient_state: PatientState
     ) -> DialogueMessage:
         """创建初始消息"""
-        # 找到最推荐的治疗方案
-        best_treatment = max(opinion.treatment_preferences.items(), key=lambda x: x[1])[
-            0
-        ]
+        # 智能选择治疗方案（不仅仅是最高分）
+        focus_treatment = self._select_focus_treatment_for_role(
+            agent, opinion, patient_state
+        )
 
-        # 生成初始发言内容
-        content = f"As the {agent.role.value}, I {self._get_recommendation_phrase(opinion.treatment_preferences[best_treatment])} {best_treatment.value}. "
-        content += f"My reasoning: {opinion.reasoning}"
-
-        if opinion.concerns:
-            content += (
-                f" However, I have concerns about: {', '.join(opinion.concerns[:2])}"
-            )
+        # 尝试使用LLM生成个性化初始消息
+        content = self._generate_llm_initial_message(agent, opinion, patient_state, focus_treatment)
+        
+        # 如果LLM生成失败，降级到模板化方法
+        if not content:
+            content = self._generate_template_initial_message(agent, opinion, focus_treatment)
 
         return DialogueMessage(
             role=agent.role,
@@ -133,8 +131,205 @@ class MultiAgentDialogueManager:
             message_type="initial_opinion",
             referenced_roles=[],
             evidence_cited=[],
-            treatment_focus=best_treatment,
+            treatment_focus=focus_treatment,
         )
+
+    def _select_focus_treatment_for_role(
+        self, agent: RoleAgent, opinion, patient_state: PatientState
+    ) -> TreatmentOption:
+        """为特定角色智能选择焦点治疗方案"""
+        prefs = opinion.treatment_preferences
+        
+        # 1. 过滤掉明显不合适的治疗方案（评分过低）
+        viable_treatments = {
+            treatment: score for treatment, score in prefs.items() 
+            if score > -0.5  # 排除强烈反对的方案
+        }
+        
+        if not viable_treatments:
+            # 如果所有方案都被强烈反对，选择最不反对的
+            return max(prefs.items(), key=lambda x: x[1])[0]
+        
+        # 2. 考虑角色专业特长
+        role_preferred_treatments = self._get_role_preferred_treatments(agent.role)
+        
+        # 3. 智能选择策略
+        return self._apply_intelligent_selection_strategy(
+            viable_treatments, role_preferred_treatments, patient_state, agent.role
+        )
+
+    def _get_role_preferred_treatments(self, role: RoleType) -> List[TreatmentOption]:
+        """获取角色偏好的治疗方案类型"""
+        role_preferences = {
+            RoleType.ONCOLOGIST: [
+                TreatmentOption.CHEMOTHERAPY, 
+                TreatmentOption.RADIOTHERAPY, 
+                TreatmentOption.SURGERY,
+                TreatmentOption.IMMUNOTHERAPY
+            ],
+            RoleType.NURSE: [
+                TreatmentOption.PALLIATIVE_CARE,
+                TreatmentOption.CHEMOTHERAPY,  # 护理角度关注
+                TreatmentOption.RADIOTHERAPY
+            ],
+            RoleType.PSYCHOLOGIST: [
+                TreatmentOption.PALLIATIVE_CARE,
+                TreatmentOption.WATCHFUL_WAITING,
+                TreatmentOption.IMMUNOTHERAPY  # 相对温和
+            ],
+            RoleType.RADIOLOGIST: [
+                TreatmentOption.RADIOTHERAPY,
+                TreatmentOption.SURGERY,
+                TreatmentOption.CHEMOTHERAPY
+            ],
+            RoleType.PATIENT_ADVOCATE: [
+                TreatmentOption.PALLIATIVE_CARE,
+                TreatmentOption.WATCHFUL_WAITING,
+                TreatmentOption.IMMUNOTHERAPY
+            ],
+            RoleType.NUTRITIONIST: [
+                TreatmentOption.PALLIATIVE_CARE,
+                TreatmentOption.IMMUNOTHERAPY,
+                TreatmentOption.CHEMOTHERAPY
+            ],
+            RoleType.REHABILITATION_THERAPIST: [
+                TreatmentOption.SURGERY,
+                TreatmentOption.RADIOTHERAPY,
+                TreatmentOption.PALLIATIVE_CARE
+            ]
+        }
+        return role_preferences.get(role, list(TreatmentOption))
+
+    def _apply_intelligent_selection_strategy(
+        self, 
+        viable_treatments: Dict[TreatmentOption, float],
+        role_preferred_treatments: List[TreatmentOption],
+        patient_state: PatientState,
+        role: RoleType
+    ) -> TreatmentOption:
+        """应用智能选择策略"""
+        
+        # 策略1: 如果有明显的高分治疗方案（>0.7），直接选择
+        high_score_treatments = {
+            t: s for t, s in viable_treatments.items() if s > 0.7
+        }
+        if high_score_treatments:
+            return max(high_score_treatments.items(), key=lambda x: x[1])[0]
+        
+        # 策略2: 在角色偏好的治疗方案中选择评分最高的
+        role_viable_treatments = {
+            t: s for t, s in viable_treatments.items() 
+            if t in role_preferred_treatments
+        }
+        if role_viable_treatments:
+            return max(role_viable_treatments.items(), key=lambda x: x[1])[0]
+        
+        # 策略3: 考虑患者状态的特殊情况
+        if patient_state.quality_of_life_score < 0.3:
+            # 生活质量很差，优先考虑姑息治疗
+            if TreatmentOption.PALLIATIVE_CARE in viable_treatments:
+                return TreatmentOption.PALLIATIVE_CARE
+        
+        if patient_state.age > 80:
+            # 高龄患者，优先考虑温和治疗
+            gentle_treatments = [
+                TreatmentOption.PALLIATIVE_CARE,
+                TreatmentOption.WATCHFUL_WAITING,
+                TreatmentOption.IMMUNOTHERAPY
+            ]
+            for treatment in gentle_treatments:
+                if treatment in viable_treatments:
+                    return treatment
+        
+        # 策略4: 如果评分接近，选择争议性较小的方案
+        max_score = max(viable_treatments.values())
+        close_treatments = {
+            t: s for t, s in viable_treatments.items() 
+            if abs(s - max_score) < 0.2
+        }
+        
+        if len(close_treatments) > 1:
+            # 选择通常争议较小的治疗方案
+            preference_order = [
+                TreatmentOption.IMMUNOTHERAPY,
+                TreatmentOption.RADIOTHERAPY,
+                TreatmentOption.CHEMOTHERAPY,
+                TreatmentOption.SURGERY,
+                TreatmentOption.PALLIATIVE_CARE,
+                TreatmentOption.WATCHFUL_WAITING
+            ]
+            
+            for preferred in preference_order:
+                if preferred in close_treatments:
+                    return preferred
+        
+        # 策略5: 默认选择评分最高的
+        return max(viable_treatments.items(), key=lambda x: x[1])[0]
+
+    def _generate_llm_initial_message(
+        self, agent: RoleAgent, opinion, patient_state: PatientState, focus_treatment: TreatmentOption
+    ) -> str:
+        """使用LLM生成个性化初始消息"""
+        if not hasattr(agent, 'llm_interface') or not agent.llm_interface:
+            return ""
+            
+        try:
+            # 使用专门的治疗推理方法生成基础推理
+            if hasattr(agent.llm_interface, 'generate_treatment_reasoning'):
+                reasoning = agent.llm_interface.generate_treatment_reasoning(
+                    patient_state=patient_state,
+                    role=agent.role,
+                    treatment_option=focus_treatment,
+                    knowledge_context={}
+                )
+                
+                if reasoning and len(reasoning.strip()) > 0:
+                    # 基于推理生成MDT发言格式的消息
+                    content = self._format_reasoning_as_mdt_message(
+                        agent, reasoning, focus_treatment, opinion
+                    )
+                    logger.debug(f"Generated LLM initial message for {agent.role.value}: {content[:100]}...")
+                    return content
+                    
+        except Exception as e:
+            logger.warning(f"LLM initial message generation failed for {agent.role}: {e}")
+            
+        return ""
+
+    def _format_reasoning_as_mdt_message(
+        self, agent: RoleAgent, reasoning: str, focus_treatment: TreatmentOption, opinion
+    ) -> str:
+        """将LLM推理格式化为MDT发言消息"""
+        
+        # 获取推荐强度
+        treatment_score = opinion.treatment_preferences.get(focus_treatment, 0.0)
+        recommendation_phrase = self._get_recommendation_phrase(treatment_score)
+        
+        # 构建MDT发言格式
+        content = f"作为{agent.role.value}，我{recommendation_phrase}{focus_treatment.value}。\n\n"
+        content += f"我的专业分析：{reasoning}"
+        
+        # 添加关注事项
+        if opinion.concerns:
+            content += f"\n\n需要特别关注的问题：{', '.join(opinion.concerns[:3])}"
+            
+        return content
+
+
+
+    def _generate_template_initial_message(
+        self, agent: RoleAgent, opinion, focus_treatment: TreatmentOption
+    ) -> str:
+        """生成模板化初始消息（降级方案）"""
+        content = f"As the {agent.role.value}, I {self._get_recommendation_phrase(opinion.treatment_preferences[focus_treatment])} {focus_treatment.value}. "
+        content += f"My reasoning: {opinion.reasoning}"
+
+        if opinion.concerns:
+            content += (
+                f" However, I have concerns about: {', '.join(opinion.concerns[:2])}"
+            )
+            
+        return content
 
     def _get_recommendation_phrase(self, score: float) -> str:
         """获取推荐措辞"""

@@ -453,6 +453,70 @@ class MDTReinforcementLearning(gym.Env):
         self.episode_count = 0
         logger.info("Training history reset")
 
+    def get_optimal_action(self, patient_state: PatientState, consensus_result: ConsensusResult = None) -> RLAction:
+        """获取最优动作"""
+        if consensus_result is None and self.consensus_system:
+            consensus_result = self.consensus_system.generate_consensus(patient_state)
+        elif consensus_result is None:
+            consensus_result = self._generate_mock_consensus()
+        
+        # 计算每个治疗方案的预期奖励
+        best_treatment = None
+        best_reward = float('-inf')
+        best_confidence = 0.0
+        
+        for treatment in TreatmentOption:
+            reward_info = self.calculate_reward(treatment, consensus_result, patient_state)
+            if reward_info.total_reward > best_reward:
+                best_reward = reward_info.total_reward
+                best_treatment = treatment
+                # 基于奖励计算置信度
+                best_confidence = min(1.0, max(0.0, (reward_info.total_reward + 1.0) / 2.0))
+        
+        # 生成解释
+        explanation = f"基于共识分析和患者适宜性评估，推荐{best_treatment.value}治疗方案，预期奖励为{best_reward:.3f}"
+        
+        return RLAction(
+            treatment_recommendation=best_treatment,
+            confidence_level=best_confidence,
+            explanation=explanation
+        )
+
+    def get_action_confidence(self, action: TreatmentOption, patient_state: PatientState, consensus_result: ConsensusResult = None) -> float:
+        """
+        获取特定动作的置信度
+        
+        Args:
+            action: 治疗方案
+            patient_state: 患者状态
+            consensus_result: 共识结果
+            
+        Returns:
+            float: 置信度值 (0.0 到 1.0)
+        """
+        try:
+            # 如果没有共识结果，生成模拟的
+            if consensus_result is None:
+                consensus_result = self._generate_mock_consensus()
+            
+            # 计算该动作的奖励
+            reward_info = self.calculate_reward(action, consensus_result, patient_state)
+            
+            # 基于奖励计算置信度
+            # 将奖励范围 [-1, 1] 映射到置信度范围 [0, 1]
+            confidence = min(1.0, max(0.0, (reward_info.total_reward + 1.0) / 2.0))
+            
+            # 考虑共识强度对置信度的影响
+            if hasattr(consensus_result, 'consensus_strength'):
+                consensus_factor = consensus_result.consensus_strength
+                confidence = confidence * (0.5 + 0.5 * consensus_factor)
+            
+            return confidence
+            
+        except Exception as e:
+            logger.warning(f"计算动作置信度时出错: {e}")
+            return 0.5  # 返回中等置信度作为默认值
+
     def render(self, mode="human"):
         """环境渲染"""
         if mode == "human":

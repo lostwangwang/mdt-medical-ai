@@ -432,9 +432,9 @@ class HealthMonitor:
             context={
                 'component': result.component_name,
                 'status': result.status.value,
-                'response_time': result.response_time_ms
-            },
-            severity=severity
+                'response_time': result.response_time_ms,
+                'severity': severity
+            }
         )
         
         # 尝试自动恢复

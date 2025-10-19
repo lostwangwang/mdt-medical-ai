@@ -65,11 +65,13 @@ class ConsensusRewardMapper:
         
         # 角色权重配置
         self.role_weights = {
-            RoleType.ONCOLOGIST: 0.25,      # 肿瘤科医生
-            RoleType.RADIOLOGIST: 0.20,     # 放射科医生
-            RoleType.NURSE: 0.15,           # 护士
-            RoleType.PSYCHOLOGIST: 0.20,    # 心理医生
-            RoleType.PATIENT_ADVOCATE: 0.20 # 患者代表
+            RoleType.ONCOLOGIST: 0.22,           # 肿瘤科医生
+            RoleType.RADIOLOGIST: 0.18,          # 放射科医生
+            RoleType.NURSE: 0.13,                # 护士
+            RoleType.PSYCHOLOGIST: 0.17,         # 心理医生
+            RoleType.PATIENT_ADVOCATE: 0.17,     # 患者代表
+            RoleType.NUTRITIONIST: 0.13,         # 营养师
+            RoleType.REHABILITATION_THERAPIST: 0.13  # 康复师
         }
         
         logger.info("ConsensusRewardMapper initialized")
