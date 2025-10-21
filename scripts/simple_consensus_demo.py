@@ -14,6 +14,11 @@ import json
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+from src.utils.llm_interface import LLMConfig, LLMInterface
+from src.knowledge.enhanced_faiss_integration import EnhancedFAISSManager
+from src.knowledge.rag_system import MedicalKnowledgeRAG
+from src.consensus.dialogue_manager import MultiAgentDialogueManager
+
 def demonstrate_consensus_flow():
     """演示共识达成流程"""
     
@@ -240,3 +245,8 @@ def demonstrate_consensus_flow():
 
 if __name__ == "__main__":
     demonstrate_consensus_flow()
+    cfg = LLMConfig()
+    llm = LLMInterface(cfg)
+    faiss_mgr = EnhancedFAISSManager(db_path="clinical_memory_db")
+    rag = MedicalKnowledgeRAG(faiss_manager=faiss_mgr)
+    manager = MultiAgentDialogueManager(rag_system=rag, llm_interface=llm)

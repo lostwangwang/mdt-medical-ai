@@ -12,6 +12,7 @@ import json
 import logging
 
 from ..core.data_models import PatientState, TreatmentOption
+from .enhanced_faiss_integration import EnhancedFAISSManager, SearchResult
 
 logger = logging.getLogger(__name__)
 
@@ -19,15 +20,16 @@ logger = logging.getLogger(__name__)
 class MedicalKnowledgeRAG:
     """医学知识检索增强生成系统"""
 
-    def __init__(self, knowledge_base_path: str = None):
+    def __init__(self, knowledge_base_path: str = None, faiss_manager: Optional[EnhancedFAISSManager] = None):
         self.knowledge_base = self._initialize_knowledge_base(knowledge_base_path)
         self.embedding_cache = {}
+        self.faiss_manager = faiss_manager
 
     def _initialize_knowledge_base(
         self, knowledge_base_path: Optional[str]
     ) -> Dict[str, Any]:
         """初始化医学知识库"""
-        # 在实际项目中，这里会加载真实的医学知识库
+        # 在实际项目中，这里会加载真实的医学知识库，这个我现在还没弄好。
         # 现在使用模拟的知识结构
 
         knowledge_base = {
@@ -260,7 +262,24 @@ class MedicalKnowledgeRAG:
         return guidelines
 
     def _get_similar_cases(self, patient_state: PatientState) -> List[Dict[str, Any]]:
-        """获取相似病例"""
+        # 优先使用FAISS相似患者检索
+        if self.faiss_manager:
+            results = self.faiss_manager.search_similar_patients(patient_state, k=3)
+            return [
+                {
+                    "patient_profile": {
+                        "age": r.metadata.get("age"),
+                        "stage": r.metadata.get("stage"),
+                        "comorbidities": r.metadata.get("comorbidities", [])
+                    },
+                    "content": r.content,
+                    "score": r.score,
+                    "patient_id": r.patient_id,
+                    "document_type": r.document_type,
+                    "timestamp": r.timestamp.isoformat() if r.timestamp else None
+                }
+                for r in results
+            ]
         similar_cases = []
 
         patient_age = patient_state.age

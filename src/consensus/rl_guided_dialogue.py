@@ -29,7 +29,14 @@ logger = logging.getLogger(__name__)
 
 
 class RLGuidanceMode(Enum):
-    """RL指导模式"""
+    """
+    RL指导模式
+    
+    Attributes:
+        SOFT_GUIDANCE: 软指导（RL建议作为参考）
+        STRONG_GUIDANCE: 强指导（RL建议影响初始偏好）
+        ADAPTIVE_GUIDANCE: 自适应指导（基于RL置信度调整）
+    """
     SOFT_GUIDANCE = "soft_guidance"      # 软指导：RL建议作为参考
     STRONG_GUIDANCE = "strong_guidance"  # 强指导：RL建议影响初始偏好
     ADAPTIVE_GUIDANCE = "adaptive_guidance"  # 自适应指导：基于RL置信度调整
@@ -37,7 +44,17 @@ class RLGuidanceMode(Enum):
 
 @dataclass
 class RLGuidance:
-    """RL指导信息"""
+    """
+    RL指导信息
+    
+    Attributes:
+        recommended_treatment: 推荐的治疗方案
+        confidence: RL建议的置信度（0-1）
+        reasoning: 基于RL模型的推理
+        value_estimates: 治疗方案价值估计（字典，方案->价值）
+        uncertainty: 模型不确定性（0-1）
+        guidance_mode: RL指导模式
+    """
     recommended_treatment: TreatmentOption
     confidence: float
     reasoning: str
@@ -48,7 +65,15 @@ class RLGuidance:
 
 @dataclass
 class RLInfluencedOpinion:
-    """受RL影响的意见"""
+    """
+    受RL影响的意见
+    
+    Attributes:
+        original_opinion: 原始意见
+        rl_influenced_opinion: 受RL影响后的意见
+        influence_strength: 影响强度（0-1）
+        reasoning_modification: 基于RL模型的推理修改
+    """
     original_opinion: RoleOpinion
     rl_influenced_opinion: RoleOpinion
     influence_strength: float
@@ -56,7 +81,12 @@ class RLInfluencedOpinion:
 
 
 class RLGuidedDialogueManager(MultiAgentDialogueManager):
-    """RL指导的对话管理器"""
+    """
+    RL指导的对话管理器
+    
+    Attributes:
+        guidance_mode: RL指导模式
+    """
     
     def __init__(
         self, 

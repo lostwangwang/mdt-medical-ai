@@ -20,6 +20,7 @@ from ..core.data_models import (
 )
 from .role_agents import RoleAgent
 from ..knowledge.rag_system import MedicalKnowledgeRAG
+from ..utils.llm_interface import LLMInterface, LLMConfig
 
 logger = logging.getLogger(__name__)
 
@@ -27,20 +28,8 @@ logger = logging.getLogger(__name__)
 class MultiAgentDialogueManager:
     """多智能体对话管理器"""
 
-    def __init__(self, rag_system: MedicalKnowledgeRAG):
-        """
-        初始化多智能体对话管理器
-
-        Args:
-            rag_system (MedicalKnowledgeRAG): 医学知识RAG系统实例
-            agents (Dict[RoleType, RoleAgent]): 各角色智能体映射，键为角色枚举，值为对应智能体实例
-            rag_system (MedicalKnowledgeRAG): 医学知识检索与生成系统，用于提供循证支持
-            dialogue_rounds (List[DialogueRound]): 已完成的对话轮次列表，每轮包含多条消息与焦点治疗方案
-            current_round (int): 当前对话轮次编号，从0开始计数
-            max_rounds (int): 允许的最大对话轮次上限，超过则强制终止
-            convergence_threshold (float): 立场收敛阈值，超过此比例的角色立场稳定即视为达成共识
-        """
-        self.agents = {role: RoleAgent(role) for role in RoleType}
+    def __init__(self, rag_system: MedicalKnowledgeRAG, llm_interface: Optional[LLMInterface] = None):
+        self.agents = {role: RoleAgent(role, llm_interface=llm_interface) for role in RoleType}
         self.rag_system = rag_system
         self.dialogue_rounds = []
         self.current_round = 0
@@ -49,25 +38,35 @@ class MultiAgentDialogueManager:
 
 
     def conduct_mdt_discussion(self, patient_state: PatientState) -> ConsensusResult:
-        """进行MDT讨论"""
+        """
+        进行MDT讨论
+        
+        讨论流程:
+        1. 初始化讨论 - 各角色基于RAG检索的医学知识生成初始意见
+        2. 多轮对话协商 - 角色间就治疗方案进行结构化讨论
+        3. 立场更新 - 基于其他角色观点调整自己的立场
+        4. 争议聚焦 - 针对分歧较大的治疗方案深入讨论
+        5. 共识达成 - 生成最终的治疗建议和共识结果
+        """
         logger.info(f"Starting MDT discussion for patient {patient_state.patient_id}")
 
-        # 初始化对话
+        # 初始化对话 - 各角色生成基于证据的初始意见
         self._initialize_discussion(patient_state)
 
-        # 进行多轮对话
+        # 进行多轮对话协商
         while self.current_round < self.max_rounds and not self._check_convergence():
 
             self.current_round += 1
             logger.info(f"Starting dialogue round {self.current_round}")
 
+            # 进行一轮结构化对话
             current_round = self._conduct_dialogue_round(patient_state)
             self.dialogue_rounds.append(current_round)
 
-            # 更新智能体立场
+            # 基于对话内容更新各角色立场
             self._update_agent_stances(current_round)
 
-            # 检查是否需要聚焦讨论
+            # 检查是否需要聚焦讨论争议较大的治疗方案
             if self.current_round > 2:
                 self._focus_on_contentious_treatments(patient_state)
 
@@ -78,8 +77,16 @@ class MultiAgentDialogueManager:
         return final_result
 
     def _initialize_discussion(self, patient_state: PatientState) -> None:
-        """初始化讨论"""
-        # 获取相关医学知识 这里怎么检索? 从RAG系统中检索与患者状态相关的初始评估知识,要这里检索
+        """
+        初始化讨论
+        - RAG知识检索 ：从医学知识库中检索与患者状态相关的初始评估知识
+        - 角色意见生成 ：每个医疗角色（肿瘤医生、护士、心理医生等）基于检索到的知识生成初始治疗意见
+        - 智能治疗方案选择 ：不是简单选择最高分方案，而是考虑：
+            - 角色专业特长偏好
+            - 患者复杂度（年龄、生活质量、心理状态）
+            - 治疗方案可行性评估
+        """
+        # 获取相关医学知识 这里怎么检索? 从RAG系统中检索与患者状态相关的初始评估知识,要这里检索?我这里还没搞好，我先不专注这里
         initial_knowledge = self.rag_system.retrieve_relevant_knowledge(
             patient_state, "initial_assessment"
         )
@@ -101,6 +108,7 @@ class MultiAgentDialogueManager:
             initial_message = self._create_initial_message(
                 agent, opinion, patient_state
             )
+            logger.info(f"Generated initial message for {role}: {initial_message.content}")
             initial_round.messages.append(initial_message)
 
         self.dialogue_rounds.append(initial_round)
@@ -112,7 +120,7 @@ class MultiAgentDialogueManager:
         self, agent: RoleAgent, opinion, patient_state: PatientState
     ) -> DialogueMessage:
         """创建初始消息"""
-        # 智能选择治疗方案（不仅仅是最高分）
+        # 智能选择治疗方案（仅仅是最高分）
         focus_treatment = self._select_focus_treatment_for_role(
             agent, opinion, patient_state
         )
@@ -345,7 +353,7 @@ class MultiAgentDialogueManager:
             return "strongly advise against"
 
     def _conduct_dialogue_round(self, patient_state: PatientState) -> DialogueRound:
-        """进行一轮对话"""
+        """进行一轮对话 - 增强版本，支持更自然的对话流程"""
         current_round = DialogueRound(
             round_number=self.current_round,
             messages=[],
@@ -362,32 +370,263 @@ class MultiAgentDialogueManager:
             patient_state, "treatment_discussion", current_round.focus_treatment
         )
 
-        # 确定发言顺序（按争议程度）
-        speaking_order = self._determine_speaking_order(current_round.focus_treatment)
+        # 智能确定发言顺序和对话策略
+        speaking_order, dialogue_strategy = self._determine_intelligent_speaking_order(
+            current_round.focus_treatment, patient_state
+        )
 
-        # 各角色依次发言
-        for role in speaking_order:
-            agent = self.agents[role]
+        logger.info(f"Dialogue strategy: {dialogue_strategy}, Speaking order: {[r.value for r in speaking_order]}")
 
-            # 获取当前对话历史
-            all_previous_messages = []
-            for round in self.dialogue_rounds:
-                all_previous_messages.extend(round.messages)
-            all_previous_messages.extend(current_round.messages)
-
-            # 生成回应
-            response = agent.generate_dialogue_response(
-                patient_state,
-                round_knowledge,
-                all_previous_messages,
-                current_round.focus_treatment,
+        # 根据策略进行对话
+        if dialogue_strategy == "focused_debate":
+            current_round = self._conduct_focused_debate(
+                current_round, patient_state, round_knowledge, speaking_order
+            )
+        elif dialogue_strategy == "collaborative_discussion":
+            current_round = self._conduct_collaborative_discussion(
+                current_round, patient_state, round_knowledge, speaking_order
+            )
+        else:  # sequential_presentation
+            current_round = self._conduct_sequential_presentation(
+                current_round, patient_state, round_knowledge, speaking_order
             )
 
-            current_round.messages.append(response)
-
-            logger.debug(f"{role.value} responded: {response.content[:100]}...")
-
         return current_round
+    
+    def _determine_intelligent_speaking_order(
+        self, focus_treatment: TreatmentOption, patient_state: PatientState
+    ) -> tuple[List[RoleType], str]:
+        """智能确定发言顺序和对话策略"""
+        
+        # 分析当前争议程度
+        stance_variance = self._calculate_stance_variance(focus_treatment)
+        
+        # 分析患者复杂度
+        patient_complexity = self._assess_patient_complexity(patient_state)
+        
+        # 确定对话策略
+        if stance_variance > 0.6:  # 高争议
+            strategy = "focused_debate"
+            # 争议大的情况下，让立场最极端的角色先发言
+            speaking_order = self._get_polarized_speaking_order(focus_treatment)
+        elif patient_complexity > 0.7:  # 复杂病例
+            strategy = "collaborative_discussion"
+            # 复杂病例需要协作，按专业相关性排序
+            speaking_order = self._get_expertise_based_order(focus_treatment, patient_state)
+        else:  # 常规讨论
+            strategy = "sequential_presentation"
+            # 按传统的专业重要性排序
+            speaking_order = self._get_traditional_speaking_order(focus_treatment)
+        
+        return speaking_order, strategy
+    
+    def _calculate_stance_variance(self, treatment: TreatmentOption) -> float:
+        """计算立场方差，衡量争议程度"""
+        stances = []
+        for agent in self.agents.values():
+            stance = agent.current_stance.get(treatment, 0)
+            stances.append(stance)
+        
+        if len(stances) < 2:
+            return 0.0
+        
+        import numpy as np
+        return float(np.var(stances))
+    
+    def _assess_patient_complexity(self, patient_state: PatientState) -> float:
+        """评估患者复杂度"""
+        complexity_score = 0.0
+        
+        # 年龄因素
+        if patient_state.age > 75:
+            complexity_score += 0.3
+        elif patient_state.age < 40:
+            complexity_score += 0.2
+        
+        # 合并症
+        complexity_score += min(0.4, len(patient_state.comorbidities) * 0.1)
+        
+        # 生活质量
+        if patient_state.quality_of_life_score < 0.5:
+            complexity_score += 0.2
+        
+        # 心理状态
+        if patient_state.psychological_status in ["severe_anxiety", "depression"]:
+            complexity_score += 0.1
+        
+        return min(1.0, complexity_score)
+    
+    def _get_polarized_speaking_order(self, treatment: TreatmentOption) -> List[RoleType]:
+        """获取极化发言顺序（用于争议性讨论）"""
+        stance_roles = []
+        for role, agent in self.agents.items():
+            stance = agent.current_stance.get(treatment, 0)
+            stance_roles.append((role, abs(stance)))
+        
+        # 按立场强度排序，最极端的先发言
+        stance_roles.sort(key=lambda x: x[1], reverse=True)
+        return [role for role, _ in stance_roles]
+    
+    def _get_expertise_based_order(self, treatment: TreatmentOption, patient_state: PatientState) -> List[RoleType]:
+        """基于专业相关性的发言顺序"""
+        # 根据治疗类型和患者情况确定专业相关性
+        expertise_weights = {
+            TreatmentOption.SURGERY: {
+                RoleType.ONCOLOGIST: 0.9,
+                RoleType.RADIOLOGIST: 0.8,
+                RoleType.NURSE: 0.7,
+                RoleType.PSYCHOLOGIST: 0.4,
+                RoleType.PATIENT_ADVOCATE: 0.5,
+            },
+            TreatmentOption.CHEMOTHERAPY: {
+                RoleType.ONCOLOGIST: 0.9,
+                RoleType.NURSE: 0.8,
+                RoleType.PSYCHOLOGIST: 0.6,
+                RoleType.RADIOLOGIST: 0.5,
+                RoleType.PATIENT_ADVOCATE: 0.6,
+            },
+            TreatmentOption.PALLIATIVE_CARE: {
+                RoleType.NURSE: 0.9,
+                RoleType.PSYCHOLOGIST: 0.8,
+                RoleType.PATIENT_ADVOCATE: 0.9,
+                RoleType.ONCOLOGIST: 0.6,
+                RoleType.RADIOLOGIST: 0.3,
+            }
+        }
+        
+        weights = expertise_weights.get(treatment, {})
+        
+        # 根据患者复杂度调整权重
+        if len(patient_state.comorbidities) > 2:
+            weights[RoleType.NURSE] = weights.get(RoleType.NURSE, 0.5) + 0.2
+        
+        if patient_state.psychological_status in ["anxious", "depressed"]:
+            weights[RoleType.PSYCHOLOGIST] = weights.get(RoleType.PSYCHOLOGIST, 0.5) + 0.2
+        
+        # 按权重排序
+        sorted_roles = sorted(weights.items(), key=lambda x: x[1], reverse=True)
+        return [role for role, _ in sorted_roles if role in self.agents]
+    
+    def _get_traditional_speaking_order(self, treatment: TreatmentOption) -> List[RoleType]:
+        """传统的发言顺序"""
+        traditional_order = [
+            RoleType.ONCOLOGIST,
+            RoleType.RADIOLOGIST,
+            RoleType.NURSE,
+            RoleType.PSYCHOLOGIST,
+            RoleType.PATIENT_ADVOCATE,
+        ]
+        return [role for role in traditional_order if role in self.agents]
+    
+    def _conduct_focused_debate(
+        self, round_data: DialogueRound, patient_state: PatientState, 
+        knowledge: Dict, speaking_order: List[RoleType]
+    ) -> DialogueRound:
+        """进行聚焦辩论式对话"""
+        logger.info("Conducting focused debate format")
+        
+        # 第一轮：各方表明立场
+        for role in speaking_order:
+            agent = self.agents[role]
+            all_previous_messages = self._get_all_previous_messages(round_data)
+            
+            response = agent.generate_dialogue_response(
+                patient_state, knowledge, all_previous_messages, round_data.focus_treatment
+            )
+            round_data.messages.append(response)
+        
+        # 第二轮：针对性回应（如果有明显分歧）
+        if len(speaking_order) > 2:
+            opposing_pairs = self._identify_opposing_pairs(speaking_order, round_data.focus_treatment)
+            for role1, role2 in opposing_pairs[:2]:  # 最多2对辩论
+                # role1 回应 role2
+                agent1 = self.agents[role1]
+                all_previous_messages = self._get_all_previous_messages(round_data)
+                
+                response = agent1.generate_dialogue_response(
+                    patient_state, knowledge, all_previous_messages, round_data.focus_treatment
+                )
+                round_data.messages.append(response)
+        
+        return round_data
+    
+    def _conduct_collaborative_discussion(
+        self, round_data: DialogueRound, patient_state: PatientState,
+        knowledge: Dict, speaking_order: List[RoleType]
+    ) -> DialogueRound:
+        """进行协作式讨论"""
+        logger.info("Conducting collaborative discussion format")
+        
+        # 协作式讨论：每个角色都有机会回应前面的观点
+        for i, role in enumerate(speaking_order):
+            agent = self.agents[role]
+            all_previous_messages = self._get_all_previous_messages(round_data)
+            
+            response = agent.generate_dialogue_response(
+                patient_state, knowledge, all_previous_messages, round_data.focus_treatment
+            )
+            round_data.messages.append(response)
+            
+            # 如果不是最后一个发言者，给其他人机会简短回应
+            if i < len(speaking_order) - 1 and len(round_data.messages) > 2:
+                # 随机选择一个之前发言的角色进行简短回应
+                import random
+                previous_speakers = speaking_order[:i]
+                if previous_speakers and random.random() < 0.3:  # 30%概率有人回应
+                    responder_role = random.choice(previous_speakers)
+                    responder_agent = self.agents[responder_role]
+                    
+                    brief_response = responder_agent.generate_dialogue_response(
+                        patient_state, knowledge, all_previous_messages, round_data.focus_treatment
+                    )
+                    round_data.messages.append(brief_response)
+        
+        return round_data
+    
+    def _conduct_sequential_presentation(
+        self, round_data: DialogueRound, patient_state: PatientState,
+        knowledge: Dict, speaking_order: List[RoleType]
+    ) -> DialogueRound:
+        """进行顺序陈述式对话"""
+        logger.info("Conducting sequential presentation format")
+        
+        # 传统的顺序发言
+        for role in speaking_order:
+            agent = self.agents[role]
+            all_previous_messages = self._get_all_previous_messages(round_data)
+            
+            response = agent.generate_dialogue_response(
+                patient_state, knowledge, all_previous_messages, round_data.focus_treatment
+            )
+            round_data.messages.append(response)
+            
+            logger.debug(f"{role.value} responded: {response.content[:100]}...")
+        
+        return round_data
+    
+    def _get_all_previous_messages(self, current_round: DialogueRound) -> List:
+        """获取所有之前的消息"""
+        all_previous_messages = []
+        for round in self.dialogue_rounds:
+            all_previous_messages.extend(round.messages)
+        all_previous_messages.extend(current_round.messages)
+        return all_previous_messages
+    
+    def _identify_opposing_pairs(self, speaking_order: List[RoleType], treatment: TreatmentOption) -> List[tuple]:
+        """识别对立的角色对"""
+        opposing_pairs = []
+        
+        for i, role1 in enumerate(speaking_order):
+            stance1 = self.agents[role1].current_stance.get(treatment, 0)
+            
+            for role2 in speaking_order[i+1:]:
+                stance2 = self.agents[role2].current_stance.get(treatment, 0)
+                
+                # 如果立场相反（一个支持一个反对）
+                if (stance1 > 0.3 and stance2 < -0.3) or (stance1 < -0.3 and stance2 > 0.3):
+                    opposing_pairs.append((role1, role2))
+        
+        return opposing_pairs
 
     def _select_focus_treatment(self) -> TreatmentOption:
         """选择焦点治疗方案"""

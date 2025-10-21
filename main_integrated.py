@@ -15,7 +15,7 @@ from typing import Dict, Any, List
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from src.core.data_models import PatientState, TreatmentOption, RLAction
+from src.core.data_models import PatientState, TreatmentOption, RLAction, ChatRole
 from src.consensus.consensus_matrix import ConsensusMatrix
 from src.consensus.dialogue_manager import MultiAgentDialogueManager
 from src.consensus.role_agents import RoleAgent, RoleType, RoleOpinion, DialogueMessage
@@ -273,7 +273,7 @@ class EnhancedPatientDialogueManager:
                 # 添加历史用户查询
                 if dialogue.get("user_query"):
                     messages.append(DialogueMessage(
-                        role=RoleType.USER,
+                        role=ChatRole.USER,
                         content=f"[历史] {dialogue['user_query']}",
                         timestamp=datetime.fromisoformat(dialogue.get("timestamp", datetime.now().isoformat())),
                         message_type="user_query",
@@ -284,7 +284,7 @@ class EnhancedPatientDialogueManager:
                 # 添加历史系统回复
                 if dialogue.get("agent_response"):
                     messages.append(DialogueMessage(
-                        role=RoleType.SYSTEM,
+                        role=ChatRole.SYSTEM,
                         content=f"[历史回复] {dialogue['agent_response'][:200]}...",  # 截取前200字符
                         timestamp=datetime.fromisoformat(dialogue.get("timestamp", datetime.now().isoformat())),
                         message_type="system_response",
@@ -295,7 +295,7 @@ class EnhancedPatientDialogueManager:
         
         # 添加当前查询
         current_message = DialogueMessage(
-            role=RoleType.USER,
+            role=ChatRole.USER,
             content=query,
             timestamp=datetime.now(),
             message_type="user_query",

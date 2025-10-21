@@ -9,6 +9,7 @@ import numpy as np
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 import logging
+import re
 
 from ..utils.llm_interface import LLMConfig, LLMInterface
 
@@ -19,6 +20,7 @@ from ..core.data_models import (
     RoleOpinion,
     DialogueMessage,
     MedicalEvent,
+    ChatRole,
 )
 
 logger = logging.getLogger(__name__)
@@ -27,17 +29,21 @@ logger = logging.getLogger(__name__)
 class RoleAgent:
     """角色智能体基类"""
 
-    def __init__(self, role: RoleType, llm_interface=None):
+    def __init__(self, role: RoleType, llm_interface: Optional[LLMInterface] = None, llm_config: Optional[LLMConfig] = None):
         """初始化角色智能体
         Args:
             role: 角色类型
             llm_interface: LLM接口实例，用于与LLM交互
+            llm_config: LLM配置实例，当llm_interface为None时使用
             默认为None，在初始化时会根据角色类型自动创建
         """
-        llm_config = LLMConfig()
         self.role = role
-        self.llm_interface = LLMInterface(llm_config) # 待优化
-        self.specialization = self._get_specialization() # 通过内部方法获取实例的“专业领域”
+        if llm_interface is not None:
+            self.llm_interface = llm_interface
+        else:
+            cfg = llm_config or LLMConfig()
+            self.llm_interface = LLMInterface(cfg)
+        self.specialization = self._get_specialization() # 通过内部方法获取实例的"专业领域"
         self.dialogue_history = []
         self.current_stance = {}  # 当前立场
         
@@ -425,7 +431,7 @@ class RoleAgent:
 
         # 生成回应内容
         response_content = self._construct_response(
-            patient_state, knowledge, target_treatment, opposing_views, supporting_views
+            patient_state, knowledge, target_treatment, opposing_views, supporting_views, full_dialogue_context=dialogue_context
         )
 
         # 识别回应中引用的角色
@@ -494,27 +500,27 @@ class RoleAgent:
         treatment: TreatmentOption,
         opposing_views: List[Dict],
         supporting_views: List[Dict],
+        full_dialogue_context: Optional[List[DialogueMessage]] = None,
     ) -> str:
-        """构建回应内容"""
+        """构建回应内容 - 增强版本，减少模板化"""
         
-        # 如果有LLM接口，使用智能对话生成
+        # 优先使用LLM生成自然对话
         if self.llm_interface:
             try:
-                # 构建对话上下文
-                context_summary = ""
-                if opposing_views:
-                    context_summary += f"Opposing views: {opposing_views[0].get('content', '')[:100]}... "
-                if supporting_views:
-                    context_summary += f"Supporting views: {supporting_views[0].get('content', '')[:100]}... "
+                # 构建丰富的对话上下文
+                dialogue_context = self._build_rich_dialogue_context(
+                    patient_state, opposing_views, supporting_views, knowledge
+                )
                 
                 # 使用LLM生成自然对话回应
                 response = self.llm_interface.generate_dialogue_response(
                     patient_state=patient_state,
                     role=self.role,
                     treatment_option=treatment,
-                    discussion_context=context_summary,
+                    discussion_context=dialogue_context,
                     knowledge_context=knowledge,
-                    current_stance=self.current_stance
+                    current_stance=self.current_stance,
+                    dialogue_history=self._get_recent_dialogue_history(full_dialogue_context)
                 )
                 
                 if response and len(response.strip()) > 0:
@@ -524,50 +530,685 @@ class RoleAgent:
             except Exception as e:
                 logger.warning(f"LLM response generation failed for {self.role}: {e}")
 
-        # 降级到改进的模板化回应
-        # 获取角色立场
-        my_stance = self.current_stance.get(treatment, 0)
+        # 智能化的降级方案 - 动态构建回应
+        return self._construct_intelligent_fallback_response(
+            patient_state, treatment, opposing_views, supporting_views, knowledge
+        )
+    
+    def _build_rich_dialogue_context(
+        self,
+        patient_state: PatientState,
+        opposing_views: List[Dict],
+        supporting_views: List[Dict],
+        knowledge: Dict[str, Any]
+    ) -> str:
+        """构建丰富的对话上下文（中英双语与更稳健的关键词标签）"""
+        context_parts = []
 
-        # 构建基础立场
-        if my_stance > 0.5:
-            stance_phrase = "I strongly support"
-        elif my_stance > 0:
-            stance_phrase = "I cautiously recommend"
-        elif my_stance < -0.5:
-            stance_phrase = "I have serious concerns about"
-        else:
-            stance_phrase = "I have mixed feelings about"
+        # 患者关键信息（中英双语标签）
+        try:
+            age_en = f"{patient_state.age}y"
+            age_zh = f"{patient_state.age}岁"
+            diagnosis = patient_state.diagnosis
+            stage = patient_state.stage
+            context_parts.append(f"Patient/患者: {age_en} {diagnosis} stage/分期 {stage} ({age_zh})")
+        except Exception:
+            context_parts.append("Patient/患者: N/A")
 
-        # 添加角色特定的开场白
+        # 关键临床指标（QoL与合并症的双语提示）
+        try:
+            if patient_state.quality_of_life_score < 0.5:
+                context_parts.append("Poor QoL/生活质量较差")
+        except Exception:
+            pass
+        try:
+            if len(getattr(patient_state, 'comorbidities', []) or []) > 2:
+                context_parts.append("Multiple comorbidities/多合并症")
+        except Exception:
+            pass
+
+        # 对话历史摘要（中英双语标签）
+        if opposing_views:
+            opposing_summary = self._summarize_viewpoints(opposing_views, "opposing")
+            if opposing_summary:
+                context_parts.append(f"Opposition/反对: {opposing_summary}")
+
+        if supporting_views:
+            supporting_summary = self._summarize_viewpoints(supporting_views, "supporting")
+            if supporting_summary:
+                context_parts.append(f"Support/支持: {supporting_summary}")
+
+        return " | ".join(context_parts)
+
+    def _summarize_viewpoints(self, views: List[Dict], view_type: str) -> str:
+        """总结观点（中英双语，否定识别与关键词更稳健）"""
+        if not views:
+            return ""
+
+        key_concerns = []
+
+        # 关键词与否定模式（英中混合）
+        risk_patterns = [
+            r"\brisk\b", r"\bconcern(s)?\b", r"\bworry(ing)?\b",
+            r"adverse", r"side effect(s)?", r"toxicit(y|ies)",
+            r"风险", r"担忧", r"顾虑", r"副作用", r"不良", r"毒性"
+        ]
+        benefit_patterns = [
+            r"\bbenefit(s)?\b", r"\beffective(ness)?\b", r"\befficacy\b",
+            r"\bresponse\b", r"\bimprov(e|ement)\b", r"\bsurvival\b",
+            r"获益", r"有效", r"疗效", r"反应", r"改善", r"生存"
+        ]
+        qol_patterns = [
+            r"quality of life", r"\bqol\b", r"life quality",
+            r"生活质量", r"生存质量"
+        ]
+        safety_patterns = [
+            r"\bsafety\b", r"\bsafe\b", r"\btolerable\b",
+            r"安全性", r"安全", r"耐受", r"可耐受"
+        ]
+        negation_patterns = [
+            r"no\s+(risk|concern|worr(y|ies)|adverse|side effect(s)?|toxicit(y|ies))",
+            r"not\s+(concerned|worried)",
+            r"without\s+(risk|concern|toxicity|adverse)",
+            r"free of\s+(risk|toxicit(y|ies))",
+            r"lack of\s+concern",
+            r"无风险", r"不担心", r"无担忧", r"无需担忧", r"无顾虑", r"无明显风险"
+        ]
+        low_risk_patterns = [
+            r"low\s+risk", r"风险较低", r"风险不高"
+        ]
+
+        def any_match(patterns: List[str], text: str) -> bool:
+            return any(re.search(p, text) for p in patterns)
+
+        for view in views[:2]:  # 只看前两个观点
+            content_raw = view.get('content', '')
+            if not isinstance(content_raw, str):
+                continue
+            content = content_raw.lower()
+            role = view.get('role', '')
+
+            # 优先识别否定或安全倾向
+            if any_match(negation_patterns, content) or any_match(safety_patterns, content):
+                key_concerns.append(f"{role} indicates safety/表示安全性较好")
+                if any_match(benefit_patterns, content):
+                    key_concerns.append(f"{role} sees benefits/看到获益")
+                if any_match(qol_patterns, content):
+                    key_concerns.append(f"{role} focuses on QoL/关注生活质量")
+                continue
+
+            # 风险识别（排除明确否定）
+            if any_match(risk_patterns, content) and not any_match(negation_patterns, content):
+                key_concerns.append(f"{role} raises risks/提出风险")
+
+            # 获益
+            if any_match(benefit_patterns, content):
+                key_concerns.append(f"{role} sees benefits/看到获益")
+
+            # 生活质量
+            if any_match(qol_patterns, content):
+                key_concerns.append(f"{role} focuses on QoL/关注生活质量")
+
+            # 低风险提示（作为补充）
+            if any_match(low_risk_patterns, content):
+                key_concerns.append(f"{role} notes low risk/风险较低")
+
+        # 去重并截断
+        unique = []
+        for item in key_concerns:
+            if item not in unique:
+                unique.append(item)
+        return ", ".join(unique[:3])  # 最多3个关注点
+    
+    def _construct_intelligent_fallback_response(
+        self,
+        patient_state: PatientState,
+        treatment: TreatmentOption,
+        opposing_views: List[Dict],
+        supporting_views: List[Dict],
+        knowledge: Dict[str, Any],
+        dialogue_patterns: Dict[str, Any] = None
+    ) -> str:
+        """构建智能化的降级回应 - 减少模板化"""
+        
+        # 动态分析当前讨论焦点
+        discussion_focus = self._analyze_discussion_focus(opposing_views, supporting_views)
+        
+        # 考虑对话模式，避免重复表达
+        avoid_phrases = []
+        if dialogue_patterns and 'role_patterns' in dialogue_patterns:
+            role_pattern = dialogue_patterns['role_patterns'].get(self.role.value, {})
+            avoid_phrases = role_pattern.get('phrases', [])[:5]  # 避免最近使用的短语
+        
+        # 基于角色专业性和患者特征生成个性化开场
+        opening = self._generate_contextual_opening(
+            patient_state, treatment, discussion_focus, avoid_phrases
+        )
+        
+        # 生成基于证据的核心论点
+        core_argument = self._generate_evidence_based_argument(
+            patient_state, treatment, knowledge, discussion_focus
+        )
+        
+        # 如果有反对意见，生成针对性回应
+        response_to_opposition = ""
+        if opposing_views:
+            response_to_opposition = self._generate_targeted_response(
+                opposing_views, treatment, patient_state
+            )
+        
+        # 组合回应，避免固定模板
+        response_parts = [opening, core_argument]
+        if response_to_opposition:
+            response_parts.append(response_to_opposition)
+        
+        # 添加角色特异性的结论
+        conclusion = self._generate_role_specific_conclusion(patient_state, treatment)
+        if conclusion:
+            response_parts.append(conclusion)
+        
+        logger.debug(f"Using intelligent fallback response for {self.role.value}")
+        return " ".join(response_parts)
+    
+    def _analyze_discussion_focus(self, opposing_views: List[Dict], supporting_views: List[Dict]) -> str:
+        """分析当前讨论焦点"""
+        focus_keywords = []
+        
+        all_views = opposing_views + supporting_views
+        for view in all_views:
+            content = view.get('content', '').lower()
+            
+            # 识别讨论焦点
+            if any(word in content for word in ['risk', 'safety', 'complication']):
+                focus_keywords.append('safety')
+            if any(word in content for word in ['efficacy', 'survival', 'outcome']):
+                focus_keywords.append('efficacy')
+            if any(word in content for word in ['quality', 'comfort', 'symptom']):
+                focus_keywords.append('quality_of_life')
+            if any(word in content for word in ['cost', 'resource', 'feasible']):
+                focus_keywords.append('feasibility')
+        
+        # 返回最主要的讨论焦点
+        if focus_keywords:
+            return max(set(focus_keywords), key=focus_keywords.count)
+        return 'general'
+    
+    def _generate_contextual_opening(
+        self, patient_state: PatientState, treatment: TreatmentOption, focus: str, avoid_phrases: List[str] = None
+    ) -> str:
+        """生成基于上下文的动态开场白 - 大幅减少模板化"""
+        
+        import random
+        
+        # 基于患者特征的动态要素
+        age_factor = "年轻" if patient_state.age < 50 else "年长" if patient_state.age > 70 else ""
+        stage_factor = "早期" if patient_state.stage in ["I", "II"] else "晚期" if patient_state.stage in ["III", "IV"] else ""
+        qol_factor = "生活质量较差" if patient_state.quality_of_life_score < 0.5 else "状态良好" if patient_state.quality_of_life_score > 0.8 else ""
+        
+        # 角色特异性的多样化开场方式
         role_openings = {
-            RoleType.ONCOLOGIST: "From an oncological perspective,",
-            RoleType.NURSE: "As the care coordinator,",
-            RoleType.PSYCHOLOGIST: "Considering the psychological aspects,",
-            RoleType.RADIOLOGIST: "Based on imaging findings,",
-            RoleType.PATIENT_ADVOCATE: "Speaking for the patient's interests,",
+            RoleType.ONCOLOGIST: [
+                f"这位{age_factor}患者的{patient_state.diagnosis}",
+                f"针对{stage_factor}{patient_state.diagnosis}",
+                f"从肿瘤学角度看这个病例",
+                f"考虑到患者的临床特征",
+                f"基于{patient_state.diagnosis}的治疗指南"
+            ],
+            RoleType.NURSE: [
+                f"从护理实践来看",
+                f"考虑到患者的日常护理需求",
+                f"在实际照护中",
+                f"从患者舒适度角度",
+                f"护理团队的经验显示"
+            ],
+            RoleType.PSYCHOLOGIST: [
+                f"从心理适应角度",
+                f"考虑患者的心理状态",
+                f"心理评估显示",
+                f"从情感支持层面",
+                f"患者的心理承受能力"
+            ],
+            RoleType.RADIOLOGIST: [
+                f"影像学评估结果",
+                f"从放射学角度",
+                f"技术可行性方面",
+                f"基于影像学发现",
+                f"放射治疗的精准性"
+            ],
+            RoleType.PATIENT_ADVOCATE: [
+                f"站在患者立场",
+                f"从患者权益角度",
+                f"考虑患者的价值观",
+                f"尊重患者的选择",
+                f"患者的最佳利益"
+            ]
         }
         
-        opening = role_openings.get(self.role, f"As the {self.role.value},")
-        response_parts = [opening, f"{stance_phrase} {treatment.value} for this patient."]
+        # 随机选择开场方式，增加多样性，避免重复
+        openings = role_openings.get(self.role, [f"作为{self.role.value}"])
+        
+        # 过滤掉最近使用过的短语
+        if avoid_phrases:
+            filtered_openings = []
+            for opening in openings:
+                # 检查是否包含需要避免的短语
+                contains_avoid_phrase = any(phrase in opening for phrase in avoid_phrases if phrase)
+                if not contains_avoid_phrase:
+                    filtered_openings.append(opening)
+            openings = filtered_openings if filtered_openings else openings
+        
+        base_opening = random.choice(openings)
+        
+        # 根据讨论焦点添加特定关注点
+        focus_additions = {
+            'safety': ["安全性是关键考虑", "风险评估很重要", "需要谨慎评估风险"],
+            'efficacy': ["疗效是核心问题", "治疗效果值得期待", "疗效数据支持"],
+            'quality_of_life': ["生活质量不容忽视", "患者感受很重要", "舒适度是关键"],
+            'feasibility': ["实施可行性", "操作层面的考虑", "实际执行中"]
+        }
+        
+        # 30%概率添加焦点相关内容
+        if focus in focus_additions and random.random() < 0.3:
+            focus_addition = random.choice(focus_additions[focus])
+            return f"{base_opening}，{focus_addition}，"
+        
+        return f"{base_opening}，"
+    
+    def _generate_evidence_based_argument(
+        self,
+        patient_state: PatientState,
+        treatment: TreatmentOption,
+        knowledge: Dict[str, Any],
+        focus: str
+    ) -> str:
+        """生成基于证据的核心论点"""
+        
+        # 获取角色立场
+        my_stance = self.current_stance.get(treatment, 0)
+        
+        # 基于立场和焦点生成论点
+        if my_stance > 0.5:
+            return self._generate_strong_support_argument(patient_state, treatment, focus)
+        elif my_stance > 0:
+            return self._generate_cautious_support_argument(patient_state, treatment, focus)
+        elif my_stance < -0.5:
+            return self._generate_strong_concern_argument(patient_state, treatment, focus)
+        else:
+            return self._generate_balanced_argument(patient_state, treatment, focus)
+    
+    def _generate_strong_support_argument(self, patient_state: PatientState, treatment: TreatmentOption, focus: str) -> str:
+        """生成强烈支持的论点 - 动态化和个性化"""
+        import random
+        
+        # 基于患者特征的动态要素
+        age_consideration = f"{patient_state.age}岁的年龄" if patient_state.age > 70 or patient_state.age < 40 else ""
+        stage_consideration = f"{patient_state.stage}期" if patient_state.stage else ""
+        comorbidity_consideration = "合并症情况" if patient_state.comorbidities else ""
+        
+        # 角色特异性的支持论点模板池
+        role_arguments = {
+            RoleType.ONCOLOGIST: {
+                'efficacy': [
+                    f"{treatment.value}在{patient_state.diagnosis}治疗中显示出显著疗效",
+                    f"临床数据支持{treatment.value}对此类患者的治疗效果",
+                    f"基于循证医学，{treatment.value}是最佳选择",
+                    f"多项研究证实{treatment.value}的生存获益"
+                ],
+                'safety': [
+                    f"患者的临床状况适合{treatment.value}治疗",
+                    f"风险效益比分析支持{treatment.value}",
+                    f"安全性数据令人放心",
+                    f"副作用可控且可管理"
+                ]
+            },
+            RoleType.NURSE: {
+                'feasibility': [
+                    f"我们的护理团队完全有能力支持{treatment.value}",
+                    f"从护理角度看，{treatment.value}是可行的",
+                    f"患者的功能状态支持这个治疗方案",
+                    f"护理流程已经很成熟"
+                ],
+                'quality_of_life': [
+                    f"{treatment.value}有助于维持患者的生活质量",
+                    f"从患者舒适度考虑，这是好选择",
+                    f"能够保持患者的独立性",
+                    f"日常生活影响相对较小"
+                ]
+            },
+            RoleType.PSYCHOLOGIST: {
+                'quality_of_life': [
+                    f"从心理角度，{treatment.value}给患者带来希望",
+                    f"患者的心理状态能够承受这个治疗",
+                    f"心理适应性良好",
+                    f"有助于患者保持积极心态"
+                ]
+            },
+            RoleType.RADIOLOGIST: {
+                'safety': [
+                    f"影像学评估支持{treatment.value}的安全性",
+                    f"技术条件完全满足要求",
+                    f"解剖结构适合这种治疗方式",
+                    f"精准度可以得到保证"
+                ]
+            },
+            RoleType.PATIENT_ADVOCATE: {
+                'general': [
+                    f"{treatment.value}符合患者的最佳利益",
+                    f"这个选择尊重了患者的价值观",
+                    f"从患者权益角度完全支持",
+                    f"患者有权获得最佳治疗"
+                ]
+            }
+        }
+        
+        # 获取角色特定的论点
+        role_args = role_arguments.get(self.role, {})
+        focus_args = role_args.get(focus, role_args.get('general', []))
+        
+        if focus_args:
+            base_argument = random.choice(focus_args)
+        else:
+            # 通用支持论点
+            generic_supports = [
+                f"{treatment.value}是这个患者的最佳选择",
+                f"我强烈推荐{treatment.value}",
+                f"综合考虑，{treatment.value}最合适",
+                f"专业判断支持{treatment.value}"
+            ]
+            base_argument = random.choice(generic_supports)
+        
+        # 随机添加患者特征相关的补充说明
+        supplements = []
+        if age_consideration and random.random() < 0.4:
+            supplements.append(f"考虑到{age_consideration}")
+        if stage_consideration and random.random() < 0.4:
+            supplements.append(f"在{stage_consideration}的情况下")
+        if comorbidity_consideration and random.random() < 0.3:
+            supplements.append(f"尽管有{comorbidity_consideration}")
+        
+        if supplements:
+            supplement = random.choice(supplements)
+            return f"{supplement}，{base_argument}。"
+        
+        return f"{base_argument}。"
+    
+    def _generate_cautious_support_argument(self, patient_state: PatientState, treatment: TreatmentOption, focus: str) -> str:
+        """生成谨慎支持的论点 - 动态化"""
+        import random
+        
+        cautious_expressions = [
+            f"{treatment.value}有一定优势，但需要密切关注",
+            f"我倾向于支持{treatment.value}，不过要谨慎监测",
+            f"{treatment.value}可以考虑，但要做好风险管理",
+            f"支持{treatment.value}，同时要充分准备应对并发症"
+        ]
+        
+        risk_factors = []
+        if patient_state.age > 70:
+            risk_factors.append("高龄因素")
+        if patient_state.comorbidities:
+            risk_factors.append("合并症负担")
+        if patient_state.quality_of_life_score < 0.6:
+            risk_factors.append("生活质量状况")
+        
+        base_statement = random.choice(cautious_expressions)
+        if risk_factors:
+            risk_mention = f"特别是{random.choice(risk_factors)}"
+            return f"{base_statement}，{risk_mention}。"
+        
+        return f"{base_statement}。"
+    
+    def _generate_strong_concern_argument(self, patient_state: PatientState, treatment: TreatmentOption, focus: str) -> str:
+        """生成强烈关注的论点 - 动态化"""
+        import random
+        
+        concern_expressions = [
+            f"我对{treatment.value}有较大担忧",
+            f"{treatment.value}的风险可能过高",
+            f"需要重新考虑{treatment.value}的适用性",
+            f"我不太赞成{treatment.value}这个方案"
+        ]
+        
+        specific_concerns = {
+            'safety': [
+                f"安全性风险不容忽视",
+                f"副作用可能难以承受",
+                f"风险效益比不理想"
+            ],
+            'quality_of_life': [
+                f"对生活质量的影响太大",
+                f"患者的舒适度会严重下降",
+                f"生活质量评分已经不高"
+            ],
+            'efficacy': [
+                f"疗效可能不如预期",
+                f"获益有限",
+                f"效果存在不确定性"
+            ]
+        }
+        
+        base_concern = random.choice(concern_expressions)
+        specific_concern = random.choice(specific_concerns.get(focus, specific_concerns['safety']))
+        
+        # 添加患者特征相关的具体担忧
+        patient_factors = []
+        if patient_state.age > 75:
+            patient_factors.append(f"{patient_state.age}岁的高龄")
+        if len(patient_state.comorbidities) > 2:
+            patient_factors.append("多重合并症")
+        if patient_state.quality_of_life_score < 0.4:
+            patient_factors.append("生活质量已经很差")
+        
+        if patient_factors:
+            factor = random.choice(patient_factors)
+            return f"{base_concern}，{specific_concern}，尤其是{factor}。"
+        
+        return f"{base_concern}，{specific_concern}。"
+    
+    def _generate_balanced_argument(self, patient_state: PatientState, treatment: TreatmentOption, focus: str) -> str:
+        """生成平衡的论点 - 动态化"""
+        import random
+        
+        balanced_expressions = [
+            f"{treatment.value}有利有弊，需要仔细权衡",
+            f"对于{treatment.value}，我持中性态度",
+            f"{treatment.value}值得考虑，但要全面评估",
+            f"需要更多信息来判断{treatment.value}的适用性"
+        ]
+        
+        considerations = [
+            "需要综合考虑各种因素",
+            "建议多学科讨论",
+            "患者的个人意愿也很重要",
+            "可以进一步评估后决定"
+        ]
+        
+        base_statement = random.choice(balanced_expressions)
+        consideration = random.choice(considerations)
+        
+        return f"{base_statement}，{consideration}。"
+    
+    def _generate_targeted_response(
+        self, opposing_views: List[Dict], treatment: TreatmentOption, patient_state: PatientState
+    ) -> str:
+        """生成针对性回应 - 动态化"""
+        if not opposing_views:
+            return ""
+        
+        import random
+        
+        # 分析反对意见的核心关注点
+        main_concern = self._extract_main_concern(opposing_views[0])
+        opposing_role = opposing_views[0].get('role', 'colleague')
+        
+        # 动态回应模板
+        response_templates = {
+            'risk': [
+                f"我理解{opposing_role}对风险的担忧，但我认为通过适当的监测可以管理这些风险",
+                f"虽然{opposing_role}提到了风险问题，但获益可能更大",
+                f"关于{opposing_role}的风险顾虑，我们有相应的预防措施",
+                f"我同意{opposing_role}的风险评估，但这些风险是可控的"
+            ],
+            'efficacy': [
+                f"我对{opposing_role}的疗效评估有不同看法，类似病例的证据显示效果不错",
+                f"虽然{opposing_role}质疑疗效，但我认为值得一试",
+                f"关于{opposing_role}提到的疗效问题，我们可以密切观察",
+                f"我理解{opposing_role}的疑虑，但现有证据还是支持的"
+            ],
+            'quality_of_life': [
+                f"{opposing_role}的生活质量担忧很有道理，我们可以通过支持治疗来改善",
+                f"我同意{opposing_role}的观点，生活质量确实重要，但我们有办法平衡",
+                f"关于{opposing_role}提到的生活质量问题，我们会特别关注",
+                f"虽然{opposing_role}担心生活质量，但长远来看可能是有益的"
+            ],
+            'general': [
+                f"我很赞赏{opposing_role}的观点，但我们也要考虑其他因素",
+                f"感谢{opposing_role}的提醒，不过我认为还有其他角度需要考虑",
+                f"我理解{opposing_role}的立场，但我们需要综合评估",
+                f"{opposing_role}说得有道理，但我们也要看到积极的一面"
+            ]
+        }
+        
+        # 随机选择回应模板
+        templates = response_templates.get(main_concern, response_templates['general'])
+        return random.choice(templates)
+    
+    def _extract_main_concern(self, opposing_view: Dict) -> str:
+        """提取主要关注点"""
+        content = opposing_view.get('content', '').lower()
+        
+        if any(word in content for word in ['risk', 'danger', 'complication']):
+            return 'risk'
+        elif any(word in content for word in ['ineffective', 'limited benefit', 'poor outcome']):
+            return 'efficacy'
+        elif any(word in content for word in ['quality of life', 'comfort', 'suffering']):
+            return 'quality_of_life'
+        
+        return 'general'
+    
+    def _generate_role_specific_conclusion(self, patient_state: PatientState, treatment: TreatmentOption) -> str:
+        """生成角色特异性结论 - 动态化"""
+        import random
+        
+        role_conclusions = {
+            RoleType.ONCOLOGIST: [
+                f"从肿瘤学角度，{treatment.value}是当前最佳治疗选择",
+                f"基于肿瘤特征，我推荐{treatment.value}",
+                f"考虑到患者的肿瘤分期，{treatment.value}符合指南推荐",
+                f"从抗肿瘤效果来看，{treatment.value}具有良好前景"
+            ],
+            RoleType.NURSE: [
+                f"从护理角度，我们能够确保{treatment.value}的安全实施",
+                f"护理团队有信心配合{treatment.value}的治疗",
+                f"我们会全程关注患者在{treatment.value}期间的护理需求",
+                f"从护理管理角度，{treatment.value}是可行的"
+            ],
+            RoleType.PSYCHOLOGIST: [
+                f"从心理学角度，{treatment.value}考虑了患者的心理承受能力",
+                f"这个方案有助于维护患者的心理健康",
+                f"从心理支持角度，{treatment.value}是合适的选择",
+                f"考虑到患者的心理状态，{treatment.value}是可以接受的"
+            ],
+            RoleType.RADIOLOGIST: [
+                f"影像学检查支持{treatment.value}的选择",
+                f"从影像学角度，{treatment.value}有充分的依据",
+                f"影像学表现提示{treatment.value}是合理的",
+                f"基于影像学评估，{treatment.value}具有可行性"
+            ],
+            RoleType.PATIENT_ADVOCATE: [
+                f"这个决定充分尊重了患者的价值观和偏好",
+                f"从患者权益角度，{treatment.value}是合适的",
+                f"我们充分考虑了患者的意愿和需求",
+                f"这个选择体现了以患者为中心的理念"
+            ]
+        }
+        
+        # 添加患者特征相关的个性化元素
+        patient_factors = []
+        if patient_state.age > 70:
+            patient_factors.append("考虑到患者的年龄因素")
+        if patient_state.comorbidities:
+            patient_factors.append("结合患者的合并症情况")
+        if patient_state.quality_of_life_score < 0.6:
+            patient_factors.append("重视患者的生活质量")
+        
+        base_conclusions = role_conclusions.get(self.role, [f"从专业角度，{treatment.value}是合理的选择"])
+        base_conclusion = random.choice(base_conclusions)
+        
+        if patient_factors and random.random() < 0.7:  # 70%概率添加患者因素
+            factor = random.choice(patient_factors)
+            return f"{base_conclusion}，{factor}。"
+        
+        return f"{base_conclusion}。"
 
-        # 基于专业领域的论据
-        professional_reasoning = self._get_professional_reasoning(
-            patient_state, treatment, knowledge
-        )
-        if professional_reasoning:
-            response_parts.append(
-                f"From my {self.role.value} perspective, {professional_reasoning}"
-            )
-
-        # 回应反对意见
-        if opposing_views:
-            counter_argument = self._generate_counter_argument(
-                treatment, opposing_views[0], knowledge
-            )
-            response_parts.append(f"However, {counter_argument}")
-
-        logger.debug(f"Using template response for {self.role.value}")
-        return " ".join(response_parts)
+    def _get_recent_dialogue_history(
+        self,
+        messages: Optional[List[DialogueMessage]] = None,
+        limit: int = 5
+    ) -> List[Dict[str, Any]]:
+        """提取最近对话历史供LLM提示使用（仅需role与content）"""
+        history_list: List[Dict[str, Any]] = []
+        source = messages if messages is not None else getattr(self, "dialogue_history", [])
+        if not source:
+            return history_list
+        recent = source[-limit:] if len(source) > limit else source
+        for item in recent:
+            if isinstance(item, dict):
+                role_name = item.get("role", "Unknown")
+                content = item.get("content", "")
+            else:
+                role_name = item.role.value if hasattr(item, "role") and hasattr(item.role, "value") else str(getattr(item, "role", "Unknown"))
+                content = getattr(item, "content", "")
+            if not content:
+                continue
+            history_list.append({"role": role_name, "content": content})
+        return history_list
+    
+    def _get_dialogue_history(self, discussion_context: Dict[str, Any]) -> List[Dict[str, str]]:
+        """获取对话历史，增强上下文感知"""
+        dialogue_history = []
+        
+        # 从讨论上下文中提取历史对话
+        if 'previous_rounds' in discussion_context:
+            for round_data in discussion_context['previous_rounds']:
+                if 'responses' in round_data:
+                    for response in round_data['responses']:
+                        dialogue_history.append({
+                            'role': response.get('role', 'unknown'),
+                            'content': response.get('content', ''),
+                            'stance': response.get('stance', 'neutral'),
+                            'round': round_data.get('round_number', 0)
+                        })
+        
+        # 限制历史长度，保留最近的对话
+        return dialogue_history[-10:] if len(dialogue_history) > 10 else dialogue_history
+    
+    def _analyze_dialogue_patterns(self, dialogue_history: List[Dict[str, str]]) -> Dict[str, Any]:
+        """分析对话模式，避免重复"""
+        patterns = {
+            'repeated_phrases': [],
+            'common_stances': {},
+            'role_patterns': {},
+            'recent_topics': []
+        }
+        
+        # 分析角色发言模式
+        for entry in dialogue_history:
+            role = entry['role']
+            content = entry['content']
+            stance = entry['stance']
+            
+            # 统计角色立场
+            if role not in patterns['role_patterns']:
+                patterns['role_patterns'][role] = {'stances': [], 'phrases': []}
+            patterns['role_patterns'][role]['stances'].append(stance)
+            
+            # 提取常用短语（简化版）
+            words = content.split()
+            if len(words) > 3:
+                patterns['role_patterns'][role]['phrases'].extend(words[:3])
+        
+        return patterns
 
     def _get_professional_reasoning(
         self,
@@ -738,22 +1379,22 @@ class RoleAgent:
             citations.append("survival_statistics")
         return citations
 
-    def update_stance_based_on_dialogue(
-        self, dialogue_context: List[DialogueMessage]
-    ) -> None:
-        """基于对话更新立场"""
-        for treatment in TreatmentOption:
-            supporting_messages = [
-                m
-                for m in dialogue_context
-                if m.treatment_focus == treatment
-                and m.role != self.role
-                and "recommend" in m.content.lower()
-            ]
+    # def update_stance_based_on_dialogue(
+    #     self, dialogue_context: List[DialogueMessage]
+    # ) -> None:
+    #     """基于对话更新立场"""
+    #     for treatment in TreatmentOption:
+    #         supporting_messages = [
+    #             m
+    #             for m in dialogue_context
+    #             if m.treatment_focus == treatment
+    #             and m.role != self.role
+    #             and "recommend" in m.content.lower()
+    #         ]
 
-            if len(supporting_messages) >= 2:  # 多数支持时轻微调整立场
-                current_stance = self.current_stance.get(treatment, 0)
-                self.current_stance[treatment] = min(1.0, current_stance + 0.1)
+    #         if len(supporting_messages) >= 2:  # 多数支持时轻微调整立场
+    #             current_stance = self.current_stance.get(treatment, 0)
+    #             self.current_stance[treatment] = min(1.0, current_stance + 0.1)
     
     # RL指导相关方法
     def set_rl_guidance(self, rl_guidance, influence_strength: float):
@@ -972,3 +1613,76 @@ class RoleAgent:
                 "current_stance": self.current_stance
             } if self.original_preferences else None
         }
+    
+    def update_stance_based_on_dialogue(self, messages: List[DialogueMessage]) -> None:
+        """根据对话内容更新立场（改进版：否定优先、证据加权、去重、防御空值）"""
+        if not messages:
+            return
+
+        # 同一（发言角色, 治疗）仅影响一次，避免重复累积
+        seen_pairs = set()
+
+        for message in messages:
+            # 防御空字段
+            if not hasattr(message, "role") or not hasattr(message, "treatment_focus"):
+                continue
+
+            # 忽略非医疗对话角色（USER/SYSTEM）
+            if isinstance(message.role, ChatRole):
+                continue
+
+            # 跳过自己的消息
+            if message.role == self.role:
+                continue
+
+            treatment = message.treatment_focus
+            if not treatment or treatment not in self.current_stance:
+                continue
+
+            # 去重：同一角色-同一治疗只应用一次影响
+            pair = (message.role, treatment)
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
+
+            content = (getattr(message, "content", "") or "").lower()
+
+            # 证据强度加权
+            influence = 0.06  # 默认影响步长
+            strong_evidence_markers = (
+                "rct", "randomized", "randomised", "meta-analysis",
+                "systematic review", "guideline", "practice guideline", "cochrane"
+            )
+            moderate_markers = ("evidence", "study", "trial", "data")
+            case_markers = ("case report", "case series")
+
+            if any(k in content for k in strong_evidence_markers):
+                influence = 0.15
+            elif any(k in content for k in moderate_markers):
+                influence = 0.10
+            elif any(k in content for k in case_markers):
+                influence = 0.08
+
+            # 否定优先识别，避免 "not recommend" 被误判为正向
+            no_concern_markers = ("no concern", "not a concern", "no significant concern", "little concern", "low concern")
+            has_no_concern = any(k in content for k in no_concern_markers)
+
+            negative_markers = (
+                "not recommend", "contraindicated", "oppose", "against", "avoid",
+                "do not", "not advised", "no benefit", "concern", "high risk", "risk outweighs"
+            )
+            positive_markers = ("recommend", "suggest", "advocate", "support", "favor", "prefer", "indicated")
+
+            is_negative = any(k in content for k in negative_markers) and not has_no_concern
+            is_positive = ("not recommend" not in content) and any(k in content for k in positive_markers)
+
+            if is_negative:
+                self.current_stance[treatment] = max(-1.0, self.current_stance[treatment] - influence)
+            elif is_positive:
+                self.current_stance[treatment] = min(1.0, self.current_stance[treatment] + influence)
+            else:
+                # 无明确倾向，保持不变
+                continue
+
+        # 记录立场更新
+        logger.debug(f"{self.role.value} updated stance based on dialogue: {self.current_stance}")

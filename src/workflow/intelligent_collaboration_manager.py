@@ -26,7 +26,21 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class CollaborationMetrics:
-    """协作指标"""
+    """
+    协作指标
+    
+    Attributes:
+        total_processing_time: 总处理时间（秒）
+        faiss_query_time: FAISS查询时间（秒）
+        role_selection_time: 角色选择时间（秒）
+        mdt_discussion_time: MDT讨论时间（秒）
+        decision_fusion_time: 决策融合时间（秒）
+        similar_patients_found: 找到的相似患者数量
+        roles_selected: 选择的角色列表
+        consensus_achieved: 是否达成共识
+        total_discussion_rounds: 总讨论轮数
+        final_confidence: 最终置信度（0-1）
+    """
     
     total_processing_time: float = 0.0
     faiss_query_time: float = 0.0

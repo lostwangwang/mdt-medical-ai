@@ -6,15 +6,14 @@
 """
 
 from dataclasses import dataclass
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Union
 from enum import Enum
 from datetime import datetime
 
 
 class RoleType(Enum):
     """医疗团队角色类型"""
-
-    SURGEON = "surgeon"  # 外科医生
+    # SURGEON = "surgeon"  # 外科医生？需要去掉
     ONCOLOGIST = "oncologist"  # 肿瘤科医生
     RADIOLOGIST = "radiologist"  # 影像科医生
     NURSE = "nurse"  # 护士
@@ -22,7 +21,10 @@ class RoleType(Enum):
     PATIENT_ADVOCATE = "patient_advocate"  # 患者代表
     NUTRITIONIST = "nutritionist"  # 营养师
     REHABILITATION_THERAPIST = "rehabilitation_therapist"  # 康复治疗师
-    # 非医疗角色类型，用于对话消息
+
+
+class ChatRole(Enum):
+    """非医疗对话角色类型"""
     USER = "user"  # 用户/患者
     SYSTEM = "system"  # 系统
 
@@ -124,16 +126,16 @@ class DialogueMessage:
     包含角色的对话内容、时间戳、消息类型、引用角色、引用证据和治疗焦点。
     
     Attributes:
-        role (RoleType): 角色类型
+        role (Union[RoleType, ChatRole]): 角色类型（医疗或用户/系统）
         content (str): 对话内容
         timestamp (datetime): 消息发送时间
         message_type (str): 消息类型，如"initial_opinion", "response", "rebuttal", "consensus"
-        referenced_roles (List[RoleType]): 引用的其他角色列表
+        referenced_roles (List[RoleType]): 引用的其他医疗角色列表
         evidence_cited (List[str]): 引用的证据列表
         treatment_focus (TreatmentOption): 当前治疗焦点
     """
 
-    role: RoleType
+    role: Union[RoleType, ChatRole]
     content: str
     timestamp: datetime
     message_type: str  # "initial_opinion", "response", "rebuttal", "consensus"
