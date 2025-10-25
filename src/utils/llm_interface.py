@@ -110,6 +110,7 @@ class LLMInterface:
                     temperature=self.config.temperature,
                     max_tokens=self.config.max_tokens
                 )
+                logger.info(f"1111LLM response 111: {response.choices[0].message.content.strip()}")
                 return response.choices[0].message.content.strip()
             else:
                 # 降级到模板化回复
@@ -294,7 +295,9 @@ class LLMInterface:
             RoleType.NURSE: "护士，关注护理可行性和患者舒适度",
             RoleType.PSYCHOLOGIST: "心理医生，关注患者心理健康",
             RoleType.RADIOLOGIST: "放射科医生，关注影像学表现和放射治疗",
-            RoleType.PATIENT_ADVOCATE: "患者代表，关注患者权益、自主选择和生活质量"
+            RoleType.PATIENT_ADVOCATE: "患者代表，关注患者权益、自主选择和生活质量",
+            RoleType.NUTRITIONIST: "营养师，关注患者营养状况和营养支持治疗",
+            RoleType.REHABILITATION_THERAPIST: "康复治疗师，关注患者功能恢复和生活质量改善"
         }
         
         prompt = f"""

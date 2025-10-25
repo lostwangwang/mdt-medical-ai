@@ -120,7 +120,7 @@ class MDTLogger:
         
         # 根日志记录器配置
         root_logger = logging.getLogger()
-        root_logger.setLevel(logging.INFO)
+        root_logger.setLevel(logging.DEBUG)
         
         # 清除现有处理器
         for handler in root_logger.handlers[:]:
@@ -128,7 +128,7 @@ class MDTLogger:
         
         # 控制台处理器
         console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
+        console_handler.setLevel(logging.DEBUG)
         console_formatter = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
@@ -141,7 +141,7 @@ class MDTLogger:
             maxBytes=10*1024*1024,  # 10MB
             backupCount=5
         )
-        file_handler.setLevel(logging.INFO)
+        file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(console_formatter)
         root_logger.addHandler(file_handler)
         
@@ -151,7 +151,7 @@ class MDTLogger:
             maxBytes=10*1024*1024,
             backupCount=5
         )
-        structured_handler.setLevel(logging.INFO)
+        structured_handler.setLevel(logging.DEBUG)
         structured_handler.setFormatter(StructuredFormatter())
         root_logger.addHandler(structured_handler)
         
@@ -171,13 +171,13 @@ class MDTLogger:
             maxBytes=5*1024*1024,
             backupCount=3
         )
-        perf_handler.setLevel(logging.INFO)
+        perf_handler.setLevel(logging.DEBUG)
         perf_handler.setFormatter(console_formatter)
         
         # 创建性能专用日志记录器
         perf_logger = logging.getLogger('performance')
         perf_logger.addHandler(perf_handler)
-        perf_logger.setLevel(logging.INFO)
+        perf_logger.setLevel(logging.DEBUG)
         perf_logger.propagate = False
     
     def get_logger(self, name: str) -> logging.Logger:

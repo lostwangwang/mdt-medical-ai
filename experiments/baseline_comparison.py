@@ -401,17 +401,17 @@ class ComparisonExperiment:
                     "heart_rate": np.random.randint(55, 110),
                 },
                 symptoms=np.random.choice(
-                    [[], ["fatigue"], ["pain"], ["fatigue", "pain"], ["nausea"]]
+                    np.array([[], ["fatigue"], ["pain"], ["fatigue", "pain"], ["nausea"]], dtype=object)
                 ),
                 comorbidities=np.random.choice(
-                    [
+                    np.array([
                         [],
                         ["diabetes"],
                         ["hypertension"],
                         ["cardiac_dysfunction"],
                         ["diabetes", "hypertension"],
                         ["diabetes", "cardiac_dysfunction"],
-                    ]
+                    ], dtype=object)
                 ),
                 psychological_status=np.random.choice(
                     ["stable", "anxious", "depressed"]
@@ -759,16 +759,18 @@ class ComparisonExperiment:
                 )
 
         # 在最后一个子图中创建综合雷达图
-        ax = axes[1, 2]
-        self._plot_radar_chart(ax)
+        # ax = axes[1, 2]
+        polar_ax = fig.add_subplot(2, 3, 6, projection='polar')
+        self._plot_radar_chart(polar_ax)
 
         plt.tight_layout()
 
         if save_path:
             plt.savefig(save_path, dpi=300, bbox_inches="tight")
             logger.info(f"Comparison plot saved to {save_path}")
-
-        plt.show()
+            plt.close(fig)
+        else:
+            plt.show()
 
     def _plot_radar_chart(self, ax) -> None:
         """绘制雷达图"""

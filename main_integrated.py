@@ -11,6 +11,10 @@ import sys
 import os
 from datetime import datetime
 from typing import Dict, Any, List
+import os
+# from dotenv import load_dotenv
+
+# load_dotenv()
 
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -34,26 +38,96 @@ system_optimizer = get_system_optimizer()
 logger = system_optimizer.get_logger(__name__)
 
 
-def _make_json_serializable(obj):
-    """将对象转换为JSON可序列化的格式"""
-    if isinstance(obj, dict):
-        return {key: _make_json_serializable(value) for key, value in obj.items()}
-    elif isinstance(obj, list):
-        return [_make_json_serializable(item) for item in obj]
-    elif isinstance(obj, RLAction):
-        return {
-            "treatment_recommendation": obj.treatment_recommendation.value,
-            "confidence_level": obj.confidence_level,
-            "explanation": obj.explanation
-        }
-    elif hasattr(obj, 'value'):  # 处理枚举类型
-        return obj.value
-    elif hasattr(obj, 'to_dict'):  # 处理有to_dict方法的对象
-        return _make_json_serializable(obj.to_dict())
-    elif hasattr(obj, '__dict__'):  # 处理其他对象
-        return _make_json_serializable(obj.__dict__)
-    else:
+def _make_json_serializable(obj, _visited=None):
+    """将对象转换为JSON可序列化的格式，避免递归和复杂图对象"""
+    # 初始化循环引用跟踪
+    if _visited is None:
+        _visited = set()
+    try:
+        oid = id(obj)
+        if oid in _visited:
+            return "<cyclic>"
+        _visited.add(oid)
+    except Exception:
+        pass
+
+    # 基本类型直接返回
+    from enum import Enum
+    from datetime import datetime as _dt
+    if obj is None or isinstance(obj, (str, int, float, bool)):
         return obj
+    if isinstance(obj, _dt):
+        return obj.isoformat()
+
+    # 容器类型
+    if isinstance(obj, dict):
+        return {key: _make_json_serializable(value, _visited) for key, value in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        return [ _make_json_serializable(item, _visited) for item in obj ]
+
+    # Numpy/Pandas等常见类型
+    try:
+        # numpy数组
+        import numpy as np
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+    except Exception:
+        pass
+    try:
+        # pandas DataFrame/Series 只给简要信息，避免海量内容与循环
+        import pandas as pd
+        if isinstance(obj, pd.DataFrame):
+            return {
+                "type": "DataFrame",
+                "shape": list(obj.shape),
+                "columns": obj.columns.tolist()
+            }
+        if isinstance(obj, pd.Series):
+            return obj.to_dict()
+    except Exception:
+        pass
+
+    # 枚举/动作对象
+    if isinstance(obj, Enum):
+        return obj.value
+    try:
+        from src.core.data_models import RLAction
+        if isinstance(obj, RLAction):
+            return {
+                "treatment_recommendation": obj.treatment_recommendation.value,
+                "confidence_level": obj.confidence_level,
+                "explanation": obj.explanation
+            }
+    except Exception:
+        pass
+
+    # 可自定义to_dict的对象
+    if hasattr(obj, 'to_dict') and callable(getattr(obj, 'to_dict')):
+        try:
+            return _make_json_serializable(obj.to_dict(), _visited)
+        except Exception:
+            return str(obj)
+
+    # 图形对象：matplotlib/plotly/nx等，直接省略具体结构
+    module_name = getattr(obj.__class__, "__module__", "")
+    class_name = getattr(obj.__class__, "__name__", "")
+    if "matplotlib" in module_name and class_name == "Figure":
+        return "<matplotlib.Figure>"
+    if module_name.startswith("plotly") and class_name == "Figure":
+        return "<plotly.Figure>"
+    if module_name.startswith("networkx"):
+        return f"<networkx.{class_name}>"
+
+    # 最后尝试__dict__，但避免再次递归爆炸
+    if hasattr(obj, '__dict__'):
+        try:
+            plain = {k: v for k, v in obj.__dict__.items() if not k.startswith('_')}
+            return _make_json_serializable(plain, _visited)
+        except Exception:
+            return str(obj)
+
+    # 回退为字符串表示
+    return str(obj)
 
 
 class EnhancedPatientDialogueManager:
@@ -485,11 +559,20 @@ class FullyIntegratedMDTSystem:
         self.logger = self.system_optimizer.get_logger(self.__class__.__name__)
         
         # 初始化核心组件
-        self.rag_system = MedicalKnowledgeRAG()
+        # 改为可切换的RAG：默认禁用，后续可以增加命令行参数启用
+        try:
+            from src.knowledge.disabled_rag import DisabledRAG
+            self.rag_system = DisabledRAG()
+            self.logger.info("RAG 已禁用，使用 DisabledRAG 存根")
+        except Exception:
+            # 兜底使用原始RAG
+            self.rag_system = MedicalKnowledgeRAG()
+            self.logger.info("DisabledRAG 加载失败，回退到 MedicalKnowledgeRAG")
         self.faiss_manager = EnhancedFAISSManager()
         
         # 🔥 真正集成所有功能模块
-        self.consensus_system = ConsensusMatrix()
+        # 将系统级 RAG 传入 ConsensusMatrix 以保持一致的RAG行为
+        self.consensus_system = ConsensusMatrix(rag_system=self.rag_system)
         self.rl_environment = MDTReinforcementLearning(self.consensus_system)
         self.dialogue_manager = MultiAgentDialogueManager(self.rag_system)
         
@@ -807,28 +890,28 @@ class FullyIntegratedMDTSystem:
         consensus_result = self.dialogue_manager.conduct_mdt_discussion(patient_state)
 
         # 2. 🔥 新增：角色智能体分析
-        self.logger.info("收集角色智能体意见...")
-        role_opinions = self.enhanced_dialogue_manager._collect_role_opinions(
-            patient_state, "请提供治疗建议"
-        )
+        # self.logger.info("收集角色智能体意见...")
+        # role_opinions = self.enhanced_dialogue_manager._collect_role_opinions(
+        #     patient_state, "请提供治疗建议"
+        # )
 
-        # 3. 🔥 新增：增强共识计算
-        self.logger.info("计算增强共识...")
-        enhanced_consensus = self.enhanced_dialogue_manager._calculate_consensus(
-            role_opinions, patient_state
-        )
+        # # 3. 🔥 新增：增强共识计算
+        # self.logger.info("计算增强共识...")
+        # enhanced_consensus = self.enhanced_dialogue_manager._calculate_consensus(
+        #     role_opinions, patient_state
+        # )
 
-        # 4. 🔥 新增：强化学习优化
-        self.logger.info("应用强化学习优化...")
-        rl_optimization = self.enhanced_dialogue_manager._apply_rl_optimization(
-            enhanced_consensus, patient_state
-        )
+        # # 4. 🔥 新增：强化学习优化
+        # self.logger.info("应用强化学习优化...")
+        # rl_optimization = self.enhanced_dialogue_manager._apply_rl_optimization(
+        #     enhanced_consensus, patient_state
+        # )
 
-        # 5. 生成可视化
-        self.logger.info("生成可视化...")
-        visualizations = self.visualizer.create_patient_analysis_dashboard(
-            patient_state, consensus_result
-        )
+        # # 5. 生成可视化
+        # self.logger.info("生成可视化...")
+        # visualizations = self.visualizer.create_patient_analysis_dashboard(
+        #     patient_state, consensus_result
+        # )
 
         # 6. 整理完整结果
         analysis_result = {
@@ -850,23 +933,23 @@ class FullyIntegratedMDTSystem:
                 "agreements": len(consensus_result.agreements),
             },
             # 🔥 新增：角色智能体结果
-            "role_agent_analysis": {
-                "participating_roles": len(role_opinions),
-                "role_opinions": [opinion.to_dict() for opinion in role_opinions],
-                "role_consensus_score": enhanced_consensus.get("consensus_score", 0.0),
-                "role_convergence": enhanced_consensus.get("convergence_achieved", False)
-            },
+            # "role_agent_analysis": {
+            #     "participating_roles": len(role_opinions),
+            #     "role_opinions": [opinion.to_dict() for opinion in role_opinions],
+            #     "role_consensus_score": enhanced_consensus.get("consensus_score", 0.0),
+            #     "role_convergence": enhanced_consensus.get("convergence_achieved", False)
+            # },
             # 🔥 新增：强化学习结果
-            "rl_optimization": {
-                "rl_recommended_action": rl_optimization.get("rl_recommended_action"),
-                "rl_confidence": rl_optimization.get("rl_confidence", 0.0),
-                "consensus_rl_alignment": rl_optimization.get("consensus_rl_alignment", 0.0)
-            },
-            # 其他信息
-            "dialogue_transcript": self.dialogue_manager.get_dialogue_transcript(),
-            "visualizations": visualizations,
-            "analysis_timestamp": datetime.now().isoformat(),
-            "fully_integrated": True
+            # "rl_optimization": {
+            #     "rl_recommended_action": rl_optimization.get("rl_recommended_action"),
+            #     "rl_confidence": rl_optimization.get("rl_confidence", 0.0),
+            #     "consensus_rl_alignment": rl_optimization.get("consensus_rl_alignment", 0.0)
+            # },
+            # # 其他信息
+            # "dialogue_transcript": self.dialogue_manager.get_dialogue_transcript(),
+            # "visualizations": visualizations,
+            # "analysis_timestamp": datetime.now().isoformat(),
+            # "fully_integrated": True
         }
 
         self.logger.info("完全集成分析完成")
@@ -916,18 +999,6 @@ def create_sample_patients() -> List[Dict[str, Any]]:
     """创建示例患者数据"""
     return [
         {
-            "patient_id": "P001",
-            "age": 65,
-            "diagnosis": "肺癌",
-            "stage": "IIIA",
-            "lab_results": {"CEA": 8.5, "CA125": 45.2},
-            "vital_signs": {"血压": 140, "心率": 78, "体温": 36.5},
-            "symptoms": ["咳嗽", "胸痛", "呼吸困难"],
-            "comorbidities": ["高血压", "糖尿病"],
-            "psychological_status": "轻度焦虑",
-            "quality_of_life_score": 65.0
-        },
-        {
             "patient_id": "P002", 
             "age": 45,
             "diagnosis": "乳腺癌",
@@ -938,18 +1009,6 @@ def create_sample_patients() -> List[Dict[str, Any]]:
             "comorbidities": [],
             "psychological_status": "正常",
             "quality_of_life_score": 80.0
-        },
-        {
-            "patient_id": "P003",
-            "age": 72,
-            "diagnosis": "结直肠癌", 
-            "stage": "IV",
-            "lab_results": {"CEA": 125.8, "CA199": 89.5},
-            "vital_signs": {"血压": 160, "心率": 85, "体温": 37.1},
-            "symptoms": ["腹痛", "便血", "体重下降"],
-            "comorbidities": ["心脏病", "高血压"],
-            "psychological_status": "中度抑郁",
-            "quality_of_life_score": 45.0
         }
     ]
 
@@ -999,30 +1058,31 @@ def main():
     print(f"运行模式: {args.mode}")
 
     if args.mode == "demo":
-        print("\n=== 完全集成演示模式 ===")
+        logger.info("\n=== 完全集成演示模式 ===")
         # 结构化的肺癌患者医疗档案
         sample_patients = create_sample_patients()
 
         for i, patient_data in enumerate(sample_patients, 1):
-            print(f"\n--- 完全集成分析患者 {i}: {patient_data['patient_id']} ---")
+            logger.info(f"\n--- 完全集成分析患者 {i}: {patient_data['patient_id']} ---")
             result = system.run_fully_integrated_analysis(patient_data)
-
+            logger.info(f"完全集成分析结果: {json.dumps(result, ensure_ascii=False, indent=2)}")
             # 显示原有结果
             print(f"推荐治疗方案: {result['consensus_result']['recommended_treatment']}")
             print(f"共识得分: {result['consensus_result']['consensus_score']:.3f}")
             
             # 🔥 显示新增的集成结果
-            print(f"角色智能体参与数: {result['role_agent_analysis']['participating_roles']}")
-            print(f"角色共识得分: {result['role_agent_analysis']['role_consensus_score']:.3f}")
-            print(f"RL优化置信度: {result['rl_optimization']['rl_confidence']:.3f}")
-            print(f"共识-RL一致性: {result['rl_optimization']['consensus_rl_alignment']:.3f}")
+            # print(f"角色智能体参与数: {result['role_agent_analysis']['participating_roles']}")
+            # print(f"角色共识得分: {result['role_agent_analysis']['role_consensus_score']:.3f}")
+            # print(f"RL优化置信度: {result['rl_optimization']['rl_confidence']:.3f}")
+            # print(f"共识-RL一致性: {result['rl_optimization']['consensus_rl_alignment']:.3f}")
 
             # 保存结果
             import json
             output_file = f"{args.output_dir}/integrated_patient_{patient_data['patient_id']}_analysis.json"
             with open(output_file, "w", encoding="utf-8") as f:
-                serializable_result = _make_json_serializable(result.copy())
+                serializable_result = result.copy()
                 serializable_result.pop("visualizations", None)
+                serializable_result = _make_json_serializable(serializable_result)
                 json.dump(serializable_result, f, ensure_ascii=False, indent=2)
 
             print(f"完全集成结果已保存到: {output_file}")
@@ -1049,8 +1109,9 @@ def main():
                 output_file = f"{args.output_dir}/integrated_dialogue_history_{timestamp}.json"
                 
                 with open(output_file, "w", encoding="utf-8") as f:
-                    json.dump(result, f, ensure_ascii=False, indent=2)
-                
+                    safe_result = _make_json_serializable(result)
+                    json.dump(safe_result, f, ensure_ascii=False, indent=2)
+
                 print(f"\n完全集成对话历史已保存到: {output_file}")
                 print(f"总查询次数: {result['total_queries']}")
                 print(f"会话时长: {result['session_duration']:.1f}秒")
@@ -1081,10 +1142,36 @@ def main():
 
         print(f"集成训练结果已保存到: {output_file}")
 
+    elif args.mode == "comparison":
+        print(f"\n=== 基线对比模式 ({args.num_patients} 患者, {args.num_trials} 试验) ===")
+        experiment = ComparisonExperiment()
+        experiment.generate_test_patients(args.num_patients)
+        results = experiment.run_comparison(args.num_trials)
+        report = experiment.generate_comparison_report()
+
+        # 绘制并保存对比图表
+        plot_path = f"{args.output_dir}/figures/baseline_comparison.png"
+        experiment.plot_comparison_results(plot_path)
+
+        # 保存对比结果
+        import json
+        output_file = f"{args.output_dir}/comparison_results.json"
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump({
+                "comparison_results": results.to_dict("records"),
+                "report": report,
+                "visualization_saved": True
+            }, f, ensure_ascii=False, indent=2)
+
+        print("对比实验完成!")
+        print("\n" + report)
+        print(f"对比结果已保存到: {output_file}")
+        print(f"对比图表已保存到: {plot_path}")
+
     # 其他模式保持原有逻辑...
     else:
         print(f"模式 '{args.mode}' 暂未在完全集成版本中实现")
-        print("可用模式: demo, integrated, training")
+        print(f"可用模式: demo, integrated, training, comparison")
 
     print(f"\n所有输出文件保存在: {args.output_dir}/")
     print("🏥 完全集成MDT系统运行完成！")

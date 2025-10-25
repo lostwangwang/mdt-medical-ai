@@ -10,6 +10,8 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 import logging
 
+from pandas.core.indexes.base import F
+
 from ..core.data_models import (
     RoleType,
     TreatmentOption,
@@ -21,6 +23,7 @@ from ..core.data_models import (
 from .role_agents import RoleAgent
 from ..knowledge.rag_system import MedicalKnowledgeRAG
 from ..utils.llm_interface import LLMInterface, LLMConfig
+
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +64,7 @@ class MultiAgentDialogueManager:
 
             # 进行一轮结构化对话
             current_round = self._conduct_dialogue_round(patient_state)
+            logger.info(f"dialogue round {self.current_round}: {current_round}")
             self.dialogue_rounds.append(current_round)
 
             # 基于对话内容更新各角色立场
@@ -69,11 +73,12 @@ class MultiAgentDialogueManager:
             # 检查是否需要聚焦讨论争议较大的治疗方案
             if self.current_round > 2:
                 self._focus_on_contentious_treatments(patient_state)
-
+        logger.info("\n==生成共识结果开始：==")
         # 生成最终共识结果
         final_result = self._generate_final_consensus(patient_state)
 
         logger.info(f"MDT discussion completed after {self.current_round} rounds")
+        logger.info(f"Final consensus result: {final_result}")
         return final_result
 
     def _initialize_discussion(self, patient_state: PatientState) -> None:
@@ -108,6 +113,7 @@ class MultiAgentDialogueManager:
             initial_message = self._create_initial_message(
                 agent, opinion, patient_state
             )
+
             logger.info(f"Generated initial message for {role}: {initial_message.content}")
             initial_round.messages.append(initial_message)
 
@@ -124,7 +130,8 @@ class MultiAgentDialogueManager:
         focus_treatment = self._select_focus_treatment_for_role(
             agent, opinion, patient_state
         )
-
+        logger.info(f"focus_treament: {focus_treatment}")
+    
         # 尝试使用LLM生成个性化初始消息
         content = self._generate_llm_initial_message(agent, opinion, patient_state, focus_treatment)
         
@@ -296,7 +303,7 @@ class MultiAgentDialogueManager:
                     content = self._format_reasoning_as_mdt_message(
                         agent, reasoning, focus_treatment, opinion
                     )
-                    logger.debug(f"Generated LLM initial message for {agent.role.value}: {content[:100]}...")
+                    logger.debug(f"Generated LLM initial message for {agent.role.value}: {content}")
                     return content
                     
         except Exception as e:
@@ -311,8 +318,9 @@ class MultiAgentDialogueManager:
         
         # 获取推荐强度
         treatment_score = opinion.treatment_preferences.get(focus_treatment, 0.0)
+        logger.debug(f"treatment_score: {treatment_score}")
         recommendation_phrase = self._get_recommendation_phrase(treatment_score)
-        
+        logger.debug(f"recommendation_phrase: {recommendation_phrase}")
         # 构建MDT发言格式
         content = f"作为{agent.role.value}，我{recommendation_phrase}{focus_treatment.value}。\n\n"
         content += f"我的专业分析：{reasoning}"
@@ -342,15 +350,15 @@ class MultiAgentDialogueManager:
     def _get_recommendation_phrase(self, score: float) -> str:
         """获取推荐措辞"""
         if score > 0.7:
-            return "strongly recommend"
+            return "strongly recommend "
         elif score > 0.3:
-            return "recommend"
+            return "recommend "
         elif score > -0.3:
-            return "have mixed feelings about"
+            return "have mixed feelings about "
         elif score > -0.7:
-            return "have concerns about"
+            return "have concerns about "
         else:
-            return "strongly advise against"
+            return "strongly advise against "
 
     def _conduct_dialogue_round(self, patient_state: PatientState) -> DialogueRound:
         """进行一轮对话 - 增强版本，支持更自然的对话流程"""
@@ -400,10 +408,10 @@ class MultiAgentDialogueManager:
         
         # 分析当前争议程度
         stance_variance = self._calculate_stance_variance(focus_treatment)
-        
+        logger.info(f"Stance variance for {focus_treatment.value}: {stance_variance:.2f}")
         # 分析患者复杂度
         patient_complexity = self._assess_patient_complexity(patient_state)
-        
+        logger.info(f"Patient complexity: {patient_complexity:.2f}")
         # 确定对话策略
         if stance_variance > 0.6:  # 高争议
             strategy = "focused_debate"
@@ -465,6 +473,7 @@ class MultiAgentDialogueManager:
         
         # 按立场强度排序，最极端的先发言
         stance_roles.sort(key=lambda x: x[1], reverse=True)
+        logger.info(f"Polarized speaking order: {[role.value for role, _ in stance_roles]}")
         return [role for role, _ in stance_roles]
     
     def _get_expertise_based_order(self, treatment: TreatmentOption, patient_state: PatientState) -> List[RoleType]:
@@ -475,37 +484,92 @@ class MultiAgentDialogueManager:
                 RoleType.ONCOLOGIST: 0.9,
                 RoleType.RADIOLOGIST: 0.8,
                 RoleType.NURSE: 0.7,
+                RoleType.NUTRITIONIST: 0.6,
+                RoleType.REHABILITATION_THERAPIST: 0.7,
                 RoleType.PSYCHOLOGIST: 0.4,
                 RoleType.PATIENT_ADVOCATE: 0.5,
             },
             TreatmentOption.CHEMOTHERAPY: {
                 RoleType.ONCOLOGIST: 0.9,
                 RoleType.NURSE: 0.8,
+                RoleType.NUTRITIONIST: 0.7,
                 RoleType.PSYCHOLOGIST: 0.6,
-                RoleType.RADIOLOGIST: 0.5,
+                RoleType.RADIOLOGIST: 0.4,
                 RoleType.PATIENT_ADVOCATE: 0.6,
+                RoleType.REHABILITATION_THERAPIST: 0.4,
+            },
+            TreatmentOption.RADIOTHERAPY: {
+                RoleType.RADIOLOGIST: 0.9,
+                RoleType.ONCOLOGIST: 0.8,
+                RoleType.NURSE: 0.7,
+                RoleType.NUTRITIONIST: 0.6,
+                RoleType.PSYCHOLOGIST: 0.5,
+                RoleType.PATIENT_ADVOCATE: 0.5,
+                RoleType.REHABILITATION_THERAPIST: 0.4,
+            },
+            TreatmentOption.IMMUNOTHERAPY: {
+                RoleType.ONCOLOGIST: 0.9,
+                RoleType.NURSE: 0.8,
+                RoleType.NUTRITIONIST: 0.5,
+                RoleType.PSYCHOLOGIST: 0.5,
+                RoleType.PATIENT_ADVOCATE: 0.6,
+                RoleType.RADIOLOGIST: 0.4,
+                RoleType.REHABILITATION_THERAPIST: 0.3,
             },
             TreatmentOption.PALLIATIVE_CARE: {
                 RoleType.NURSE: 0.9,
-                RoleType.PSYCHOLOGIST: 0.8,
                 RoleType.PATIENT_ADVOCATE: 0.9,
+                RoleType.PSYCHOLOGIST: 0.8,
+                RoleType.NUTRITIONIST: 0.7,
+                RoleType.REHABILITATION_THERAPIST: 0.6,
                 RoleType.ONCOLOGIST: 0.6,
                 RoleType.RADIOLOGIST: 0.3,
+            },
+            TreatmentOption.WATCHFUL_WAITING: {
+                RoleType.PATIENT_ADVOCATE: 0.9,
+                RoleType.PSYCHOLOGIST: 0.7,
+                RoleType.NURSE: 0.7,
+                RoleType.NUTRITIONIST: 0.6,
+                RoleType.ONCOLOGIST: 0.5,
+                RoleType.RADIOLOGIST: 0.3,
+                RoleType.REHABILITATION_THERAPIST: 0.4,
             }
         }
         
         weights = expertise_weights.get(treatment, {})
         
-        # 根据患者复杂度调整权重
+        # 根据患者复杂度与具体症状动态调整
         if len(patient_state.comorbidities) > 2:
             weights[RoleType.NURSE] = weights.get(RoleType.NURSE, 0.5) + 0.2
         
-        if patient_state.psychological_status in ["anxious", "depressed"]:
+        # 心理状态（支持中英文关键词匹配）
+        symptoms_lower = {s.lower() for s in (patient_state.symptoms or [])}
+        psych_status_text = (patient_state.psychological_status or "")
+        psych_status_lower = psych_status_text.lower()
+    
+        psych_flags_en = {"anxious", "depressed", "severe_anxiety", "depression"}
+        psych_flags_zh = {"焦虑", "抑郁", "重度焦虑", "抑郁症"}
+        if any(flag in psych_status_lower for flag in psych_flags_en) or any(flag in psych_status_text for flag in psych_flags_zh):
             weights[RoleType.PSYCHOLOGIST] = weights.get(RoleType.PSYCHOLOGIST, 0.5) + 0.2
         
-        # 按权重排序
+        # 营养相关风险（体重下降/恶病质/营养不良，支持中英文）
+        nutrition_flags_en = {"weight_loss", "cachexia", "malnutrition"}
+        nutrition_flags_zh = {"体重下降", "恶病质", "营养不良"}
+        if symptoms_lower.intersection(nutrition_flags_en) or any(flag in (patient_state.symptoms or []) for flag in nutrition_flags_zh):
+            weights[RoleType.NUTRITIONIST] = weights.get(RoleType.NUTRITIONIST, 0.5) + 0.2
+        
+        # 功能受限/术后康复需求（支持中英文）
+        rehab_flags_en = {"mobility_issue", "weakness", "postoperative"}
+        rehab_flags_zh = {"运动障碍", "虚弱", "术后"}
+        if symptoms_lower.intersection(rehab_flags_en) or any(flag in (patient_state.symptoms or []) for flag in rehab_flags_zh):
+            weights[RoleType.REHABILITATION_THERAPIST] = weights.get(RoleType.REHABILITATION_THERAPIST, 0.4) + 0.2
+        
+        # 按权重排序；若为空，回退到传统顺序
         sorted_roles = sorted(weights.items(), key=lambda x: x[1], reverse=True)
-        return [role for role, _ in sorted_roles if role in self.agents]
+        ordered = [role for role, _ in sorted_roles if role in self.agents]
+        if not ordered:
+            return self._get_traditional_speaking_order(treatment)
+        return ordered
     
     def _get_traditional_speaking_order(self, treatment: TreatmentOption) -> List[RoleType]:
         """传统的发言顺序"""
@@ -515,6 +579,8 @@ class MultiAgentDialogueManager:
             RoleType.NURSE,
             RoleType.PSYCHOLOGIST,
             RoleType.PATIENT_ADVOCATE,
+            RoleType.NUTRITIONIST,
+            RoleType.REHABILITATION_THERAPIST,
         ]
         return [role for role in traditional_order if role in self.agents]
     
@@ -594,13 +660,14 @@ class MultiAgentDialogueManager:
         for role in speaking_order:
             agent = self.agents[role]
             all_previous_messages = self._get_all_previous_messages(round_data)
-            
+            logger.info(f"All previous messages: {all_previous_messages}")
             response = agent.generate_dialogue_response(
                 patient_state, knowledge, all_previous_messages, round_data.focus_treatment
             )
+            logger.info(f"{role.value} responded: {response.content}...")
             round_data.messages.append(response)
             
-            logger.debug(f"{role.value} responded: {response.content[:100]}...")
+            logger.debug(f"{role.value} responded: {response.content}...")
         
         return round_data
     
@@ -645,8 +712,10 @@ class MultiAgentDialogueManager:
 
         # 选择提及最多或争议最大的治疗方案
         if treatment_mentions:
+            logger.info(f"选择焦点治疗方案：treatment_mentions: {treatment_mentions}")
             return max(treatment_mentions.items(), key=lambda x: x[1])[0]
-
+        
+        
         # 轮换讨论不同治疗方案
         treatments = list(TreatmentOption)
         return treatments[self.current_round % len(treatments)]
@@ -674,30 +743,41 @@ class MultiAgentDialogueManager:
             agent.update_stance_based_on_dialogue(round_data.messages)
 
     def _check_convergence(self) -> bool:
-        """检查是否收敛"""
+        """检查是否收敛（聚焦上一轮的焦点治疗）"""
         if len(self.dialogue_rounds) < 2:
             return False
 
-        # 计算立场稳定性
-        stable_agents = 0
+        last_round = self.dialogue_rounds[-1]
+        focus_treatment = last_round.focus_treatment
+        stance_threshold = 0.6
 
+        if focus_treatment:
+            stable_roles = []
+            role_stances = {}
+            for role, agent in self.agents.items():
+                score = agent.current_stance.get(focus_treatment, 0.0)
+                role_stances[role.value] = score
+                if abs(score) >= stance_threshold:
+                    stable_roles.append(role.value)
+
+            convergence_ratio = len(stable_roles) / len(self.agents)
+            logger.debug(
+                f"Convergence(check on {focus_treatment.value}): {convergence_ratio:.2f} "
+                f"(stable_roles: {stable_roles}, role_stances: {role_stances}, "
+                f"threshold: {self.convergence_threshold})"
+            )
+            return convergence_ratio >= self.convergence_threshold
+
+        # 无焦点时回退到原逻辑
+        stable_agents = 0
         for role, agent in self.agents.items():
             current_stances = agent.current_stance
-            strong_stances = [abs(score) > 0.6 for score in current_stances.values()]
-
-            if (
-                len(strong_stances) > 0
-                and sum(strong_stances) / len(strong_stances) > 0.7
-            ):
+            strong_stances = [abs(score) > stance_threshold for score in current_stances.values()]
+            if len(strong_stances) > 0 and sum(strong_stances) / len(strong_stances) > 0.7:
                 stable_agents += 1
 
-        # 如果大多数角色都有明确且稳定的立场，认为已收敛
         convergence_ratio = stable_agents / len(self.agents)
-
-        logger.debug(
-            f"Convergence check: {convergence_ratio:.2f} (threshold: {self.convergence_threshold})"
-        )
-
+        logger.debug(f"Convergence check: {convergence_ratio:.2f} (threshold: {self.convergence_threshold})")
         return convergence_ratio >= self.convergence_threshold
 
     def _focus_on_contentious_treatments(self, patient_state: PatientState) -> None:

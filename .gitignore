@@ -82,6 +82,8 @@ saved_models/
 *.h5
 *.onnx
 
+data/examples/medqa/
+
 # Secrets, keys, credentials, env overrides
 .env*
 secrets.json

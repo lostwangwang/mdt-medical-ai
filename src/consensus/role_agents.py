@@ -202,10 +202,15 @@ class RoleAgent:
         
         # 我可以调用大模型吗? 可以，基于患者状态和相关知识，调用llm_interface.generate_text方法生成初始意见
         # 这个初始意见是怎么生成的? 基于患者状态和相关知识，调用_calculate_treatment_preferences和_generate_reasoning方法
+        # treatment_prefs是什么？ 它是一个字典，键是治疗选项，值是该选项的偏好评分
         treatment_prefs = self._calculate_treatment_preferences(
             patient_state, knowledge
         )
+        logger.debug(f"[{self.role.value}] Generated initial treatment preferences: {treatment_prefs}")
+        
+        # reasoning是什么？ 它是一个字符串，描述了基于患者状态和治疗偏好的推理过程
         reasoning = self._generate_reasoning(patient_state, treatment_prefs, knowledge)
+        logger.debug(f"[{self.role.value}] Generated initial reasoning: {reasoning}")
 
         opinion = RoleOpinion(
             role=self.role,
@@ -277,6 +282,22 @@ class RoleAgent:
                 TreatmentOption.PALLIATIVE_CARE: 0.8,  # 强调功能维持和生活质量
                 TreatmentOption.WATCHFUL_WAITING: 0.3,  # 预防性康复训练
             },
+            RoleType.RADIOLOGIST: {
+                TreatmentOption.SURGERY: 0.4,
+                TreatmentOption.CHEMOTHERAPY: 0.3,
+                TreatmentOption.RADIOTHERAPY: 0.6,
+                TreatmentOption.IMMUNOTHERAPY: 0.4,
+                TreatmentOption.PALLIATIVE_CARE: 0.3,
+                TreatmentOption.WATCHFUL_WAITING: 0.2,
+            },
+            RoleType.PATIENT_ADVOCATE: {
+                TreatmentOption.SURGERY: 0.5,
+                TreatmentOption.CHEMOTHERAPY: 0.3,
+                TreatmentOption.RADIOTHERAPY: 0.4,
+                TreatmentOption.IMMUNOTHERAPY: 0.6,
+                TreatmentOption.PALLIATIVE_CARE: 0.9,
+                TreatmentOption.WATCHFUL_WAITING: 0.9,
+            },
         }
 
         role_scores = base_scores.get(self.role, {})
@@ -339,7 +360,7 @@ class RoleAgent:
                 )
                 
                 if reasoning and len(reasoning.strip()) > 0:
-                    logger.debug(f"Generated LLM reasoning for {self.role.value}: {reasoning[:100]}...")
+                    logger.debug(f"Generated LLM reasoning for {self.role.value}: {reasoning}...")
                     return reasoning
                     
             except Exception as e:
@@ -391,21 +412,23 @@ class RoleAgent:
 
         # 通用关注点
         if patient_state.age > 70:
-            concerns.append("advanced_age")
+            concerns.append("高龄患者")
 
         if len(patient_state.comorbidities) > 2:
-            concerns.append("multiple_comorbidities")
+            concerns.append("合并症较多")
 
         if patient_state.quality_of_life_score < 0.5:
-            concerns.append("poor_quality_of_life")
+            concerns.append("生活质量较差")
 
-        # 角色特异性关注点
+        # 角色特异性关注点（中文）
         role_specific_concerns = {
-            RoleType.ONCOLOGIST: ["disease_progression", "treatment_resistance"],
-            RoleType.NURSE: ["patient_compliance", "care_complexity"],
-            RoleType.PSYCHOLOGIST: ["psychological_burden", "family_stress"],
-            RoleType.RADIOLOGIST: ["anatomical_constraints", "technical_feasibility"],
-            RoleType.PATIENT_ADVOCATE: ["patient_autonomy", "informed_consent"],
+            RoleType.ONCOLOGIST: ["疾病进展", "治疗耐药性"],
+            RoleType.NURSE: ["患者依从性", "护理复杂度"],
+            RoleType.PSYCHOLOGIST: ["心理负担", "家庭压力"],
+            RoleType.RADIOLOGIST: ["解剖结构限制", "技术可行性"],
+            RoleType.PATIENT_ADVOCATE: ["患者自主权", "知情同意"],
+            RoleType.NUTRITIONIST: ["营养不良", "饮食管理难度"],
+            RoleType.REHABILITATION_THERAPIST: ["术后康复挑战", "功能障碍风险"],
         }
 
         concerns.extend(role_specific_concerns.get(self.role, [])[:2])
@@ -458,11 +481,34 @@ class RoleAgent:
         """分析反对观点"""
         opposing_views = []
         my_stance = self.current_stance.get(treatment, 0)
+        logger.debug(f"分析反对观点： {self.role.value}_stance: {my_stance}")
 
         for message in dialogue_context:
             if message.role != self.role and message.treatment_focus == treatment:
-                # 简化的观点分析
-                if "not recommend" in message.content.lower() and my_stance > 0:
+                # 更稳健的反对判定：中英双语关键词 + 无担忧排除
+                content_lower = (message.content or "").lower()
+
+                no_concern_markers = (
+                    # 英文
+                    "no concern", "not a concern", "no significant concern", "little concern", "low concern",
+                    # 中文
+                    "无担忧", "不是担忧", "没有显著担忧", "担忧较少", "担忧低",
+                    "无顾虑", "不成问题", "没有明显问题"
+                )
+                negative_markers = (
+                    # 英文
+                    "not recommend", "contraindicated", "oppose", "against", "avoid",
+                    "do not", "not advised", "no benefit", "concern", "high risk", "risk outweighs",
+                    # 中文
+                    "不推荐", "禁忌", "反对", "不支持", "避免", "不要",
+                    "不建议", "无获益", "担忧", "高风险", "风险大于获益", "风险超过获益",
+                    "不宜", "不适合"
+                )
+
+                has_no_concern = any(k in content_lower for k in no_concern_markers)
+                is_negative = any(k in content_lower for k in negative_markers) and not has_no_concern
+
+                if is_negative and my_stance > 0:
                     opposing_views.append(
                         {
                             "role": message.role,
@@ -470,7 +516,8 @@ class RoleAgent:
                             "stance": "opposing",
                         }
                     )
-
+        logger.debug(f"[{self.role.value}] 分析反对观点： {opposing_views}")
+        # logger.debug(f"Detected opposing view: {message.content}...")   
         return opposing_views
 
     def _analyze_supporting_views(
@@ -482,7 +529,32 @@ class RoleAgent:
 
         for message in dialogue_context:
             if message.role != self.role and message.treatment_focus == treatment:
-                if "recommend" in message.content.lower() and my_stance > 0:
+                content_lower = (message.content or "").lower()
+
+                # 负向关键词（中英双语）
+                negative_markers = (
+                    # 英文
+                    "not recommend", "contraindicated", "oppose", "against", "avoid",
+                    "do not", "not advised", "no benefit", "concern", "high risk", "risk outweighs",
+                    # 中文
+                    "不推荐", "禁忌", "反对", "不支持", "避免", "不要",
+                    "不建议", "无获益", "担忧", "高风险", "风险大于获益", "风险超过获益",
+                    "不宜", "不适合"
+                )
+
+                # 正向关键词（中英双语）
+                positive_markers = (
+                    # 英文
+                    "recommend", "suggest", "advocate", "support", "favor", "prefer", "indicated",
+                    # 中文
+                    "推荐", "建议", "倡导", "支持", "赞成", "偏好", "适应证", "指征"
+                )
+
+                has_negative = any(k in content_lower for k in negative_markers)
+                has_positive = any(k in content_lower for k in positive_markers)
+
+                # 保证不包含负向词，且出现正向词，并且本角色当前是正向立场
+                if has_positive and not has_negative and my_stance > 0:
                     supporting_views.append(
                         {
                             "role": message.role,
@@ -490,6 +562,8 @@ class RoleAgent:
                             "stance": "supporting",
                         }
                     )
+        logger.debug(f"分析支持观点： my_stance: {my_stance}")
+        logger.debug(f"supporting_views: {supporting_views}")
 
         return supporting_views
 
@@ -524,7 +598,7 @@ class RoleAgent:
                 )
                 
                 if response and len(response.strip()) > 0:
-                    logger.debug(f"Generated LLM response for {self.role.value}: {response[:100]}...")
+                    logger.debug(f"Generated LLM response for {self.role.value}: {response}...")
                     return response
                     
             except Exception as e:
@@ -1229,7 +1303,7 @@ class RoleAgent:
                 )
                 
                 if reasoning and len(reasoning.strip()) > 0:
-                    logger.debug(f"Generated LLM professional reasoning for {self.role.value}: {reasoning[:100]}...")
+                    logger.debug(f"Generated LLM professional reasoning for {self.role.value}: {reasoning}...")
                     return reasoning
                     
             except Exception as e:
@@ -1304,7 +1378,7 @@ class RoleAgent:
                 )
                 
                 if counter_argument and len(counter_argument.strip()) > 0:
-                    logger.debug(f"Generated LLM counter argument for {self.role.value}: {counter_argument[:100]}...")
+                    logger.debug(f"Generated LLM counter argument for {self.role.value}: {counter_argument}...")
                     return counter_argument
                     
             except Exception as e:
@@ -1647,14 +1721,29 @@ class RoleAgent:
 
             content = (getattr(message, "content", "") or "").lower()
 
-            # 证据强度加权
+            # 证据强度加权（中英双语关键词）
             influence = 0.06  # 默认影响步长
             strong_evidence_markers = (
+                # 英文
                 "rct", "randomized", "randomised", "meta-analysis",
-                "systematic review", "guideline", "practice guideline", "cochrane"
+                "systematic review", "guideline", "practice guideline", "cochrane",
+                # 中文
+                "随机对照试验", "随机化", "随机研究", "meta分析",
+                "系统综述", "指南", "实践指南", "循证指南",
+                "科克伦", "考科兰", "cochrane系统综述"
             )
-            moderate_markers = ("evidence", "study", "trial", "data")
-            case_markers = ("case report", "case series")
+            moderate_markers = (
+                # 英文
+                "evidence", "study", "trial", "data",
+                # 中文
+                "证据", "研究", "试验", "数据", "临床研究", "临床试验"
+            )
+            case_markers = (
+                # 英文
+                "case report", "case series",
+                # 中文
+                "病例报告", "病例系列", "个案报告"
+            )
 
             if any(k in content for k in strong_evidence_markers):
                 influence = 0.15
@@ -1663,18 +1752,35 @@ class RoleAgent:
             elif any(k in content for k in case_markers):
                 influence = 0.08
 
-            # 否定优先识别，避免 "not recommend" 被误判为正向
-            no_concern_markers = ("no concern", "not a concern", "no significant concern", "little concern", "low concern")
+            # 否定优先识别（中英双语），避免"不推荐/not recommend"被误判为正向
+            no_concern_markers = (
+                # 英文
+                "no concern", "not a concern", "no significant concern", "little concern", "low concern",
+                # 中文
+                "无担忧", "不是担忧", "没有显著担忧", "担忧较少", "担忧低",
+                "无顾虑", "不成问题", "没有明显问题"
+            )
             has_no_concern = any(k in content for k in no_concern_markers)
 
             negative_markers = (
+                # 英文
                 "not recommend", "contraindicated", "oppose", "against", "avoid",
-                "do not", "not advised", "no benefit", "concern", "high risk", "risk outweighs"
+                "do not", "not advised", "no benefit", "concern", "high risk", "risk outweighs",
+                # 中文
+                "不推荐", "禁忌", "反对", "不支持", "避免", "不要",
+                "不建议", "无获益", "担忧", "高风险", "风险大于获益",
+                "风险超过获益", "不宜", "不适合"
             )
-            positive_markers = ("recommend", "suggest", "advocate", "support", "favor", "prefer", "indicated")
+            positive_markers = (
+                # 英文
+                "recommend", "suggest", "advocate", "support", "favor", "prefer", "indicated",
+                # 中文
+                "推荐", "建议", "倡导", "支持", "赞成", "偏好", "适应证", "指征"
+            )
 
             is_negative = any(k in content for k in negative_markers) and not has_no_concern
-            is_positive = ("not recommend" not in content) and any(k in content for k in positive_markers)
+            # 更稳健的正向判定：不包含任何负向词，且出现任一正向词
+            is_positive = (not any(k in content for k in negative_markers)) and any(k in content for k in positive_markers)
 
             if is_negative:
                 self.current_stance[treatment] = max(-1.0, self.current_stance[treatment] - influence)

@@ -27,9 +27,16 @@ logger = logging.getLogger(__name__)
 class ConsensusMatrix:
     """共识矩阵系统"""
 
-    def __init__(self):
+    def __init__(self, rag_system: Optional[Any] = None):
         self.agents = {role: RoleAgent(role) for role in RoleType}
-        self.rag_system = MedicalKnowledgeRAG()
+        # 支持可选RAG实例注入；默认使用MedicalKnowledgeRAG
+        self.rag_system = rag_system if rag_system is not None else MedicalKnowledgeRAG()
+        # 初始化日志，报告活跃的RAG实现
+        try:
+            rag_name = type(self.rag_system).__name__
+        except Exception:
+            rag_name = str(self.rag_system)
+        logger.info(f"ConsensusMatrix initialized with RAG: {rag_name}")
 
     def generate_consensus(
         self, patient_state: PatientState, use_dialogue: bool = False
@@ -138,157 +145,59 @@ class ConsensusMatrix:
                 # 检查权重和是否为零，如果是则使用简单平均
                 if sum(weights) == 0:
                     weighted_score = np.mean(scores)
-                    logger.warning(f"All weights are zero for {treatment.value}, using simple average")
                 else:
-                    # 加权平均
                     weighted_score = np.average(scores, weights=weights)
-                
                 aggregated[treatment] = weighted_score
 
-                logger.debug(
-                    f"Treatment {treatment.value}: weighted score = {weighted_score:.3f}"
-                )
-
+        logger.info("Aggregated scores computed: %s", aggregated)
         return aggregated
 
     def _identify_conflicts(
         self, role_opinions: Dict[RoleType, RoleOpinion]
     ) -> List[Dict[str, Any]]:
-        """识别角色间冲突"""
+        """识别冲突"""
         conflicts = []
-
         for treatment in TreatmentOption:
             scores = [
                 opinion.treatment_preferences.get(treatment, 0.0)
                 for opinion in role_opinions.values()
             ]
-
             if len(scores) > 1:
                 variance = np.var(scores)
-                if variance > 0.5:  # 高方差表示冲突
-                    conflict_info = {
-                        "treatment": treatment,
-                        "variance": variance,
-                        "min_score": min(scores),
-                        "max_score": max(scores),
-                        "score_range": max(scores) - min(scores),
-                        "conflicting_roles": self._find_conflicting_roles(
-                            treatment, role_opinions
-                        ),
-                        "conflict_severity": self._assess_conflict_severity(
-                            variance, scores
-                        ),
-                    }
-                    conflicts.append(conflict_info)
-
-                    logger.info(
-                        f"Conflict identified for {treatment.value}: variance={variance:.3f}"
+                if variance > 0.15:  # 阈值可调整
+                    conflicts.append(
+                        {
+                            "treatment": treatment,
+                            "variance": float(variance),
+                            "conflicting_roles": [r.value for r in role_opinions.keys()],
+                        }
                     )
-
-        # 按冲突严重程度排序
-        conflicts.sort(key=lambda x: x["variance"], reverse=True)
-
+        logger.info("Conflicts identified: %s", conflicts)
         return conflicts
 
     def _identify_agreements(
         self, role_opinions: Dict[RoleType, RoleOpinion]
     ) -> List[Dict[str, Any]]:
-        """识别角色间一致意见"""
+        """识别一致意见"""
         agreements = []
-
         for treatment in TreatmentOption:
             scores = [
                 opinion.treatment_preferences.get(treatment, 0.0)
                 for opinion in role_opinions.values()
             ]
-
-            if len(scores) > 1:
-                variance = np.var(scores)
-                mean_score = np.mean(scores)
-
-                if variance < 0.2 and abs(mean_score) > 0.3:  # 低方差且有明确倾向
-                    agreement_info = {
-                        "treatment": treatment,
-                        "consensus_score": mean_score,
-                        "agreement_strength": 1.0 - variance,
-                        "unanimous": all(s > 0.5 for s in scores)
-                        or all(s < -0.5 for s in scores),
-                        "supporting_roles": self._find_supporting_roles(
-                            treatment, role_opinions, mean_score
-                        ),
-                        "confidence_level": self._assess_agreement_confidence(
-                            scores, variance
-                        ),
-                    }
-                    agreements.append(agreement_info)
-
-                    logger.info(
-                        f"Agreement identified for {treatment.value}: consensus={mean_score:.3f}"
+            if scores:
+                consensus_score = float(np.mean(scores))
+                agreement_strength = float(1.0 - np.var(scores))
+                if agreement_strength > 0.6:  # 阈值可调整
+                    agreements.append(
+                        {
+                            "treatment": treatment,
+                            "consensus_score": consensus_score,
+                            "agreement_strength": agreement_strength,
+                        }
                     )
-
-        # 按共识强度排序
-        agreements.sort(key=lambda x: x["agreement_strength"], reverse=True)
-
+        logger.info("Agreements identified: %s", agreements)
         return agreements
-
-    def _find_conflicting_roles(
-        self, treatment: TreatmentOption, role_opinions: Dict[RoleType, RoleOpinion]
-    ) -> List[str]:
-        """找出在特定治疗上有冲突的角色"""
-        scores_by_role = {
-            role.value: opinion.treatment_preferences.get(treatment, 0.0)
-            for role, opinion in role_opinions.items()
-        }
-
-        mean_score = np.mean(list(scores_by_role.values()))
-        conflicting_roles = [
-            role
-            for role, score in scores_by_role.items()
-            if abs(score - mean_score) > 0.5
-        ]
-
-        return conflicting_roles
-
-    def _find_supporting_roles(
-        self,
-        treatment: TreatmentOption,
-        role_opinions: Dict[RoleType, RoleOpinion],
-        consensus_score: float,
-    ) -> List[str]:
-        """找出支持特定治疗的角色"""
-        supporting_roles = []
-
-        for role, opinion in role_opinions.items():
-            score = opinion.treatment_preferences.get(treatment, 0.0)
-            # 如果角色评分与共识方向一致
-            if (consensus_score > 0 and score > 0.3) or (
-                consensus_score < 0 and score < -0.3
-            ):
-                supporting_roles.append(role.value)
-
-        return supporting_roles
-
-    def _assess_conflict_severity(self, variance: float, scores: List[float]) -> str:
-        """评估冲突严重程度"""
-        if variance > 1.0:
-            return "severe"
-        elif variance > 0.7:
-            return "moderate"
-        elif variance > 0.5:
-            return "mild"
-        else:
-            return "low"
-
-    def _assess_agreement_confidence(self, scores: List[float], variance: float) -> str:
-        """评估一致性置信度"""
-        mean_abs_score = np.mean([abs(s) for s in scores])
-
-        if variance < 0.1 and mean_abs_score > 0.7:
-            return "high"
-        elif variance < 0.2 and mean_abs_score > 0.5:
-            return "medium"
-        else:
-            return "low"
 
     def analyze_consensus_patterns(
         self, consensus_result: ConsensusResult
