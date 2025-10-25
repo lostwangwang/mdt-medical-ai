@@ -309,10 +309,10 @@ def show_help():
   • 丰富的可视化
 
 🔧 完整系统使用:
-  python main.py --mode demo              # 演示模式
-  python main.py --mode patient --patient-file data.json
-  python main.py --mode training --episodes 1000
-  python main.py --mode comparison --num-patients 100
+  python main_integrated.py --mode demo              # 演示模式
+  python main_integrated.py --mode patient --patient-file data.json
+  python main_integrated.py --mode training --episodes 1000
+  python main_integrated.py --mode comparison --num-patients 100
 
 📞 获取帮助:
   • 查看README.md了解详细说明

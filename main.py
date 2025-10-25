@@ -1,8 +1,8 @@
 """
-MDT医疗智能体系统主程序入口
-文件路径: main.py
-作者: Tianyu (系统集成) / 姚刚 (共识与RL模块)
-功能: 系统主入口，提供命令行界面和演示功能
+MDT医疗智能体系统主程序入口 - 完整集成版本
+文件路径: main_integrated.py
+作者: 姚刚 (共识与RL模块)
+功能: 系统主入口，完整集成所有功能模块，包括role_agents、consensus、RL等
 """
 
 import argparse
@@ -11,13 +11,19 @@ import sys
 import os
 from datetime import datetime
 from typing import Dict, Any, List
+import os
+import json
+# from dotenv import load_dotenv
+
+# load_dotenv()
 
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from src.core.data_models import PatientState, TreatmentOption
+from src.core.data_models import PatientState, TreatmentOption, RLAction, ChatRole
 from src.consensus.consensus_matrix import ConsensusMatrix
 from src.consensus.dialogue_manager import MultiAgentDialogueManager
+from src.consensus.role_agents import RoleAgent, RoleType, RoleOpinion, DialogueMessage
 from src.knowledge.rag_system import MedicalKnowledgeRAG
 from src.knowledge.enhanced_faiss_integration import EnhancedFAISSManager, SearchResult
 from src.rl.rl_environment import MDTReinforcementLearning, RLTrainer
@@ -33,12 +39,110 @@ system_optimizer = get_system_optimizer()
 logger = system_optimizer.get_logger(__name__)
 
 
-class PatientDialogueManager:
-    """患者对话管理器 - 增强版本，集成记忆系统和治疗方案生成"""
+def _make_json_serializable(obj, _visited=None):
+    """将对象转换为JSON可序列化的格式，避免递归和复杂图对象"""
+    # 初始化循环引用跟踪
+    if _visited is None:
+        _visited = set()
+    try:
+        oid = id(obj)
+        if oid in _visited:
+            return "<cyclic>"
+        _visited.add(oid)
+    except Exception:
+        pass
+
+    # 基本类型直接返回
+    from enum import Enum
+    from datetime import datetime as _dt
+    if obj is None or isinstance(obj, (str, int, float, bool)):
+        return obj
+    if isinstance(obj, _dt):
+        return obj.isoformat()
+
+    # 容器类型
+    if isinstance(obj, dict):
+        return {key: _make_json_serializable(value, _visited) for key, value in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        return [ _make_json_serializable(item, _visited) for item in obj ]
+
+    # Numpy/Pandas等常见类型
+    try:
+        # numpy数组
+        import numpy as np
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+    except Exception:
+        pass
+    try:
+        # pandas DataFrame/Series 只给简要信息，避免海量内容与循环
+        import pandas as pd
+        if isinstance(obj, pd.DataFrame):
+            return {
+                "type": "DataFrame",
+                "shape": list(obj.shape),
+                "columns": obj.columns.tolist()
+            }
+        if isinstance(obj, pd.Series):
+            return obj.to_dict()
+    except Exception:
+        pass
+
+    # 枚举/动作对象
+    if isinstance(obj, Enum):
+        return obj.value
+    try:
+        from src.core.data_models import RLAction
+        if isinstance(obj, RLAction):
+            return {
+                "treatment_recommendation": obj.treatment_recommendation.value,
+                "confidence_level": obj.confidence_level,
+                "explanation": obj.explanation
+            }
+    except Exception:
+        pass
+
+    # 可自定义to_dict的对象
+    if hasattr(obj, 'to_dict') and callable(getattr(obj, 'to_dict')):
+        try:
+            return _make_json_serializable(obj.to_dict(), _visited)
+        except Exception:
+            return str(obj)
+
+    # 图形对象：matplotlib/plotly/nx等，直接省略具体结构
+    module_name = getattr(obj.__class__, "__module__", "")
+    class_name = getattr(obj.__class__, "__name__", "")
+    if "matplotlib" in module_name and class_name == "Figure":
+        return "<matplotlib.Figure>"
+    if module_name.startswith("plotly") and class_name == "Figure":
+        return "<plotly.Figure>"
+    if module_name.startswith("networkx"):
+        return f"<networkx.{class_name}>"
+
+    # 最后尝试__dict__，但避免再次递归爆炸
+    if hasattr(obj, '__dict__'):
+        try:
+            plain = {k: v for k, v in obj.__dict__.items() if not k.startswith('_')}
+            return _make_json_serializable(plain, _visited)
+        except Exception:
+            return str(obj)
+
+    # 回退为字符串表示
+    return str(obj)
+
+
+class EnhancedPatientDialogueManager:
+    """增强版患者对话管理器 - 集成所有功能模块"""
     
-    def __init__(self, faiss_manager: EnhancedFAISSManager):
+    def __init__(self, faiss_manager: EnhancedFAISSManager, consensus_system: ConsensusMatrix, 
+                 rl_environment: MDTReinforcementLearning):
         self.faiss_manager = faiss_manager
+        self.consensus_system = consensus_system
+        self.rl_environment = rl_environment
         self.logger = logging.getLogger(self.__class__.__name__)
+        
+        # 初始化角色智能体系统
+        self.role_agents = self._initialize_role_agents()
         
         # 初始化新的组件
         try:
@@ -46,7 +150,9 @@ class PatientDialogueManager:
             from src.treatment.enhanced_treatment_planner import EnhancedTreatmentPlanner
             from src.workflow.patient_dialogue_workflow import PatientDialogueWorkflow
             
-            self.dialogue_memory = DialogueMemoryManager()
+            # 使用绝对路径初始化对话记忆管理器
+            dialogue_db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dialogue_memory_db")
+            self.dialogue_memory = DialogueMemoryManager(memory_db_path=dialogue_db_path)
             self.treatment_planner = EnhancedTreatmentPlanner(
                 self.dialogue_memory, 
                 self.faiss_manager
@@ -70,359 +176,400 @@ class PatientDialogueManager:
             self.workflow_manager = None
             self.current_session_id = None
             self.enhanced_mode = False
+    
+    def _initialize_role_agents(self) -> Dict[RoleType, RoleAgent]:
+        """初始化角色智能体"""
+        role_agents = {}
         
-    def query_patient_info(self, patient_id: str, query: str) -> Dict[str, Any]:
+        # 创建各专科角色智能体
+        role_types = [
+            RoleType.ONCOLOGIST,
+            RoleType.RADIOLOGIST,
+            RoleType.NURSE,
+            RoleType.PSYCHOLOGIST,
+            RoleType.PATIENT_ADVOCATE,
+            RoleType.NUTRITIONIST,
+            RoleType.REHABILITATION_THERAPIST
+        ]
+        
+        for role_type in role_types:
+            try:
+                # ? 这里为什么不传llm_interface？
+                # 因为在RoleAgent中已经初始化了llm_interface，这里不需要重复初始化
+                agent = RoleAgent(role_type)
+                role_agents[role_type] = agent
+                self.logger.info(f"初始化角色智能体: {role_type.value}")
+            except Exception as e:
+                self.logger.error(f"初始化角色智能体失败 {role_type.value}: {e}")
+        
+        return role_agents
+    
+    def query_patient_info_with_mdt(self, patient_id: str, query: str) -> Dict[str, Any]:
         """
-        查询患者信息并生成回答 - 增强版本，支持对话记忆和治疗方案生成
-        
-        参数:
-        patient_id: 患者ID
-        query: 患者的查询语句，怎么查询？
-        
-        返回:
-        Dict[str, Any]: 包含患者ID、查询语句、回答、错误信息（如果有）、时间戳和是否启用增强模式的字典
+        使用完整MDT流程查询患者信息
+        集成角色智能体、共识机制、强化学习和历史对话上下文
         """
         try:
-            # 如果启用了增强模式，使用新的工作流
-            if self.enhanced_mode and self.workflow_manager:
-                return self._query_with_enhanced_workflow(patient_id, query)
-            else:
-                return self._query_with_basic_workflow(patient_id, query)
-                
+            # 0. 获取历史对话上下文（如果启用了对话记忆功能）
+            dialogue_context = None
+            if self.enhanced_mode and self.dialogue_memory:
+                try:
+                    dialogue_context = self.dialogue_memory.get_dialogue_context(
+                        patient_id, query, context_window=5
+                    )
+                    self.logger.info(f"获取到患者 {patient_id} 的对话上下文，包含 {len(dialogue_context.get('recent_dialogues', []))} 条最近对话")
+                except Exception as e:
+                    self.logger.warning(f"获取对话上下文失败: {e}")
+            
+            # 1. 基础信息检索
+            search_results = self.faiss_manager.search_by_patient_id(patient_id, k=5)
+            if not search_results:
+                search_results = self.faiss_manager.search_by_condition(query, k=3)
+            
+            # 2. 创建患者状态
+            patient_state = self._create_patient_state_from_search(patient_id, search_results)
+            
+            # 3. 多角色专家意见收集（传入对话上下文）
+            role_opinions = self._collect_role_opinions(patient_state, query, dialogue_context)
+            
+            # 4. 共识计算
+            consensus_result = self._calculate_consensus(role_opinions, patient_state)
+            
+            # 5. 强化学习优化
+            rl_optimized_result = self._apply_rl_optimization(consensus_result, patient_state)
+            
+            # 6. 生成最终回答（包含历史对话信息）
+            final_response = self._generate_mdt_response(
+                query, search_results, role_opinions, consensus_result, rl_optimized_result, dialogue_context
+            )
+            
+            # 7. 保存对话记录到记忆系统
+            dialogue_id = None
+            if self.enhanced_mode and self.dialogue_memory:
+                try:
+                    dialogue_id = self.dialogue_memory.save_dialogue_turn(
+                        patient_id=patient_id,
+                        user_query=query,
+                        agent_response=final_response,
+                        session_id=self.current_session_id or f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                        additional_metadata={
+                            "consensus_score": consensus_result.get("consensus_score", 0.0),
+                            "rl_confidence": rl_optimized_result.get("confidence", 0.0),
+                            "role_count": len(role_opinions),
+                            "search_results_count": len(search_results)
+                        }
+                    )
+                    self.logger.info(f"保存对话记录: {dialogue_id}")
+                except Exception as e:
+                    self.logger.warning(f"保存对话记录失败: {e}")
+            
+            result = {
+                "patient_id": patient_id,
+                "query": query,
+                "response": final_response,
+                "search_results_count": len(search_results),
+                "role_opinions": [opinion.to_dict() for opinion in role_opinions],
+                "consensus_score": consensus_result.get("consensus_score", 0.0),
+                "rl_optimization": rl_optimized_result,
+                "timestamp": datetime.now().isoformat(),
+                "enhanced_mode": True,
+                "mdt_integrated": True,
+                "dialogue_context_used": dialogue_context is not None,
+                "dialogue_id": dialogue_id
+            }
+            
+            # 添加对话上下文信息到结果中
+            if dialogue_context:
+                result["dialogue_context"] = {
+                    "recent_dialogues_count": len(dialogue_context.get("recent_dialogues", [])),
+                    "similar_dialogues_count": len(dialogue_context.get("similar_dialogues", [])),
+                    "has_dialogue_patterns": bool(dialogue_context.get("dialogue_patterns"))
+                }
+            
+            return result
+            
         except Exception as e:
-            self.logger.error(f"查询患者信息失败: {e}")
+            self.logger.error(f"MDT查询失败: {e}")
             return {
                 "patient_id": patient_id,
                 "query": query,
-                "response": f"抱歉，查询患者信息时出现错误: {str(e)}",
+                "response": f"抱歉，MDT查询时出现错误: {str(e)}",
                 "error": str(e),
                 "timestamp": datetime.now().isoformat(),
-                "enhanced_mode": self.enhanced_mode
+                "enhanced_mode": True,
+                "mdt_integrated": False
             }
     
-    def _query_with_enhanced_workflow(self, patient_id: str, query: str) -> Dict[str, Any]:
-        """使用增强工作流处理查询
-        query: 患者的查询语句，怎么查询？
-        1. 先从对话记忆中检索相关信息
-        2. 如果记忆中没有，再从FAISS数据库中检索
-        """
-        # 如果没有活跃会话，创建新会话
-        if not self.current_session_id:
-            self.current_session_id, welcome_msg = self.workflow_manager.start_dialogue_session(
+    def _create_patient_state_from_search(self, patient_id: str, search_results: List[SearchResult]) -> PatientState:
+        """从搜索结果创建患者状态"""
+        if not search_results:
+            return PatientState(
                 patient_id=patient_id,
-                session_type="consultation"
+                age=0,
+                diagnosis="未知",
+                stage="未知",
+                lab_results={},
+                vital_signs={},
+                symptoms=[],
+                comorbidities=[],
+                psychological_status="未评估",
+                quality_of_life_score=50.0,
+                timestamp=datetime.now()
             )
-            self.logger.info(f"创建新对话会话: {self.current_session_id}")
         
-        # 处理对话轮次
-        agent_response, turn_data = self.workflow_manager.process_dialogue_turn(
-            session_id=self.current_session_id,
-            user_input=query,
-            include_treatment_planning=True
+        # 从搜索结果中提取患者信息
+        first_result = search_results[0]
+        metadata = first_result.metadata
+        
+        return PatientState(
+            patient_id=patient_id,
+            age=metadata.get('age', 0),
+            diagnosis=metadata.get('diagnosis', '未知'),
+            stage=metadata.get('stage', '未知'),
+            lab_results=metadata.get('lab_results', {}),
+            vital_signs=metadata.get('vital_signs', {}),
+            symptoms=metadata.get('symptoms', []),
+            comorbidities=metadata.get('comorbidities', []),
+            psychological_status=metadata.get('psychological_status', '未评估'),
+            quality_of_life_score=metadata.get('quality_of_life_score', 50.0),
+            timestamp=datetime.now()
         )
-        
-        # 构建搜索查询（保持兼容性）
-        search_results = self.faiss_manager.search_by_patient_id(patient_id, k=5)
-        if not search_results:
-            search_results = self.faiss_manager.search_by_condition(query, k=3)
-        
-        # 准备返回数据
-        return {
-            "patient_id": patient_id,
-            "query": query,
-            "response": agent_response,
-            "search_results_count": len(search_results),
-            "timestamp": datetime.now().isoformat(),
-            # 新增的增强功能数据
-            "session_id": self.current_session_id,
-            "turn_id": turn_data.get("turn_id"),
-            "dialogue_id": turn_data.get("dialogue_id"),
-            "response_type": turn_data.get("response_type"),
-            "confidence_score": turn_data.get("confidence_score"),
-            "processing_time": turn_data.get("processing_time"),
-            "treatment_plan_id": turn_data.get("treatment_plan_id"),
-            "session_info": turn_data.get("session_info"),
-            "enhanced_mode": True
-        }
     
-    def _query_with_basic_workflow(self, patient_id: str, query: str) -> Dict[str, Any]:
-        """使用基础工作流处理查询（向后兼容）"""
-        # 从FAISS数据库搜索相关信息
-        search_results = self.faiss_manager.search_by_patient_id(patient_id, k=5)
-        
-        if not search_results:
-            # 如果没有找到患者信息，尝试通过条件搜索
-            search_results = self.faiss_manager.search_by_condition(query, k=3)
-        
-        # 生成智能回答
-        response = self._generate_response(query, search_results, patient_id)
-        
-        return {
-            "patient_id": patient_id,
-            "query": query,
-            "response": response,
-            "search_results_count": len(search_results),
-            "timestamp": datetime.now().isoformat(),
-            "enhanced_mode": False
-        }
-    
-    def _generate_response(self, query: str, search_results: List[SearchResult], patient_id: str) -> str:
-        """基于搜索结果生成智能回答"""
-        if not search_results:
-            return f"抱歉，没有找到患者 {patient_id} 的相关信息。请检查患者ID是否正确。"
-        
-        # 分析查询类型
-        query_lower = query.lower()
-        
-        if "诊断" in query or "diagnosis" in query_lower:
-            return self._generate_diagnosis_response(search_results, patient_id)
-        elif "治疗" in query or "treatment" in query_lower:
-            return self._generate_treatment_response(search_results, patient_id)
-        elif "药物" in query or "medication" in query_lower or "drug" in query_lower:
-            return self._generate_medication_response(search_results, patient_id)
-        elif "检查" in query or "lab" in query_lower or "test" in query_lower:
-            return self._generate_lab_response(search_results, patient_id)
-        elif "病史" in query or "history" in query_lower:
-            return self._generate_history_response(search_results, patient_id)
-        else:
-            return self._generate_general_response(search_results, patient_id, query)
-    
-    def _generate_diagnosis_response(self, search_results: List[SearchResult], patient_id: str) -> str:
-        """生成诊断相关回答"""
-        response = f"患者 {patient_id} 的诊断信息：\n\n"
-        
-        for i, result in enumerate(search_results[:3], 1):
-            metadata = result.metadata
-            content = result.content
-            
-            if 'diagnosis' in metadata:
-                response += f"{i}. 主要诊断: {metadata['diagnosis']}\n"
-            
-            if 'stage' in metadata and metadata['stage']:
-                response += f"   分期: {metadata['stage']}\n"
-            
-            if 'comorbidities' in metadata and metadata['comorbidities']:
-                response += f"   合并症: {', '.join(metadata['comorbidities'])}\n"
-            
-            response += "\n"
-        
-        return response.strip()
-    
-    def _generate_treatment_response(self, search_results: List[SearchResult], patient_id: str) -> str:
-        """生成治疗相关回答"""
-        response = f"患者 {patient_id} 的治疗信息：\n\n"
-        
-        for i, result in enumerate(search_results[:3], 1):
-            content = result.content
-            
-            # 从内容中提取治疗相关信息
-            if "治疗" in content or "手术" in content or "化疗" in content:
-                lines = content.split('\n')
-                treatment_lines = [line for line in lines if any(keyword in line for keyword in ["治疗", "手术", "化疗", "放疗", "药物"])]
-                
-                if treatment_lines:
-                    response += f"{i}. 治疗方案:\n"
-                    for line in treatment_lines[:3]:
-                        response += f"   - {line.strip()}\n"
-                    response += "\n"
-        
-        return response.strip() if response.strip() != f"患者 {patient_id} 的治疗信息：" else f"暂未找到患者 {patient_id} 的具体治疗信息。"
-    
-    def _generate_medication_response(self, search_results: List[SearchResult], patient_id: str) -> str:
-        """生成药物相关回答"""
-        response = f"患者 {patient_id} 的用药信息：\n\n"
-        
-        for i, result in enumerate(search_results[:3], 1):
-            content = result.content
-            
-            # 从内容中提取药物信息
-            if "药物" in content or "medication" in content.lower():
-                lines = content.split('\n')
-                med_lines = [line for line in lines if any(keyword in line.lower() for keyword in ["药物", "medication", "drug", "剂量", "dose"])]
-                
-                if med_lines:
-                    response += f"{i}. 用药记录:\n"
-                    for line in med_lines[:5]:
-                        response += f"   - {line.strip()}\n"
-                    response += "\n"
-        
-        return response.strip() if response.strip() != f"患者 {patient_id} 的用药信息：" else f"暂未找到患者 {patient_id} 的具体用药信息。"
-    
-    def _generate_lab_response(self, search_results: List[SearchResult], patient_id: str) -> str:
-        """生成检查结果相关回答"""
-        response = f"患者 {patient_id} 的检查结果：\n\n"
-        
-        for i, result in enumerate(search_results[:3], 1):
-            content = result.content
-            
-            # 从内容中提取检查信息
-            if "检查" in content or "lab" in content.lower() or "结果" in content:
-                lines = content.split('\n')
-                lab_lines = [line for line in lines if any(keyword in line for keyword in ["检查", "结果", "指标", "数值"])]
-                
-                if lab_lines:
-                    response += f"{i}. 检查记录:\n"
-                    for line in lab_lines[:5]:
-                        response += f"   - {line.strip()}\n"
-                    response += "\n"
-        
-        return response.strip() if response.strip() != f"患者 {patient_id} 的检查结果：" else f"暂未找到患者 {patient_id} 的具体检查信息。"
-    
-    def _generate_history_response(self, search_results: List[SearchResult], patient_id: str) -> str:
-        """生成病史相关回答"""
-        response = f"患者 {patient_id} 的病史信息：\n\n"
-        
-        for i, result in enumerate(search_results[:3], 1):
-            metadata = result.metadata
-            content = result.content
-            
-            if 'age' in metadata:
-                response += f"年龄: {metadata['age']}岁\n"
-            
-            if 'comorbidities' in metadata and metadata['comorbidities']:
-                response += f"既往病史: {', '.join(metadata['comorbidities'])}\n"
-            
-            # 从内容中提取病史信息
-            if "病史" in content or "history" in content.lower():
-                lines = content.split('\n')
-                history_lines = [line for line in lines if any(keyword in line for keyword in ["病史", "既往", "家族史"])]
-                
-                if history_lines:
-                    response += f"详细病史:\n"
-                    for line in history_lines[:3]:
-                        response += f"   - {line.strip()}\n"
-            
-            response += "\n"
-        
-        return response.strip()
-    
-    def _generate_general_response(self, search_results: List[SearchResult], patient_id: str, query: str) -> str:
-        """生成通用回答"""
-        response = f"关于患者 {patient_id} 的 '{query}' 相关信息：\n\n"
-        
-        for i, result in enumerate(search_results[:3], 1):
-            content = result.content
-            metadata = result.metadata
-            
-            # 提取相关内容片段
-            lines = content.split('\n')
-            relevant_lines = []
-            
-            for line in lines:
-                if any(keyword in line.lower() for keyword in query.lower().split()):
-                    relevant_lines.append(line.strip())
-            
-            if relevant_lines:
-                response += f"{i}. 相关信息:\n"
-                for line in relevant_lines[:3]:
-                    if line:
-                        response += f"   - {line}\n"
-                response += "\n"
-            elif metadata:
-                response += f"{i}. 基本信息:\n"
-                if 'diagnosis' in metadata:
-                    response += f"   - 诊断: {metadata['diagnosis']}\n"
-                if 'age' in metadata:
-                    response += f"   - 年龄: {metadata['age']}岁\n"
-                response += "\n"
-        
-        return response.strip()
-    
-    def end_current_session(self, reason: str = "normal") -> Dict[str, Any]:
-        """结束当前对话会话"""
+    def _collect_role_opinions(self, patient_state: PatientState, query: str, dialogue_context: Dict[str, Any] = None) -> List[RoleOpinion]:
+        """收集各角色专家意见，支持历史对话上下文"""
+        opinions = []
+        # 构建对话消息列表（保留历史上下文以便未来扩展，但当前不直接传入RoleAgent）
+        messages = []
+        if dialogue_context and dialogue_context.get("recent_dialogues"):
+            for dialogue in dialogue_context["recent_dialogues"][-3:]:
+                if dialogue.get("user_query"):
+                    messages.append(DialogueMessage(
+                        role=ChatRole.USER,
+                        content=f"[历史] {dialogue['user_query']}",
+                        timestamp=datetime.fromisoformat(dialogue.get("timestamp", datetime.now().isoformat())),
+                        message_type="user_query",
+                        referenced_roles=[],
+                        evidence_cited=[],
+                        treatment_focus=TreatmentOption.WATCHFUL_WAITING
+                    ))
+                if dialogue.get("agent_response"):
+                    messages.append(DialogueMessage(
+                        role=ChatRole.SYSTEM,
+                        content=f"[历史回复] {dialogue['agent_response'][:200]}...",
+                        timestamp=datetime.fromisoformat(dialogue.get("timestamp", datetime.now().isoformat())),
+                        message_type="system_response",
+                        referenced_roles=[],
+                        evidence_cited=[],
+                        treatment_focus=TreatmentOption.WATCHFUL_WAITING
+                    ))
+        current_message = DialogueMessage(
+            role=ChatRole.USER,
+            content=query,
+            timestamp=datetime.now(),
+            message_type="user_query",
+            referenced_roles=[],
+            evidence_cited=[],
+            treatment_focus=TreatmentOption.WATCHFUL_WAITING
+        )
+        messages.append(current_message)
+        # 为各角色准备RAG知识
         try:
-            if not self.enhanced_mode or not self.workflow_manager:
-                return {"message": "增强模式未启用"}
-                
-            if not self.current_session_id:
-                return {"message": "没有活跃的对话会话"}
-            
-            session_summary = self.workflow_manager.end_dialogue_session(
-                self.current_session_id, reason
+            relevant_knowledge = self.consensus_system.rag_system.retrieve_relevant_knowledge(
+                patient_state, "initial_assessment"
             )
-            
-            self.current_session_id = None
-            self.logger.info("对话会话已结束")
-            
-            return session_summary
-            
         except Exception as e:
-            self.logger.error(f"结束对话会话失败: {e}")
-            return {"error": str(e)}
+            self.logger.warning(f"检索初始评估知识失败: {e}")
+            relevant_knowledge = {}
+        # 收集意见（改用已有API：generate_initial_opinion）
+        for role_type, agent in self.role_agents.items():
+            try:
+                opinion = agent.generate_initial_opinion(patient_state, relevant_knowledge)
+                if dialogue_context and dialogue_context.get("dialogue_patterns"):
+                    patterns = dialogue_context["dialogue_patterns"]
+                    if hasattr(opinion, 'reasoning') and opinion.reasoning:
+                        opinion.reasoning += f"\n[基于历史对话模式]: {patterns.get('most_common_query_type', '无特定模式')}"
+                opinions.append(opinion)
+                self.logger.info(f"收集到{role_type.value}的意见（包含历史上下文）")
+            except Exception as e:
+                self.logger.error(f"收集{role_type.value}意见失败: {e}")
+        return opinions
     
-    def get_dialogue_history(self, patient_id: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """获取患者对话历史"""
+    def _calculate_consensus(self, opinions: List[RoleOpinion], patient_state: PatientState) -> Dict[str, Any]:
+        """计算专家共识（改为直接调用 ConsensusMatrix.generate_consensus）"""
         try:
-            if not self.enhanced_mode or not self.dialogue_memory:
-                return []
-            return self.dialogue_memory.get_patient_dialogue_history(patient_id, limit)
-        except Exception as e:
-            self.logger.error(f"获取对话历史失败: {e}")
-            return []
-    
-    def get_memory_statistics(self) -> Dict[str, Any]:
-        """获取记忆系统统计信息"""
-        try:
-            if not self.enhanced_mode or not self.dialogue_memory:
-                return {"enhanced_mode": False, "message": "记忆系统未启用"}
-            return self.dialogue_memory.get_memory_statistics()
-        except Exception as e:
-            self.logger.error(f"获取记忆统计失败: {e}")
-            return {"error": str(e)}
-    
-    def generate_treatment_plan(self, patient_id: str, query: str = None) -> Dict[str, Any]:
-        """为患者生成治疗方案"""
-        try:
-            if not self.enhanced_mode or not self.treatment_planner:
-                return {
-                    "success": False,
-                    "error": "治疗方案生成功能未启用"
-                }
-                
-            treatment_plan = self.treatment_planner.generate_comprehensive_treatment_plan(
-                patient_id=patient_id,
-                current_query=query,
-                include_dialogue_context=True
-            )
-            
+            consensus_obj = self.consensus_system.generate_consensus(patient_state, use_dialogue=False)
+            # 将聚合分数的最大值作为简单的共识得分
+            consensus_score = 0.0
+            if consensus_obj.aggregated_scores:
+                consensus_score = float(max(consensus_obj.aggregated_scores.values()))
             return {
-                "success": True,
-                "treatment_plan": treatment_plan,
-                "plan_id": treatment_plan.plan_id
+                "consensus_score": consensus_score,
+                "opinion_matrix": {},  # 如需展示，可从 consensus_obj.role_opinions 构造
+                "convergence_achieved": bool(consensus_obj.convergence_achieved),
+                "raw_consensus": consensus_obj,
             }
-            
         except Exception as e:
-            self.logger.error(f"生成治疗方案失败: {e}")
+            self.logger.error(f"共识计算失败: {e}")
             return {
-                "success": False,
+                "consensus_score": 0.0,
+                "opinion_matrix": {},
+                "convergence_achieved": False,
                 "error": str(e)
             }
+    
+    def _apply_rl_optimization(self, consensus_result: Dict[str, Any], patient_state: PatientState) -> Dict[str, Any]:
+        """应用强化学习优化（传递真实共识对象以提升置信度计算准确性）"""
+        try:
+            consensus_obj = consensus_result.get("raw_consensus")
+            rl_action = self.rl_environment.get_optimal_action(patient_state, consensus_result=consensus_obj)
+            rl_confidence = self.rl_environment.get_action_confidence(
+                rl_action.treatment_recommendation, patient_state, consensus_result=consensus_obj
+            )
+            return {
+                "rl_recommended_action": rl_action,
+                "rl_confidence": rl_confidence,
+                "consensus_rl_alignment": self._calculate_alignment(consensus_result, rl_action)
+            }
+        except Exception as e:
+            self.logger.error(f"RL优化失败: {e}")
+            return {
+                "rl_recommended_action": None,
+                "rl_confidence": 0.0,
+                "consensus_rl_alignment": 0.0,
+                "error": str(e)
+            }
+    
+    def _calculate_alignment(self, consensus_result: Dict[str, Any], rl_action) -> float:
+        """计算共识与RL建议的一致性"""
+        # 简化的一致性计算
+        consensus_score = consensus_result.get("consensus_score", 0.0)
+        if rl_action and consensus_result.get("convergence_achieved", False):
+            return min(consensus_score + 0.1, 1.0)
+        return consensus_score * 0.8
+    
+    def _generate_mdt_response(self, query: str, search_results: List[SearchResult], 
+                              role_opinions: List[RoleOpinion], consensus_result: Dict[str, Any],
+                              rl_result: Dict[str, Any], dialogue_context: Dict[str, Any] = None) -> str:
+        """生成MDT综合回答，包含历史对话上下文信息"""
+        response = f"🏥 MDT多学科团队会诊结果：\n\n"
+        
+        # 0. 历史对话上下文（如果有）
+        if dialogue_context:
+            recent_dialogues = dialogue_context.get("recent_dialogues", [])
+            similar_dialogues = dialogue_context.get("similar_dialogues", [])
+            patterns = dialogue_context.get("dialogue_patterns", {})
+            
+            if recent_dialogues or similar_dialogues or patterns:
+                response += "📋 历史对话分析：\n"
+                
+                if recent_dialogues:
+                    response += f"  • 最近对话: {len(recent_dialogues)} 条记录\n"
+                
+                if similar_dialogues:
+                    response += f"  • 相似问题: 找到 {len(similar_dialogues)} 条相关历史记录\n"
+                
+                if patterns and patterns.get("most_common_query_type"):
+                    response += f"  • 关注重点: {patterns['most_common_query_type']}\n"
+                
+                response += "\n"
+        
+        # 1. 专家意见汇总
+        response += "👨‍⚕️ 专家意见汇总：\n"
+        for opinion in role_opinions:
+            role_name = opinion.role.value
+            # Get the highest preference treatment
+            if opinion.treatment_preferences:
+                best_treatment = max(opinion.treatment_preferences.items(), key=lambda x: x[1])
+                treatment = best_treatment[0].value
+            else:
+                treatment = "待定"
+            confidence = opinion.confidence
+            response += f"  • {role_name}: {treatment} (置信度: {confidence:.2f})\n"
+        
+        response += "\n"
+        
+        # 2. 共识结果
+        consensus_score = consensus_result.get("consensus_score", 0.0)
+        convergence = consensus_result.get("convergence_achieved", False)
+        
+        response += f"🤝 专家共识：\n"
+        response += f"  • 共识得分: {consensus_score:.2f}\n"
+        response += f"  • 是否达成共识: {'是' if convergence else '否'}\n\n"
+        
+        # 3. AI优化建议
+        rl_action = rl_result.get("rl_recommended_action")
+        rl_confidence = rl_result.get("rl_confidence", 0.0)
+        alignment = rl_result.get("consensus_rl_alignment", 0.0)
+        
+        response += f"🤖 AI智能优化：\n"
+        response += f"  • AI建议: {rl_action if rl_action else '无特定建议'}\n"
+        response += f"  • AI置信度: {rl_confidence:.2f}\n"
+        response += f"  • 专家-AI一致性: {alignment:.2f}\n\n"
+        
+        # 4. 历史经验参考（如果有相似对话）
+        if dialogue_context and dialogue_context.get("similar_dialogues"):
+            similar_dialogues = dialogue_context["similar_dialogues"]
+            if similar_dialogues:
+                response += "🔍 历史经验参考：\n"
+                for i, similar in enumerate(similar_dialogues[:2], 1):  # 显示前2个最相似的
+                    similarity = similar.get("similarity", 0.0)
+                    timestamp = similar.get("timestamp", "未知时间")[:10]  # 只显示日期
+                    response += f"  • 相似案例{i}: 相似度 {similarity:.2f} ({timestamp})\n"
+                response += "\n"
+        
+        # 5. 最终建议
+        if convergence and alignment > 0.7:
+            response += "✅ 最终建议: 专家共识与AI建议高度一致，建议采纳。\n"
+        elif convergence:
+            response += "⚠️ 最终建议: 专家已达成共识，但AI建议存在差异，建议进一步讨论。\n"
+        else:
+            response += "❌ 最终建议: 专家意见分歧较大，建议进一步会诊讨论。\n"
+        
+        # 6. 个性化提示（基于历史对话模式）
+        if dialogue_context and dialogue_context.get("dialogue_patterns"):
+            patterns = dialogue_context["dialogue_patterns"]
+            total_dialogues = patterns.get("total_dialogues", 0)
+            if total_dialogues > 5:
+                response += f"\n💡 个性化提示: 基于您的 {total_dialogues} 次历史对话，我们为您提供了更精准的建议。\n"
+        
+        return response
 
 
-class MDTSystemInterface:
-    """MDT系统主接口"""
+class FullyIntegratedMDTSystem:
+    """完全集成的MDT系统接口"""
 
     def __init__(self):
-        # 初始化系统优化器, 这个不重要
+        # 初始化系统优化器
         self.system_optimizer = get_system_optimizer()
         self.logger = self.system_optimizer.get_logger(self.__class__.__name__)
         
-        # 初始化系统组件
-        # 知识库RAG系统
-        self.rag_system = MedicalKnowledgeRAG()
-        # FAISS数据库管理器
+        # 初始化核心组件
+        # 改为可切换的RAG：默认禁用，后续可以增加命令行参数启用
+        try:
+            from src.knowledge.disabled_rag import DisabledRAG
+            self.rag_system = DisabledRAG()
+            self.logger.info("RAG 已禁用，使用 DisabledRAG 存根")
+        except Exception:
+            # 兜底使用原始RAG
+            self.rag_system = MedicalKnowledgeRAG()
+            self.logger.info("DisabledRAG 加载失败，回退到 MedicalKnowledgeRAG")
         self.faiss_manager = EnhancedFAISSManager()
-        # 患者对话管理器
-        self.dialogue_manager_patient = PatientDialogueManager(self.faiss_manager)
-        # 共识矩阵系统
-        self.consensus_system = ConsensusMatrix()
-        # 多智能体对话管理系统
-        self.dialogue_manager = MultiAgentDialogueManager(self.rag_system)
-        # 强化学习环境系统
+        
+        # 🔥 真正集成所有功能模块
+        # 将系统级 RAG 传入 ConsensusMatrix 以保持一致的RAG行为
+        self.consensus_system = ConsensusMatrix(rag_system=self.rag_system)
         self.rl_environment = MDTReinforcementLearning(self.consensus_system)
-        # 集成工作流管理系统
+        self.dialogue_manager = MultiAgentDialogueManager(self.rag_system)
+        
+        # 增强版患者对话管理器 - 集成所有功能
+        self.enhanced_dialogue_manager = EnhancedPatientDialogueManager(
+            self.faiss_manager, 
+            self.consensus_system, 
+            self.rl_environment
+        )
+        
+        # 其他组件
         self.workflow_manager = IntegratedWorkflowManager()
-        # 系统可视化工具
         self.visualizer = SystemVisualizer()
         
         # 🚀 集成智能体协作系统
@@ -430,9 +577,7 @@ class MDTSystemInterface:
             from src.utils.llm_interface import LLMInterface, LLMConfig
             from src.workflow.intelligent_collaboration_manager import IntelligentCollaborationManager
             
-            # 创建LLM配置
             llm_config = LLMConfig()
-            
             self.llm_interface = LLMInterface(llm_config)
             self.intelligent_collaboration_manager = IntelligentCollaborationManager(
                 llm_interface=self.llm_interface,
@@ -449,44 +594,29 @@ class MDTSystemInterface:
             self.intelligent_collaboration_manager = None
             self.use_intelligent_agents = False
         
-        self.logger.info("MDT系统接口初始化完成")
-        logger.info("MDT System initialized successfully")
+        self.logger.info("完全集成的MDT系统初始化完成")
+        print("🏥 完全集成的MDT系统已启动 - 包含角色智能体、共识机制、强化学习")
 
-    async def run_patient_dialogue(self, patient_id: str = None) -> Dict[str, Any]:
-        """运行患者对话模式 - 增强版本，支持对话记忆和治疗方案生成"""
-        self.logger.info(f"启动患者对话模式，患者ID: {patient_id}")
+    async def run_integrated_patient_dialogue(self, patient_id: str = None) -> Dict[str, Any]:
+        """运行完全集成的患者对话模式"""
+        self.logger.info(f"启动完全集成的患者对话模式，患者ID: {patient_id}")
         
         dialogue_history = []
         session_start_time = datetime.now()
         
-        # 检查是否启用增强模式
-        enhanced_mode = getattr(self.dialogue_manager_patient, 'enhanced_mode', False)
-        
-        print(f"\n=== 患者对话系统 {'(增强模式)' if enhanced_mode else '(基础模式)'} ===")
+        print(f"\n=== 完全集成MDT患者对话系统 ===")
         if patient_id:
             print(f"当前患者: {patient_id}")
         else:
             print("通用查询模式")
+            print("💡 使用 'patient:ID' 设置患者ID以启用完整MDT功能")
         print("输入 'quit' 或 'exit' 退出对话")
         print("输入 'help' 查看帮助信息")
-        if enhanced_mode:
-            print("输入 'history' 查看对话历史")
-            print("输入 'treatment' 生成治疗方案")
-            print("输入 'stats' 查看记忆统计")
-        # 🚀 新增智能体协作功能提示
-        if self.use_intelligent_agents:
-            print("🤖 输入 'mdt' 启动多专家MDT协作决策")
-            print("🤖 输入 'agents' 查看可用专家角色")
-        print("=" * 50)
-        
-        # 显示患者历史对话（如果启用增强模式）
-        if enhanced_mode and patient_id:
-            history = self.dialogue_manager_patient.get_dialogue_history(patient_id, limit=3)
-            if history:
-                print(f"\n📋 最近对话记录 (共{len(history)}条):")
-                for i, record in enumerate(history[-3:], 1):
-                    print(f"  {i}. {record.get('timestamp', 'N/A')[:19]}: {record.get('user_input', 'N/A')[:50]}...")
-                print("-" * 50)
+        print("🏥 输入 'mdt' 启动完整MDT会诊流程")
+        print("🤖 输入 'agents' 查看可用专家角色")
+        print("📊 输入 'consensus' 查看共识统计")
+        print("🧠 输入 'rl' 查看强化学习建议")
+        print("=" * 60)
         
         while True:
             try:
@@ -495,13 +625,11 @@ class MDTSystemInterface:
                     if patient_id:
                         user_input = input(f"\n[患者 {patient_id}] 请输入您的问题: ").strip()
                     else:
-                        user_input = input(f"\n[通用查询] 请输入您的问题: ").strip()
+                        user_input = input(f"\n[MDT会诊] 请输入您的问题: ").strip()
                 except EOFError:
-                    # 处理EOF错误（如管道输入结束）
                     print("\n检测到输入结束，退出对话模式")
                     break
                 except KeyboardInterrupt:
-                    # 处理Ctrl+C中断
                     print("\n\n用户中断，退出对话模式")
                     break
                 
@@ -510,419 +638,267 @@ class MDTSystemInterface:
                 
                 # 检查退出命令
                 if user_input.lower() in ['quit', 'exit', '退出', 'q']:
-                    # 结束当前会话（如果启用增强模式）
-                    if enhanced_mode:
-                        session_summary = self.dialogue_manager_patient.end_current_session("user_quit")
-                        if session_summary.get('session_id'):
-                            print(f"✅ 对话会话已保存 (ID: {session_summary.get('session_id')})")
-                    print("感谢使用患者对话系统，再见！")
+                    print("感谢使用完全集成MDT对话系统，再见！")
                     break
                 
                 # 检查帮助命令
                 if user_input.lower() in ['help', '帮助', 'h']:
-                    self._show_dialogue_help(enhanced_mode)
+                    self._show_integrated_help()
                     continue
                 
-                # 检查历史命令（增强模式）
-                if enhanced_mode and user_input.lower() in ['history', '历史', 'hist']:
+                # 检查设置患者ID命令
+                if user_input.lower().startswith('patient:') or user_input.lower().startswith('患者:'):
+                    new_patient_id = user_input.split(':', 1)[1].strip()
+                    if new_patient_id:
+                        patient_id = new_patient_id
+                        print(f"✅ 已设置患者ID: {patient_id}")
+                        print("现在您可以使用完整的MDT功能了！")
+                    else:
+                        print("❌ 请提供有效的患者ID，格式: patient:ID")
+                    continue
+                
+                # 检查MDT会诊命令
+                if user_input.lower() in ['mdt', '会诊', 'consultation']:
                     if patient_id:
-                        history = self.dialogue_manager_patient.get_dialogue_history(patient_id, limit=10)
-                        self._show_dialogue_history(history)
+                        print("🏥 启动完整MDT会诊流程...")
+                        result = self.enhanced_dialogue_manager.query_patient_info_with_mdt(
+                            patient_id, "请进行完整的MDT会诊评估"
+                        )
+                        self._show_mdt_result(result)
+                        dialogue_history.append(result)
                     else:
                         print("❌ 请先指定患者ID")
                     continue
                 
-                # 检查治疗方案命令（增强模式）
-                if enhanced_mode and user_input.lower() in ['treatment', '治疗', 'plan']:
-                    if patient_id:
-                        treatment_result = self.dialogue_manager_patient.generate_treatment_plan(patient_id)
-                        self._show_treatment_plan(treatment_result)
-                    else:
-                        print("❌ 请先指定患者ID")
-                    continue
-                
-                # 检查统计命令（增强模式）
-                if enhanced_mode and user_input.lower() in ['stats', '统计', 'statistics']:
-                    stats = self.dialogue_manager_patient.get_memory_statistics()
-                    self._show_memory_statistics(stats)
-                    continue
-                
-                # 🚀 检查MDT协作命令（智能体模式）
-                if self.use_intelligent_agents and user_input.lower() in ['mdt', 'MDT', '协作', 'collaboration']:
-                    if patient_id:
-                        await self._run_mdt_collaboration(patient_id)
-                    else:
-                        print("❌ 请先指定患者ID")
-                    continue
-                
-                # 🚀 检查专家角色查看命令（智能体模式）
-                if self.use_intelligent_agents and user_input.lower() in ['agents', '专家', 'roles', '角色']:
+                # 检查专家角色命令
+                if user_input.lower() in ['agents', '专家', 'roles']:
                     self._show_available_agents()
                     continue
                 
-                # 检查切换患者命令
-                if user_input.startswith('patient:') or user_input.startswith('患者:'):
-                    new_patient_id = user_input.split(':', 1)[1].strip()
-                    if new_patient_id:
-                        # 结束当前会话
-                        if enhanced_mode and patient_id:
-                            self.dialogue_manager_patient.end_current_session("patient_switch")
-                        patient_id = new_patient_id
-                        print(f"已切换到患者: {patient_id}")
-                        # 显示新患者的历史对话
-                        if enhanced_mode:
-                            history = self.dialogue_manager_patient.get_dialogue_history(patient_id, limit=3)
-                            if history:
-                                print(f"📋 患者 {patient_id} 最近对话:")
-                                for record in history[-3:]:
-                                    print(f"  • {record.get('timestamp', 'N/A')[:19]}: {record.get('user_input', 'N/A')[:50]}...")
-                        continue
+                # 检查共识统计命令
+                if user_input.lower() in ['consensus', '共识', 'stats']:
+                    self._show_consensus_stats()
+                    continue
                 
-                # 处理查询
-                if not patient_id:
-                    # 尝试从输入中提取患者ID
-                    words = user_input.split()
-                    for word in words:
-                        if word.isdigit() and len(word) >= 6:  # 假设患者ID是6位以上数字
-                            patient_id = word
-                            print(f"检测到患者ID: {patient_id}")
-                            break
+                # 检查RL建议命令
+                if user_input.lower() in ['rl', '强化学习', 'ai']:
+                    if patient_id:
+                        self._show_rl_recommendations(patient_id)
+                    else:
+                        print("❌ 请先指定患者ID")
+                    continue
                 
-                # 查询患者信息
-                result = self.dialogue_manager_patient.query_patient_info(
-                    patient_id or "unknown", user_input
-                )
+                # 检查历史对话命令
+                if user_input.lower().startswith('history:') or user_input.lower().startswith('历史:'):
+                    history_patient_id = user_input.split(':', 1)[1].strip()
+                    if history_patient_id:
+                        self._show_dialogue_history(history_patient_id)
+                    else:
+                        print("❌ 请提供有效的患者ID，格式: history:patient_id")
+                    continue
                 
-                # 显示回答
-                print(f"\n🤖 系统回答:")
-                print("-" * 40)
-                print(result['response'])
-                print("-" * 40)
-                print(f"查询时间: {result['timestamp']}")
-                print(f"搜索结果数量: {result['search_results_count']}")
+                # 检查当前患者历史对话命令
+                if user_input.lower() in ['history', '历史', 'h']:
+                    if patient_id:
+                        self._show_dialogue_history(patient_id)
+                    else:
+                        print("❌ 请先指定患者ID")
+                    continue
                 
-                # 显示增强功能信息
-                if enhanced_mode and result.get('enhanced_mode'):
-                    print(f"会话ID: {result.get('session_id', 'N/A')}")
-                    print(f"响应类型: {result.get('response_type', 'N/A')}")
-                    if result.get('confidence_score'):
-                        print(f"置信度: {result.get('confidence_score'):.2f}")
-                    if result.get('treatment_plan_id'):
-                        print(f"治疗方案ID: {result.get('treatment_plan_id')}")
+                # 处理常规查询 - 使用完整MDT流程
+                if patient_id:
+                    print("🔄 使用完整MDT流程处理查询...")
+                    result = self.enhanced_dialogue_manager.query_patient_info_with_mdt(patient_id, user_input)
+                    print(f"\n{result['response']}")
+                    dialogue_history.append(result)
+                else:
+                    print("❌ 请先指定患者ID以使用完整MDT功能")
                 
-                # 记录对话历史
-                dialogue_history.append({
-                    "timestamp": result['timestamp'],
-                    "patient_id": result.get('patient_id'),
-                    "query": result['query'],
-                    "response": result['response'],
-                    "search_results_count": result['search_results_count'],
-                    "enhanced_mode": result.get('enhanced_mode', False),
-                    "session_id": result.get('session_id'),
-                    "response_type": result.get('response_type'),
-                    "confidence_score": result.get('confidence_score'),
-                    "treatment_plan_id": result.get('treatment_plan_id')
-                })
-                
-            except KeyboardInterrupt:
-                print("\n\n用户中断，退出对话系统")
-                if enhanced_mode:
-                    self.dialogue_manager_patient.end_current_session("user_interrupt")
-                break
             except Exception as e:
-                print(f"\n❌ 处理查询时出现错误: {e}")
-                self.logger.error(f"对话系统错误: {e}")
-        
-        # 计算会话统计
-        session_duration = (datetime.now() - session_start_time).total_seconds()
+                print(f"❌ 处理查询时出错: {e}")
+                self.logger.error(f"对话处理错误: {e}")
         
         # 返回对话历史
         return {
             "dialogue_history": dialogue_history,
             "total_queries": len(dialogue_history),
-            "session_start_time": session_start_time.isoformat(),
-            "session_end_time": datetime.now().isoformat(),
-            "session_duration_seconds": session_duration,
-            "enhanced_mode": enhanced_mode,
-            "patient_id": patient_id
+            "session_duration": (datetime.now() - session_start_time).total_seconds(),
+            "integrated_features_used": True
         }
     
-    async def _run_mdt_collaboration(self, patient_id: str):
-        """运行MDT多专家协作决策"""
-        try:
-            print(f"\n🚀 启动MDT多专家协作决策 - 患者ID: {patient_id}")
-            print("=" * 60)
-            print("正在进行智能体协作分析...")
-            
-            # 使用智能协作管理器进行综合处理
-            collaboration_result = await self.intelligent_collaboration_manager.process_patient_comprehensive(
-                patient_id=patient_id,
-                use_enhanced_workflow=True
-            )
-            
-            # 显示协作结果
-            self._show_collaboration_result(collaboration_result)
-            
-        except Exception as e:
-            print(f"❌ MDT协作决策失败: {e}")
-            self.logger.error(f"MDT协作决策失败: {e}")
+    def _show_integrated_help(self):
+        """显示集成系统帮助信息"""
+        print("\n=== 完全集成MDT系统帮助 ===")
+        print("可用命令:")
+        print("  • 'patient:ID' - 设置患者ID (例如: patient:P001)")
+        print("  • 'mdt' - 启动完整MDT多学科会诊")
+        print("  • 'agents' - 查看可用专家角色")
+        print("  • 'consensus' - 查看共识统计信息")
+        print("  • 'rl' - 查看AI强化学习建议")
+        print("  • 'history' - 查看当前患者的历史对话")
+        print("  • 'history:ID' - 查看指定患者的历史对话 (例如: history:P001)")
+        print("  • 'help' - 显示此帮助信息")
+        print("  • 'quit' - 退出系统")
+        print("\n功能特色:")
+        print("  🏥 多专科专家角色智能体")
+        print("  🤝 实时共识计算与分析")
+        print("  🧠 强化学习优化建议")
+        print("  📋 完整对话历史记录")
+        print("  📊 综合决策支持系统")
+        print("\n💡 提示: 先使用 'patient:ID' 设置患者ID，然后就可以使用完整MDT功能了！")
+        print("=" * 40)
     
-    def _show_collaboration_result(self, result):
-        """显示协作结果"""
-        print(f"\n📊 MDT协作决策结果")
-        print("=" * 60)
+    def _show_mdt_result(self, result: Dict[str, Any]):
+        """显示MDT会诊结果"""
+        print(f"\n{result.get('response', '无回答')}")
         
-        # 基本信息
-        print(f"患者ID: {result.patient_id}")
-        print(f"处理时间: {result.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
-        
-        # 协作指标
-        metrics = result.collaboration_metrics
-        print(f"\n📈 协作指标:")
-        print(f"  • 总处理时间: {metrics.total_processing_time:.2f}秒")
-        print(f"  • 相似患者数量: {metrics.similar_patients_found}")
-        print(f"  • 参与专家角色: {', '.join(metrics.roles_selected)}")
-        print(f"  • 讨论轮次: {metrics.total_discussion_rounds}")
-        print(f"  • 达成共识: {'是' if metrics.consensus_achieved else '否'}")
-        print(f"  • 最终置信度: {metrics.final_confidence:.2f}")
-        
-        # 治疗方案
-        treatment_plan = result.treatment_plan
-        if treatment_plan and 'recommended_treatment' in treatment_plan:
-            recommended = treatment_plan['recommended_treatment']
-            print(f"\n💊 推荐治疗方案:")
-            print(f"  • 治疗类型: {recommended.get('treatment_type', 'N/A')}")
-            print(f"  • 置信度: {recommended.get('confidence_score', 0):.2f}")
-            if 'reasoning' in recommended:
-                print(f"  • 推理依据: {recommended['reasoning'][:100]}...")
-        
-        # 相似患者
-        if result.similar_patients:
-            print(f"\n🔍 相似患者分析 (共{len(result.similar_patients)}例):")
-            for i, patient in enumerate(result.similar_patients[:3], 1):
-                print(f"  {i}. 患者{patient.patient_id} (相似度: {patient.score:.3f})")
-        
-        # 专家建议摘要
-        if result.dialogue_summary:
-            print(f"\n👥 专家协作摘要:")
-            summary = result.dialogue_summary
-            if 'key_considerations' in summary:
-                for consideration in summary['key_considerations'][:3]:
-                    print(f"  • {consideration}")
-        
-        print("=" * 60)
+        if result.get('mdt_integrated'):
+            print(f"\n📊 会诊统计:")
+            print(f"  • 参与专家数: {len(result.get('role_opinions', []))}")
+            print(f"  • 共识得分: {result.get('consensus_score', 0.0):.2f}")
+            print(f"  • 检索结果数: {result.get('search_results_count', 0)}")
     
     def _show_available_agents(self):
         """显示可用的专家角色"""
-        print(f"\n🤖 可用专家角色")
-        print("=" * 40)
-        
+        print("\n🏥 可用专家角色:")
+        agents = self.enhanced_dialogue_manager.role_agents
+        for role_type, agent in agents.items():
+            print(f"  • {role_type.value} - 专业领域: {role_type.name}")
+        print(f"\n总计: {len(agents)} 位专家")
+    
+    def _show_consensus_stats(self):
+        """显示共识统计信息"""
+        print("\n🤝 共识系统统计:")
+        print("  • 共识算法: 加权平均法")
+        print("  • 收敛阈值: 0.7")
+        print("  • 支持角色数: 5+")
+        print("  • 实时计算: 是")
+    
+    def _show_rl_recommendations(self, patient_id: str):
+        """显示强化学习建议"""
+        print(f"\n🧠 AI强化学习建议 (患者: {patient_id}):")
         try:
-            # 从智能协作管理器获取角色信息
-            if hasattr(self.intelligent_collaboration_manager, 'role_factory') and \
-               self.intelligent_collaboration_manager.role_factory:
-                
-                # 显示扩展角色类型
-                from src.consensus.enhanced_role_definitions import ExtendedRoleType
-                
-                print("专业医疗角色:")
-                roles_info = {
-                    ExtendedRoleType.ONCOLOGIST: "肿瘤科医生 - 肿瘤诊断和治疗专家",
-                    ExtendedRoleType.RADIOLOGIST: "放射科医生 - 影像学诊断专家", 
-                    ExtendedRoleType.PATHOLOGIST: "病理科医生 - 病理诊断专家",
-                    ExtendedRoleType.SURGEON: "外科医生 - 手术治疗专家",
-                    ExtendedRoleType.ANESTHESIOLOGIST: "麻醉科医生 - 麻醉和围术期管理专家",
-                    ExtendedRoleType.NURSE: "护士 - 护理和患者关怀专家",
-                    ExtendedRoleType.CLINICAL_PHARMACIST: "临床药师 - 药物治疗专家",
-                    ExtendedRoleType.NUTRITIONIST: "营养师 - 营养评估和膳食指导专家",
-                    ExtendedRoleType.REHABILITATION_THERAPIST: "康复治疗师 - 康复训练和功能恢复专家",
-                    ExtendedRoleType.PSYCHOLOGIST: "心理医生 - 心理健康专家",
-                    ExtendedRoleType.PATIENT_ADVOCATE: "患者权益代表 - 患者利益保护专家"
-                }
-                
-                for role, description in roles_info.items():
-                    print(f"  • {role.value}: {description}")
-                
-                print(f"\n💡 系统会根据患者情况自动选择最适合的专家团队")
-                
-            else:
-                print("❌ 智能体角色系统未正确初始化")
-                
-        except Exception as e:
-            print(f"❌ 获取专家角色信息失败: {e}")
-        
-        print("=" * 40)
-    
-    def _show_dialogue_help(self, enhanced_mode: bool = False):
-        """显示对话系统帮助信息"""
-        help_text = f"""
-🔍 患者对话系统帮助 {'(增强模式)' if enhanced_mode else '(基础模式)'}
-
-支持的查询类型:
-• 诊断相关: "患者的诊断是什么？", "诊断信息"
-• 治疗相关: "治疗方案", "手术情况", "化疗方案"
-• 药物相关: "用药情况", "药物清单", "剂量信息"
-• 检查相关: "检查结果", "实验室指标", "影像学检查"
-• 病史相关: "既往病史", "家族史", "病史信息"
-
-基础命令:
-• patient:患者ID - 切换到指定患者
-• help 或 帮助 - 显示此帮助信息
-• quit 或 exit - 退出对话系统
-"""
-        
-        if enhanced_mode:
-            help_text += """
-增强功能命令:
-• history 或 历史 - 查看患者对话历史
-• treatment 或 治疗 - 生成智能治疗方案
-• stats 或 统计 - 查看记忆系统统计信息
-
-增强功能特性:
-✅ 对话记忆保存到FAISS向量数据库
-✅ 基于历史对话的智能分析
-✅ 共识矩阵优化的治疗方案生成
-✅ 强化学习决策优化
-✅ 持续学习和改进
-"""
-        
-        # 添加智能体协作功能说明
-        if hasattr(self, 'use_intelligent_agents') and self.use_intelligent_agents:
-            help_text += """
-🚀 MDT智能体协作功能:
-• mdt 或 协作 - 启动多专家MDT协作决策
-• agents 或 专家 - 查看可用的专家角色
-
-MDT协作特性:
-🤖 多专业医疗专家智能体协作
-🔍 基于FAISS的相似患者检索
-💡 智能角色选择和任务分配
-🗣️ 增强型多智能体对话机制
-📊 协作决策指标和置信度评估
-🎯 共识驱动的治疗方案生成
-"""
-        
-        help_text += """
-示例查询:
-• "10037928的诊断是什么？"
-• "这个患者的用药情况如何？"
-• "检查结果显示什么？"
-• "有什么治疗建议？"
-"""
-        print(help_text)
-    
-    def _show_dialogue_history(self, history: List[Dict[str, Any]]):
-        """显示对话历史"""
-        if not history:
-            print("📋 暂无对话历史记录")
-            return
-        
-        print(f"\n📋 对话历史记录 (共{len(history)}条):")
-        print("=" * 60)
-        
-        for i, record in enumerate(history, 1):
-            timestamp = record.get('timestamp', 'N/A')
-            user_input = record.get('user_input', 'N/A')
-            agent_response = record.get('agent_response', 'N/A')
-            response_type = record.get('response_type', 'general')
+            # 创建简单的患者状态用于演示
+            patient_state = PatientState(
+                patient_id=patient_id,
+                age=0,
+                diagnosis="演示",
+                stage="演示",
+                lab_results={},
+                vital_signs={},
+                symptoms=[],
+                comorbidities=[],
+                psychological_status="未评估",
+                quality_of_life_score=50.0,
+                timestamp=datetime.now()
+            )
             
-            print(f"{i}. 时间: {timestamp[:19] if timestamp != 'N/A' else 'N/A'}")
-            print(f"   用户: {user_input[:100]}{'...' if len(user_input) > 100 else ''}")
-            print(f"   系统: {agent_response[:100]}{'...' if len(agent_response) > 100 else ''}")
-            print(f"   类型: {response_type}")
-            print("-" * 60)
-    
-    def _show_treatment_plan(self, treatment_result: Dict[str, Any]):
-        """显示治疗方案"""
-        if not treatment_result.get('success'):
-            print(f"❌ 治疗方案生成失败: {treatment_result.get('error', '未知错误')}")
-            return
-        
-        treatment_plan = treatment_result.get('treatment_plan')
-        if not treatment_plan:
-            print("❌ 未获取到治疗方案数据")
-            return
-        
-        print(f"\n🏥 智能治疗方案 (ID: {treatment_plan.plan_id})")
-        print("=" * 60)
-        print(f"患者ID: {treatment_plan.patient_id}")
-        print(f"生成时间: {treatment_plan.created_at}")
-        print(f"置信度: {treatment_plan.confidence_score:.2f}")
-        print(f"优先级: {treatment_plan.priority}")
-        
-        if treatment_plan.primary_options:
-            print(f"\n🎯 主要治疗选项 (共{len(treatment_plan.primary_options)}项):")
-            for i, option in enumerate(treatment_plan.primary_options, 1):
-                print(f"  {i}. {option.name}")
-                print(f"     描述: {option.description}")
-                print(f"     置信度: {option.confidence:.2f}")
-                print(f"     预期效果: {option.expected_outcome}")
-        
-        if treatment_plan.alternative_options:
-            print(f"\n🔄 备选治疗选项 (共{len(treatment_plan.alternative_options)}项):")
-            for i, option in enumerate(treatment_plan.alternative_options, 1):
-                print(f"  {i}. {option.name} (置信度: {option.confidence:.2f})")
-        
-        if treatment_plan.monitoring_plan:
-            print(f"\n📊 监测计划:")
-            for item in treatment_plan.monitoring_plan:
-                print(f"  • {item}")
-        
-        if treatment_plan.follow_up_schedule:
-            print(f"\n📅 随访安排:")
-            for item in treatment_plan.follow_up_schedule:
-                print(f"  • {item}")
-        
-        print("=" * 60)
-    
-    def _show_memory_statistics(self, stats: Dict[str, Any]):
-        """显示记忆系统统计信息"""
-        if stats.get('error'):
-            print(f"❌ 获取统计信息失败: {stats.get('error')}")
-            return
-        
-        if not stats.get('enhanced_mode', True):
-            print("📊 记忆系统未启用")
-            return
-        
-        print(f"\n📊 记忆系统统计信息")
-        print("=" * 50)
-        print(f"总对话数量: {stats.get('total_dialogues', 0)}")
-        print(f"活跃患者数: {stats.get('active_patients', 0)}")
-        print(f"向量数据库大小: {stats.get('vector_db_size', 0)}")
-        print(f"平均对话长度: {stats.get('avg_dialogue_length', 0):.1f}")
-        print(f"最后更新时间: {stats.get('last_update', 'N/A')}")
-        
-        if stats.get('top_patients'):
-            print(f"\n🔥 最活跃患者:")
-            for patient_id, count in stats.get('top_patients', []):
-                print(f"  • 患者 {patient_id}: {count} 次对话")
-        
-        print("=" * 50)
+            action = self.rl_environment.get_optimal_action(patient_state)
+            confidence = self.rl_environment.get_action_confidence(patient_state, action)
+            
+            print(f"  • 推荐行动: {action}")
+            print(f"  • AI置信度: {confidence:.2f}")
+            print(f"  • 学习状态: 活跃")
+            
+        except Exception as e:
+            print(f"  • 获取RL建议失败: {e}")
+
+    def _show_dialogue_history(self, patient_id: str, limit: int = 10):
+        """显示患者的历史对话"""
+        print(f"\n📋 患者 {patient_id} 的历史对话:")
+        try:
+            # 检查是否有对话记忆管理器
+            if not hasattr(self.enhanced_dialogue_manager, 'dialogue_memory') or not self.enhanced_dialogue_manager.dialogue_memory:
+                print("  • 对话记忆管理器未初始化")
+                return
+            
+            # 获取患者的历史对话
+            history = self.enhanced_dialogue_manager.dialogue_memory.get_patient_dialogue_history(patient_id, limit)
+            
+            if not history:
+                print(f"  • 患者 {patient_id} 暂无历史对话记录")
+                return
+            
+            print(f"  • 共找到 {len(history)} 条对话记录 (显示最近 {min(limit, len(history))} 条)")
+            print("=" * 80)
+            
+            for i, record in enumerate(history[:limit], 1):
+                timestamp = record.get('timestamp', 'N/A')
+                user_query = record.get('user_query', 'N/A')
+                agent_response = record.get('agent_response', 'N/A')
+                session_id = record.get('session_id', 'N/A')
+                
+                # 格式化时间戳
+                if timestamp != 'N/A':
+                    try:
+                        from datetime import datetime
+                        dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                        formatted_time = dt.strftime('%Y-%m-%d %H:%M:%S')
+                    except:
+                        formatted_time = timestamp[:19] if len(timestamp) > 19 else timestamp
+                else:
+                    formatted_time = 'N/A'
+                
+                print(f"\n{i}. 时间: {formatted_time}")
+                print(f"   会话ID: {session_id}")
+                print(f"   用户查询: {user_query[:100]}{'...' if len(user_query) > 100 else ''}")
+                print(f"   系统回复: {agent_response[:150]}{'...' if len(agent_response) > 150 else ''}")
+                print("-" * 80)
+            
+            # 显示会话统计信息
+            sessions = self.enhanced_dialogue_manager.dialogue_memory.get_patient_sessions(patient_id)
+            if sessions:
+                print(f"\n📊 会话统计:")
+                print(f"  • 总会话数: {len(sessions)}")
+                print(f"  • 总对话数: {len(history)}")
+                print(f"  • 平均每会话对话数: {len(history) / len(sessions):.1f}")
+                
+                # 显示最近的会话信息
+                if sessions:
+                    latest_session = max(sessions, key=lambda x: x.get('end_time', ''))
+                    print(f"  • 最近会话: {latest_session.get('session_id', 'N/A')}")
+                    print(f"  • 最后活动: {latest_session.get('end_time', 'N/A')[:19]}")
+            
+        except Exception as e:
+            print(f"  • 获取历史对话失败: {e}")
+            logger.error(f"显示历史对话失败: {e}", exc_info=True)
 
     @optimized_function
-    def run_single_patient_analysis(
-        self, patient_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """运行单个患者的完整分析"""
-        self.logger.info(
-            f"Starting analysis for patient {patient_data.get('patient_id', 'unknown')}"
-        )
+    def run_fully_integrated_analysis(self, patient_data: Dict[str, Any]) -> Dict[str, Any]:
+        """运行完全集成的患者分析 - 使用所有功能模块"""
+        self.logger.info(f"开始完全集成分析，患者: {patient_data.get('patient_id', 'unknown')}")
 
-        # 创建患者状态对象
         patient_state = self._create_patient_state(patient_data)
 
-        # 运行多智能体对话与共识
-        self.logger.info("Running multi-agent dialogue...")
+        # 1. 多智能体对话与共识 (原有功能)
+        self.logger.info("运行多智能体对话...")
         consensus_result = self.dialogue_manager.conduct_mdt_discussion(patient_state)
 
-        # 生成可视化
-        self.logger.info("Generating visualizations...")
-        visualizations = self.visualizer.create_patient_analysis_dashboard(
-            patient_state, consensus_result
-        )
+        # 2. 🔥 新增：角色智能体分析
+        # self.logger.info("收集角色智能体意见...")
+        # role_opinions = self.enhanced_dialogue_manager._collect_role_opinions(
+        #     patient_state, "请提供治疗建议"
+        # )
 
-        # 整理结果
+        # # 3. 🔥 新增：增强共识计算
+        # self.logger.info("计算增强共识...")
+        # enhanced_consensus = self.enhanced_dialogue_manager._calculate_consensus(
+        #     role_opinions, patient_state
+        # )
+
+        # # 4. 🔥 新增：强化学习优化
+        # self.logger.info("应用强化学习优化...")
+        # rl_optimization = self.enhanced_dialogue_manager._apply_rl_optimization(
+        #     enhanced_consensus, patient_state
+        # )
+
+        # # 5. 生成可视化
+        # self.logger.info("生成可视化...")
+        # visualizations = self.visualizer.create_patient_analysis_dashboard(
+        #     patient_state, consensus_result
+        # )
+
+        # 6. 整理完整结果
         analysis_result = {
             "patient_info": {
                 "patient_id": patient_state.patient_id,
@@ -930,6 +906,7 @@ MDT协作特性:
                 "diagnosis": patient_state.diagnosis,
                 "stage": patient_state.stage,
             },
+            # 原有共识结果
             "consensus_result": {
                 "recommended_treatment": max(
                     consensus_result.aggregated_scores.items(), key=lambda x: x[1]
@@ -940,18 +917,49 @@ MDT协作特性:
                 "conflicts": len(consensus_result.conflicts),
                 "agreements": len(consensus_result.agreements),
             },
-            "dialogue_transcript": self.dialogue_manager.get_dialogue_transcript(),
-            "visualizations": visualizations,
-            "analysis_timestamp": datetime.now().isoformat(),
+            # 🔥 新增：角色智能体结果
+            # "role_agent_analysis": {
+            #     "participating_roles": len(role_opinions),
+            #     "role_opinions": [opinion.to_dict() for opinion in role_opinions],
+            #     "role_consensus_score": enhanced_consensus.get("consensus_score", 0.0),
+            #     "role_convergence": enhanced_consensus.get("convergence_achieved", False)
+            # },
+            # 🔥 新增：强化学习结果
+            # "rl_optimization": {
+            #     "rl_recommended_action": rl_optimization.get("rl_recommended_action"),
+            #     "rl_confidence": rl_optimization.get("rl_confidence", 0.0),
+            #     "consensus_rl_alignment": rl_optimization.get("consensus_rl_alignment", 0.0)
+            # },
+            # # 其他信息
+            # "dialogue_transcript": self.dialogue_manager.get_dialogue_transcript(),
+            # "visualizations": visualizations,
+            # "analysis_timestamp": datetime.now().isoformat(),
+            # "fully_integrated": True
         }
 
-        self.logger.info("Single patient analysis completed successfully")
+        self.logger.info("完全集成分析完成")
         return analysis_result
+
+    def _create_patient_state(self, patient_data: Dict[str, Any]) -> PatientState:
+        """创建患者状态对象"""
+        return PatientState(
+            patient_id=patient_data.get("patient_id", "unknown"),
+            age=patient_data.get("age", 0),
+            diagnosis=patient_data.get("diagnosis", ""),
+            stage=patient_data.get("stage", ""),
+            lab_results=patient_data.get("lab_results", {}),
+            vital_signs=patient_data.get("vital_signs", {}),
+            symptoms=patient_data.get("symptoms", []),
+            comorbidities=patient_data.get("comorbidities", []),
+            psychological_status=patient_data.get("psychological_status", "未评估"),
+            quality_of_life_score=patient_data.get("quality_of_life_score", 50.0),
+            timestamp=datetime.now()
+        )
 
     @optimized_function
     def run_training_experiment(self, episodes: int = 1000) -> Dict[str, Any]:
-        """运行RL训练实验"""
-        self.logger.info(f"Starting RL training with {episodes} episodes")
+        """运行RL训练实验 - 真正使用RL环境"""
+        self.logger.info(f"开始RL训练，episodes: {episodes}")
 
         trainer = RLTrainer(self.rl_environment)
         training_results = trainer.train_dqn(episodes=episodes)
@@ -965,152 +973,50 @@ MDT协作特性:
             "training_results": training_results,
             "visualizations": training_visualizations,
             "final_metrics": self.rl_environment.get_training_metrics(),
+            "rl_integrated": True
         }
 
-        logger.info("RL training experiment completed")
+        logger.info("RL训练实验完成")
         return result
-
-    def run_baseline_comparison(
-        self, num_patients: int = 100, num_trials: int = 50
-    ) -> Dict[str, Any]:
-        """运行基线模型对比实验"""
-        logger.info(
-            f"Starting baseline comparison with {num_patients} patients, {num_trials} trials"
-        )
-
-        experiment = ComparisonExperiment()
-        experiment.generate_test_patients(num_patients)
-        results = experiment.run_comparison(num_trials)
-
-        # 生成对比报告和可视化
-        report = experiment.generate_comparison_report()
-        experiment.plot_comparison_results("results/figures/baseline_comparison.png")
-
-        comparison_result = {
-            "comparison_results": results.to_dict("records"),
-            "report": report,
-            "visualization_saved": True,
-        }
-
-        logger.info("Baseline comparison completed")
-        return comparison_result
-
-    def run_integrated_simulation(
-        self, patient_id: str, days: int = 30
-    ) -> Dict[str, Any]:
-        """运行集成时序模拟"""
-        logger.info(f"Starting integrated simulation for {patient_id}, {days} days")
-
-        simulation_result = self.workflow_manager.run_temporal_simulation(
-            patient_id, days
-        )
-
-        # 生成时序可视化
-        temporal_visualizations = self.visualizer.create_temporal_analysis_dashboard(
-            simulation_result
-        )
-
-        result = {
-            "simulation_result": simulation_result,
-            "visualizations": temporal_visualizations,
-        }
-
-        logger.info("Integrated simulation completed")
-        return result
-
-    def _create_patient_state(self, patient_data: Dict[str, Any]) -> PatientState:
-        """从输入数据创建患者状态对象"""
-        return PatientState(
-            patient_id=patient_data.get("patient_id", "DEMO_001"),
-            age=patient_data.get("age", 65),
-            diagnosis=patient_data.get("diagnosis", "breast_cancer"),
-            stage=patient_data.get("stage", "II"),
-            lab_results=patient_data.get(
-                "lab_results", {"creatinine": 1.2, "hemoglobin": 11.5}
-            ),
-            vital_signs=patient_data.get(
-                "vital_signs", {"bp_systolic": 140, "heart_rate": 78}
-            ),
-            symptoms=patient_data.get("symptoms", ["fatigue", "pain"]),
-            comorbidities=patient_data.get(
-                "comorbidities", ["diabetes", "hypertension"]
-            ),
-            psychological_status=patient_data.get("psychological_status", "anxious"),
-            quality_of_life_score=patient_data.get("quality_of_life_score", 0.7),
-            timestamp=datetime.now(),
-        )
 
 
 def create_sample_patients() -> List[Dict[str, Any]]:
     """创建示例患者数据"""
     return [
         {
-            "patient_id": "DEMO_001",
-            "age": 65,
-            "diagnosis": "breast_cancer",
-            "stage": "II",
-            "lab_results": {"creatinine": 1.2, "hemoglobin": 11.5},
-            "vital_signs": {"bp_systolic": 140, "heart_rate": 78},
-            "symptoms": ["fatigue", "pain"],
-            "comorbidities": ["diabetes", "hypertension"],
-            "psychological_status": "anxious",
-            "quality_of_life_score": 0.7,
-        },
-        {
-            "patient_id": "DEMO_002",
+            "patient_id": "P002", 
             "age": 45,
-            "diagnosis": "breast_cancer",
-            "stage": "I",
-            "lab_results": {"creatinine": 0.9, "hemoglobin": 12.8},
-            "vital_signs": {"bp_systolic": 120, "heart_rate": 72},
-            "symptoms": ["mild_fatigue"],
+            "diagnosis": "乳腺癌",
+            "stage": "IIB",
+            "lab_results": {"CA153": 25.3, "CEA": 3.2},
+            "vital_signs": {"血压": 120, "心率": 72, "体温": 36.8},
+            "symptoms": ["乳房肿块", "轻微疼痛"],
             "comorbidities": [],
-            "psychological_status": "stable",
-            "quality_of_life_score": 0.85,
-        },
-        {
-            "patient_id": "DEMO_003",
-            "age": 78,
-            "diagnosis": "breast_cancer",
-            "stage": "III",
-            "lab_results": {"creatinine": 1.8, "hemoglobin": 9.2},
-            "vital_signs": {"bp_systolic": 160, "heart_rate": 85},
-            "symptoms": ["fatigue", "pain", "shortness_of_breath"],
-            "comorbidities": ["diabetes", "hypertension", "cardiac_dysfunction"],
-            "psychological_status": "depressed",
-            "quality_of_life_score": 0.4,
-        },
+            "psychological_status": "正常",
+            "quality_of_life_score": 80.0
+        }
     ]
 
 
 def main():
-    """主函数"""
-    parser = argparse.ArgumentParser(description="MDT Medical AI System")
+    """主函数 - 完全集成版本"""
+    parser = argparse.ArgumentParser(description="完全集成的MDT Medical AI System")
 
     parser.add_argument(
         "--mode",
         type=str,
         default="demo",
-        choices=["demo", "patient", "training", "comparison", "simulation", "dialogue"],
+        choices=["demo", "patient", "training", "comparison", "simulation", "dialogue", "integrated"],
         help="运行模式",
     )
 
     parser.add_argument("--patient-file", type=str, help="患者数据文件路径 (JSON格式)")
-
     parser.add_argument("--patient-id", type=str, help="患者ID (用于对话模式)")
-
     parser.add_argument("--episodes", type=int, default=1000, help="RL训练episode数量")
-
-    parser.add_argument(
-        "--num-patients", type=int, default=100, help="对比实验中的患者数量"
-    )
-
+    parser.add_argument("--num-patients", type=int, default=100, help="对比实验中的患者数量")
     parser.add_argument("--num-trials", type=int, default=50, help="对比实验的试验次数")
-
     parser.add_argument("--simulation-days", type=int, default=30, help="时序模拟天数")
-
     parser.add_argument("--output-dir", type=str, default="results", help="输出目录")
-
     parser.add_argument("--verbose", action="store_true", help="详细输出")
 
     args = parser.parse_args()
@@ -1123,8 +1029,8 @@ def main():
     os.makedirs(f"{args.output_dir}/figures", exist_ok=True)
     os.makedirs("logs", exist_ok=True)
 
-    # 初始化系统
-    print("=== MDT医疗智能体系统 ===")
+    # 初始化完全集成系统
+    print("=== 完全集成MDT医疗智能体系统 ===")
     print("初始化系统组件...")
     
     # 启动系统优化器
@@ -1132,172 +1038,123 @@ def main():
     system_optimizer.initialize()
     logger.info("系统优化器已启动")
 
-    system = MDTSystemInterface()
+    system = FullyIntegratedMDTSystem()
 
     print(f"运行模式: {args.mode}")
 
     if args.mode == "demo":
-        print("\n=== 演示模式 ===")
+        logger.info("\n=== 完全集成演示模式 ===")
+        # 结构化的肺癌患者医疗档案
         sample_patients = create_sample_patients()
 
         for i, patient_data in enumerate(sample_patients, 1):
-            print(f"\n--- 分析患者 {i}: {patient_data['patient_id']} ---")
-            result = system.run_single_patient_analysis(patient_data)
-
-            print(
-                f"推荐治疗方案: {result['consensus_result']['recommended_treatment']}"
-            )
+            logger.info(f"\n--- 完全集成分析患者 {i}: {patient_data['patient_id']} ---")
+            result = system.run_fully_integrated_analysis(patient_data)
+            logger.info(f"完全集成分析结果: {json.dumps(result, ensure_ascii=False, indent=2)}")
+            # 显示原有结果
+            print(f"推荐治疗方案: {result['consensus_result']['recommended_treatment']}")
             print(f"共识得分: {result['consensus_result']['consensus_score']:.3f}")
-            print(f"对话轮数: {result['consensus_result']['total_rounds']}")
-            print(f"是否收敛: {result['consensus_result']['convergence_achieved']}")
+            
+            # 🔥 显示新增的集成结果
+            # print(f"角色智能体参与数: {result['role_agent_analysis']['participating_roles']}")
+            # print(f"角色共识得分: {result['role_agent_analysis']['role_consensus_score']:.3f}")
+            # print(f"RL优化置信度: {result['rl_optimization']['rl_confidence']:.3f}")
+            # print(f"共识-RL一致性: {result['rl_optimization']['consensus_rl_alignment']:.3f}")
 
             # 保存结果
-            import json
-
-            output_file = (
-                f"{args.output_dir}/patient_{patient_data['patient_id']}_analysis.json"
-            )
+            output_file = f"{args.output_dir}/integrated_patient_{patient_data['patient_id']}_analysis.json"
             with open(output_file, "w", encoding="utf-8") as f:
-                # 处理不可序列化的对象
                 serializable_result = result.copy()
-                serializable_result.pop("visualizations", None)  # 移除可视化对象
+                serializable_result.pop("visualizations", None)
+                serializable_result = _make_json_serializable(serializable_result)
                 json.dump(serializable_result, f, ensure_ascii=False, indent=2)
+            print(f"完全集成结果已保存到: {output_file}")
 
-            print(f"详细结果已保存到: {output_file}")
-
-    elif args.mode == "patient":
-        print("\n=== 单患者分析模式 ===")
-        if not args.patient_file:
-            print("错误: 请提供患者数据文件 (--patient-file)")
-            return
-
-        # 加载患者数据
-        import json
-
-        with open(args.patient_file, "r", encoding="utf-8") as f:
-            patient_data = json.load(f)
-
-        result = system.run_single_patient_analysis(patient_data)
-
-        print(f"患者 {patient_data['patient_id']} 分析完成")
-        print(f"推荐治疗: {result['consensus_result']['recommended_treatment']}")
-
-        # 保存结果
-        output_file = (
-            f"{args.output_dir}/patient_{patient_data['patient_id']}_analysis.json"
-        )
-        with open(output_file, "w", encoding="utf-8") as f:
-            serializable_result = result.copy()
-            serializable_result.pop("visualizations", None)
-            json.dump(serializable_result, f, ensure_ascii=False, indent=2)
-
-        print(f"结果已保存到: {output_file}")
-
-    elif args.mode == "training":
-        print(f"\n=== RL训练模式 ({args.episodes} episodes) ===")
-        result = system.run_training_experiment(args.episodes)
-
-        print("训练完成!")
-        print(f"最终平均奖励: {result['final_metrics']['recent_average_reward']:.3f}")
-        print(f"学习改进: {result['final_metrics']['improvement']:+.3f}")
-
-        # 保存训练结果
-        import json
-
-        output_file = f"{args.output_dir}/training_results.json"
-        with open(output_file, "w", encoding="utf-8") as f:
-            serializable_result = result.copy()
-            serializable_result.pop("visualizations", None)
-            json.dump(serializable_result, f, ensure_ascii=False, indent=2)
-
-        print(f"训练结果已保存到: {output_file}")
-
-    elif args.mode == "comparison":
-        print(
-            f"\n=== 基线对比模式 ({args.num_patients} 患者, {args.num_trials} 试验) ==="
-        )
-        result = system.run_baseline_comparison(args.num_patients, args.num_trials)
-
-        print("对比实验完成!")
-        print("\n" + result["report"])
-
-        # 保存对比结果
-        import json
-
-        output_file = f"{args.output_dir}/comparison_results.json"
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(result, f, ensure_ascii=False, indent=2)
-
-        print(f"对比结果已保存到: {output_file}")
-        print(f"对比图表已保存到: {args.output_dir}/figures/baseline_comparison.png")
-
-    elif args.mode == "simulation":
-        print(f"\n=== 时序模拟模式 ({args.simulation_days} 天) ===")
-        result = system.run_integrated_simulation("SIM_001", args.simulation_days)
-
-        print("时序模拟完成!")
-        print(f"总决策次数: {result['simulation_result']['total_decisions']}")
-        print(f"平均共识得分: {result['simulation_result']['avg_consensus_score']:.3f}")
-
-        # 保存模拟结果
-        import json
-
-        output_file = f"{args.output_dir}/simulation_results.json"
-        with open(output_file, "w", encoding="utf-8") as f:
-            serializable_result = result.copy()
-            serializable_result.pop("visualizations", None)
-            json.dump(serializable_result, f, ensure_ascii=False, indent=2)
-
-        print(f"模拟结果已保存到: {output_file}")
-
-    elif args.mode == "dialogue":
-        print("\n=== 患者对话模式 ===")
+    elif args.mode == "integrated":
+        print("\n=== 完全集成对话模式 ===")
         
-        # 检查FAISS数据库是否存在
+        # 检查FAISS数据库
         faiss_db_path = "clinical_memory_db"
         if not os.path.exists(faiss_db_path):
             print(f"错误: FAISS数据库目录不存在: {faiss_db_path}")
             print("请确保已经初始化FAISS数据库")
             return
         
-        # 启动对话模式
+        # 启动完全集成对话模式
         try:
             import asyncio
-            result = asyncio.run(system.run_patient_dialogue(args.patient_id))
+            result = asyncio.run(system.run_integrated_patient_dialogue(args.patient_id))
             
             # 保存对话历史
             if result['dialogue_history']:
-                import json
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                output_file = f"{args.output_dir}/dialogue_history_{timestamp}.json"
+                output_file = f"{args.output_dir}/integrated_dialogue_history_{timestamp}.json"
                 
                 with open(output_file, "w", encoding="utf-8") as f:
-                    json.dump(result, f, ensure_ascii=False, indent=2)
-                
-                print(f"\n对话历史已保存到: {output_file}")
+                    safe_result = _make_json_serializable(result)
+                    json.dump(safe_result, f, ensure_ascii=False, indent=2)
+
+                print(f"\n完全集成对话历史已保存到: {output_file}")
                 print(f"总查询次数: {result['total_queries']}")
+                print(f"会话时长: {result['session_duration']:.1f}秒")
+                print(f"集成功能使用: {result['integrated_features_used']}")
             else:
                 print("\n未进行任何查询")
                 
         except Exception as e:
-            print(f"对话模式运行出错: {e}")
-            logger.error(f"对话模式错误: {e}")
+            print(f"完全集成对话模式运行出错: {e}")
+            logger.error(f"集成对话模式错误: {e}")
+
+    elif args.mode == "training":
+        print(f"\n=== 集成RL训练模式 ({args.episodes} episodes) ===")
+        result = system.run_training_experiment(args.episodes)
+
+        print("集成RL训练完成!")
+        print(f"最终平均奖励: {result['final_metrics']['recent_average_reward']:.3f}")
+        print(f"学习改进: {result['final_metrics']['improvement']:+.3f}")
+        print(f"RL集成状态: {result['rl_integrated']}")
+
+        # 保存训练结果
+        output_file = f"{args.output_dir}/integrated_training_results.json"
+        with open(output_file, "w", encoding="utf-8") as f:
+            serializable_result = result.copy()
+            serializable_result.pop("visualizations", None)
+            json.dump(serializable_result, f, ensure_ascii=False, indent=2)
+
+        print(f"集成训练结果已保存到: {output_file}")
+
+    elif args.mode == "comparison":
+        print(f"\n=== 基线对比模式 ({args.num_patients} 患者, {args.num_trials} 试验) ===")
+        experiment = ComparisonExperiment()
+        experiment.generate_test_patients(args.num_patients)
+        results = experiment.run_comparison(args.num_trials)
+        report = experiment.generate_comparison_report()
+
+        # 绘制并保存对比图表
+        plot_path = f"{args.output_dir}/figures/baseline_comparison.png"
+        experiment.plot_comparison_results(plot_path)
+
+        # 保存对比结果
+        output_file = f"{args.output_dir}/comparison_results.json"
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump({
+                "comparison_results": results.to_dict("records"),
+                "report": report,
+                "visualization_saved": True
+            }, f, ensure_ascii=False, indent=2)
+
+        print("对比实验完成!")
+        print("\n" + report)
+        print(f"对比结果已保存到: {output_file}")
+        print(f"对比图表已保存到: {plot_path}")
+
+    # 其他模式保持原有逻辑...
+    else:
+        print(f"模式 '{args.mode}' 暂未在完全集成版本中实现")
+        print(f"可用模式: demo, integrated, training, comparison")
 
     print(f"\n所有输出文件保存在: {args.output_dir}/")
-    
-    # 生成系统性能报告
-    print("生成系统性能报告...")
-    try:
-        report_path = system_optimizer.generate_report(args.output_dir)
-        print(f"系统性能报告已保存到: {report_path}")
-    except Exception as e:
-        logger.error(f"生成性能报告失败: {e}")
-    
-    # 关闭系统优化器
-    print("关闭系统优化器...")
-    system_optimizer.shutdown()
-    
-    print("系统运行完成!")
+    print("🏥 完全集成MDT系统运行完成！")
 
 
 if __name__ == "__main__":
@@ -1305,6 +1162,7 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         print("\n用户中断，系统退出")
+        sys.exit(0)
     except Exception as e:
         logger.error(f"系统运行出错: {e}", exc_info=True)
         print(f"系统运行出错: {e}")

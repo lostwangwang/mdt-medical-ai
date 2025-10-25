@@ -67,7 +67,7 @@ pip install -r requirements.txt
 #### 1. 演示模式（推荐首次使用）
 
 ```bash
-python main.py --mode demo
+python main_integrated.py --mode demo
 ```
 
 这将分析3个预设的患者案例，展示系统的完整功能。
@@ -76,25 +76,25 @@ python main.py --mode demo
 
 ```bash
 # 准备患者数据文件 patient.json
-python main.py --mode patient --patient-file data/examples/patient.json
+python main_integrated.py --mode patient --patient-file data/examples/patient.json
 ```
 
 #### 3. 强化学习训练
 
 ```bash
-python main.py --mode training --episodes 1000
+python main_integrated.py --mode training --episodes 1000
 ```
 
 #### 4. 基线模型对比
 
 ```bash
-python main.py --mode comparison --num-patients 100 --num-trials 50
+python main_integrated.py --mode comparison --num-patients 100 --num-trials 50
 ```
 
 #### 5. 时序模拟
 
 ```bash
-python main.py --mode simulation --simulation-days 30
+python main_integrated.py --mode simulation --simulation-days 30
 ```
 
 ## 📊 使用示例
@@ -194,7 +194,7 @@ ls results/
 mdt_medical_ai/
 ├── README.md                    # 项目说明
 ├── requirements.txt             # 依赖包
-├── main.py                     # 主程序入口
+├── main_integrated.py          # 主程序入口（完整集成版）
 ├── src/                        # 源代码
 │   ├── core/                   # 核心数据模型
 │   │   └── data_models.py
@@ -238,85 +238,6 @@ mdt_medical_ai/
 
 | 指标     | 我们的系统 | 最佳基线 | 提升   |
 | -------- | ---------- | -------- | ------ |
-| 准确性   | 0.847      | 0.723    | +17.1% |
-| 一致性   | 0.912      | 0.834    | +9.4%  |
-| 共识对齐 | 0.889      | 0.756    | +17.6% |
-| 解释质量 | 0.950      | 0.820    | +15.9% |
-
-*基于100个测试患者的平均结果*
-
-## 🔬 研究贡献
-
-1. **动态记忆驱动的多智能体医学决策**
-   - 首次结合时序演化记忆与多角色协商
-   - 发表目标：AAAI 2024
-
-2. **可解释的共识形成机制**
-   - 量化医生间分歧，提供决策透明性
-   - 发表目标：CHI 2024
-
-3. **强化学习优化的MDT协同**
-   - 系统能从历史会诊中学习最优策略
-   - 发表目标：JBHI 2024
-
-## 📝 引用
-
-如果您在研究中使用了本项目，请引用：
-
-```bibtex
-@inproceedings{mdt2024,
-  title={MDT Memory \& Roleplay Framework: A Multi-Agent System for Medical Decision Making},
-  author={Tianyu and Jun Du and Gang Yao},
-  booktitle={Proceedings of AAAI},
-  year={2024}
-}
-```
-
-## 🤝 贡献指南
-
-我们欢迎社区贡献！请遵循以下步骤：
-
-1. Fork 项目仓库
-2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'Add amazing feature'`)
-4. 推送分支 (`git push origin feature/amazing-feature`)
-5. 打开 Pull Request
-
-### 代码规范
-
-- 遵循 PEP 8 标准
-- 添加类型注解
-- 编写单元测试
-- 更新文档
-
-## 🐛 问题反馈
-
-遇到问题？请在 [Issues](https://github.com/your-team/mdt-medical-ai/issues) 中报告。
-
-请提供：
-- 错误描述
-- 复现步骤
-- 系统环境
-- 相关日志
-
-## 📄 许可证
-
-本项目采用 MIT 许可证。详见 [LICENSE](LICENSE) 文件。
-
-## 🙏 致谢
-
-- 感谢医学专家提供的领域知识指导
-- 感谢开源社区的优秀工具和框架
-- 特别感谢 NCCN、ESMO 提供的医学指南数据
-
-## 🔗 相关资源
-
-- [项目主页](https://your-team.github.io/mdt-medical-ai)
-- [在线演示](https://demo.mdt-medical-ai.com)
-- [API文档](https://docs.mdt-medical-ai.com)
-- [论文预印版](https://arxiv.org/abs/xxxx.xxxxx)
-
-## 🧾 论文编译与导出
 
 项目提供两份顶会级论文稿件（Markdown 与 Typst）位于 `docs/`：
 

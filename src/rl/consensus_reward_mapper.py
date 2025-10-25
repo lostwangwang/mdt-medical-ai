@@ -313,20 +313,40 @@ class ConsensusRewardMapper:
         """计算安全性评估分数"""
         safety_score = 0.8  # 基础安全分数
         
-        # 检查是否识别了重要风险（使用conflicts作为代理）
-        identified_risks = consensus_result.conflicts if consensus_result.conflicts else []
+        # 尝试从对话摘要中获取字符串形式的风险列表
+        identified_risks: List[str] = []
+        try:
+            if hasattr(consensus_result, "dialogue_summary") and consensus_result.dialogue_summary:
+                risks = consensus_result.dialogue_summary.get("risks_identified", [])
+                if isinstance(risks, list):
+                    identified_risks = [str(r).lower() for r in risks if isinstance(r, (str,))]
+        except Exception:
+            identified_risks = []
+        
+        # 回退：从冲突中提取可读条目（非字符串则转为简要描述）
+        if not identified_risks and consensus_result.conflicts:
+            try:
+                for conflict in consensus_result.conflicts:
+                    if isinstance(conflict, dict):
+                        t = conflict.get("treatment")
+                        if hasattr(t, "value"):
+                            identified_risks.append(str(t.value).lower())
+                        elif t is not None:
+                            identified_risks.append(str(t).lower())
+            except Exception:
+                pass
         
         # 基于患者状态的风险评估
-        patient_risk_factors = self._assess_patient_risk_factors(patient_state)
+        patient_risk_factors = [str(r).lower() for r in self._assess_patient_risk_factors(patient_state)]
         
         # 检查是否识别了患者特定的风险
         risk_coverage = 0.0
         if patient_risk_factors:
             covered_risks = 0
-            for risk in identified_risks:
-                if any(patient_risk in risk.lower() for patient_risk in patient_risk_factors):
+            for patient_risk in patient_risk_factors:
+                if any(patient_risk in risk for risk in identified_risks):
                     covered_risks += 1
-            risk_coverage = covered_risks / len(patient_risk_factors)
+            risk_coverage = covered_risks / max(1, len(patient_risk_factors))
         
         # 检查是否有后续随访计划（使用convergence_achieved作为代理）
         follow_up_bonus = 0.1 if consensus_result.convergence_achieved else 0.0

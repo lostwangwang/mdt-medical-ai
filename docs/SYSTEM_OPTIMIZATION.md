@@ -135,7 +135,7 @@ def monitored_function():
 ### 在主应用中集成
 
 ```python
-# main.py
+# main_integrated.py
 from src.utils.system_optimizer import get_system_optimizer, optimized_function
 
 # 获取系统优化器
@@ -178,8 +178,9 @@ app = FastAPI()
 
 @app.on_event("startup")
 async def startup_event():
+    # 初始化优化器
     system_optimizer.initialize()
-    logger.info("API服务启动，系统优化器已初始化")
+    logger.info("API优化器启动")
 
 @app.post("/api/endpoint")
 @optimized_function

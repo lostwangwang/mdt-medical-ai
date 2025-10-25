@@ -218,8 +218,6 @@ class MDTBaseline(TaskBaseline):
         if not self._llm:
             return None
         try:
-            # 通过 LLMInterface 走一个最小调用路径：使用 generate_professional_reasoning 可能会输出自然语言
-            # 这里我们直接尝试 client 接口，如果不可用则返回None
             client = getattr(self._llm, 'client', None)
             cfg = getattr(self._llm, 'config', None)
             if client and cfg:
@@ -234,13 +232,11 @@ class MDTBaseline(TaskBaseline):
                 )
                 text = resp.choices[0].message.content.strip()
             else:
-                # 无真实LLM时，退化为模板：返回空以继续下游兜底
                 return None
         except Exception as e:
             logger.warning(f"MDTBaseline: LLM回退失败: {e}")
             return None
 
-        # 解析字母
         m = re.search(r"\b([A-Z])\b", text)
         if m:
             idx = self._index_for_letter(m.group(1))
@@ -266,9 +262,7 @@ class MDTBaseline(TaskBaseline):
 
     def predict_mcq(self, ex: MCQExample) -> int:
         # 构造明确格式化的提问，强约束输出字母
-        option_lines = []
-        for i, opt in enumerate(ex.options):
-            option_lines.append(f"{self._letter_for_index(i)}. {opt}")
+        option_lines = [f"{self._letter_for_index(i)}. {opt}" for i, opt in enumerate(ex.options)]
         prompt = (
             "You are an MDT system. Read the USMLE-style question and choose the single best answer.\n"
             "Return ONLY the option letter. No explanation.\n\n"
@@ -330,7 +324,9 @@ def load_medqa(path: str, max_samples: Optional[int] = None) -> List[MCQExample]
     """
     期望格式（示例）:
     每行一个JSON: { "id": "...", "question": "...", "options": ["A", "B", "C", "D"], "answer_idx": 2 }
-    实际MedQA-USMLE官方格式为不同字段命名，请先转换为上述统一格式。
+    官方MedQA-USMLE格式通常为:
+      { "question": "...", "options": { "A": "...", "B": "...", ... }, "answer": "A" }
+    本函数将进行转换并统一为上述结构。
     """
     if not os.path.exists(path):
         raise FileNotFoundError(f"MedQA file not found: {path}")
@@ -342,24 +338,19 @@ def load_medqa(path: str, max_samples: Optional[int] = None) -> List[MCQExample]
                 continue
             obj = json.loads(line)
 
-            # ---- 兼容官方与统一格式 ----
             q = obj.get("question", "")
             opts = obj.get("options")
             options_list: List[str] = []
             ans_idx: Optional[int] = None
 
             if isinstance(opts, dict):
-                # 官方格式: options 是字典（A/B/C...）
                 keys = sorted(opts.keys())
                 options_list = [opts[k] for k in keys]
 
-                # 1) answer_idx 是字母
                 if isinstance(obj.get("answer_idx"), str) and obj["answer_idx"] in keys:
                     ans_idx = keys.index(obj["answer_idx"])
-                # 2) answer 是字母
                 elif isinstance(obj.get("answer"), str) and obj["answer"] in keys:
                     ans_idx = keys.index(obj["answer"])
-                # 3) answer 是正确文本（与选项完全匹配）
                 elif isinstance(obj.get("answer"), str):
                     try:
                         ans_idx = options_list.index(obj["answer"])
@@ -367,20 +358,17 @@ def load_medqa(path: str, max_samples: Optional[int] = None) -> List[MCQExample]
                         ans_idx = None
 
             elif isinstance(opts, list):
-                # 统一格式: options 是列表
                 options_list = opts
                 if isinstance(obj.get("answer_idx"), int):
                     ans_idx = int(obj["answer_idx"])
                 elif isinstance(obj.get("answer_idx"), str) and obj["answer_idx"].isdigit():
                     ans_idx = int(obj["answer_idx"])
                 elif isinstance(obj.get("answer"), str):
-                    # 尝试把 answer 作为选项文本匹配
                     try:
                         ans_idx = options_list.index(obj["answer"])
                     except ValueError:
                         ans_idx = None
 
-            # 生成样本
             if q and options_list and ans_idx is not None and 0 <= ans_idx < len(options_list):
                 ex_id = obj.get("id", f"medqa_{i+1:06d}")
                 examples.append(MCQExample(

@@ -1,4 +1,8 @@
-# MDT Memory & Roleplay Framework 项目结构
+# MDT Medical AI System 项目结构
+
+> 项目主入口：`main_integrated.py`（统一支持 demo、integrated、training、comparison 等模式）。
+
+
 
 ```
 mdt_medical_ai/
