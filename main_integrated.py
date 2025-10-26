@@ -884,34 +884,12 @@ class FullyIntegratedMDTSystem:
         self.logger.info(f"开始完全集成分析，患者: {patient_data.get('patient_id', 'unknown')}")
 
         patient_state = self._create_patient_state(patient_data)
+        treatment_options = list(TreatmentOption)
+        logger.info(f"可用治疗方案选项: {treatment_options}")
 
         # 1. 多智能体对话与共识 (原有功能)
         self.logger.info("运行多智能体对话...")
-        consensus_result = self.dialogue_manager.conduct_mdt_discussion(patient_state)
-
-        # 2. 🔥 新增：角色智能体分析
-        # self.logger.info("收集角色智能体意见...")
-        # role_opinions = self.enhanced_dialogue_manager._collect_role_opinions(
-        #     patient_state, "请提供治疗建议"
-        # )
-
-        # # 3. 🔥 新增：增强共识计算
-        # self.logger.info("计算增强共识...")
-        # enhanced_consensus = self.enhanced_dialogue_manager._calculate_consensus(
-        #     role_opinions, patient_state
-        # )
-
-        # # 4. 🔥 新增：强化学习优化
-        # self.logger.info("应用强化学习优化...")
-        # rl_optimization = self.enhanced_dialogue_manager._apply_rl_optimization(
-        #     enhanced_consensus, patient_state
-        # )
-
-        # # 5. 生成可视化
-        # self.logger.info("生成可视化...")
-        # visualizations = self.visualizer.create_patient_analysis_dashboard(
-        #     patient_state, consensus_result
-        # )
+        consensus_result = self.dialogue_manager.conduct_mdt_discussion(patient_state, treatment_options)
 
         # 6. 整理完整结果
         analysis_result = {
@@ -1000,13 +978,13 @@ def create_sample_patients() -> List[Dict[str, Any]]:
     return [
         {
             "patient_id": "P002", 
-            "age": 45,
+            "age": 65,
             "diagnosis": "乳腺癌",
             "stage": "IIB",
             "lab_results": {"CA153": 25.3, "CEA": 3.2},
             "vital_signs": {"血压": 120, "心率": 72, "体温": 36.8},
             "symptoms": ["乳房肿块", "轻微疼痛"],
-            "comorbidities": [],
+            "comorbidities": ["糖尿病", "高血压", "心脏病"],
             "psychological_status": "正常",
             "quality_of_life_score": 80.0
         }
@@ -1069,12 +1047,6 @@ def main():
             # 显示原有结果
             print(f"推荐治疗方案: {result['consensus_result']['recommended_treatment']}")
             print(f"共识得分: {result['consensus_result']['consensus_score']:.3f}")
-            
-            # 🔥 显示新增的集成结果
-            # print(f"角色智能体参与数: {result['role_agent_analysis']['participating_roles']}")
-            # print(f"角色共识得分: {result['role_agent_analysis']['role_consensus_score']:.3f}")
-            # print(f"RL优化置信度: {result['rl_optimization']['rl_confidence']:.3f}")
-            # print(f"共识-RL一致性: {result['rl_optimization']['consensus_rl_alignment']:.3f}")
 
             # 保存结果
             import json

@@ -10,6 +10,7 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 import logging
 import re
+import json
 
 from ..utils.llm_interface import LLMConfig, LLMInterface
 
@@ -196,10 +197,9 @@ class RoleAgent:
         return specializations.get(self.role, {})
 
     def generate_initial_opinion(
-        self, patient_state: PatientState, knowledge: Dict[str, Any]
+        self, patient_state: PatientState, knowledge: Dict[str, Any], treatment_options: List[TreatmentOption]
     ) -> RoleOpinion:
         """生成初始意见"""
-        
         # 我可以调用大模型吗? 可以，基于患者状态和相关知识，调用llm_interface.generate_text方法生成初始意见
         # 这个初始意见是怎么生成的? 基于患者状态和相关知识，调用_calculate_treatment_preferences和_generate_reasoning方法
         # treatment_prefs是什么？ 它是一个字典，键是治疗选项，值是该选项的偏好评分
@@ -209,19 +209,20 @@ class RoleAgent:
         logger.debug(f"[{self.role.value}] Generated initial treatment preferences: {treatment_prefs}")
         
         # reasoning是什么？ 它是一个字符串，描述了基于患者状态和治疗偏好的推理过程
-        reasoning = self._generate_reasoning(patient_state, treatment_prefs, knowledge)
-        logger.debug(f"[{self.role.value}] Generated initial reasoning: {reasoning}")
-
-        opinion = RoleOpinion(
-            role=self.role,
-            treatment_preferences=treatment_prefs,
-            reasoning=reasoning,
-            confidence=self._calculate_confidence(patient_state),
-            concerns=self._identify_concerns(patient_state),
+        reasoning = self._generate_reasoning(patient_state, treatment_prefs, knowledge, treatment_options=treatment_options)
+        reasoning = json.loads(reasoning)
+        role_option = RoleOpinion(
+            role=self.role.value,
+            treatment_preferences=reasoning["treatment_preferences"],
+            reasoning=reasoning["reasoning"],
+            confidence=reasoning["confidence"],
+            concerns=reasoning["concerns"],
         )
 
-        self.current_stance = treatment_prefs
-        return opinion
+        self.current_stance = role_option.treatment_preferences
+        # 更新共识矩阵的置信度
+        
+        return role_option
 
     def _calculate_treatment_preferences(
         self, patient_state: PatientState, knowledge: Dict[str, Any]
@@ -343,6 +344,7 @@ class RoleAgent:
         patient_state: PatientState,
         treatment_prefs: Dict[TreatmentOption, float],
         knowledge: Dict[str, Any],
+        treatment_options: List[TreatmentOption],
     ) -> str:
         """生成决策推理"""
         # 找到最推荐的治疗
@@ -356,11 +358,14 @@ class RoleAgent:
                     patient_state=patient_state,
                     role=self.role,
                     treatment_option=best_treatment[0],
-                    knowledge_context=knowledge
+                    knowledge_context=knowledge,
+                    treatment_options=treatment_options,
                 )
-                
+                # reasoning = json.loads(reasoning)
+                # logger.debug(f"reasoning转换为json格式: {reasoning}")
                 if reasoning and len(reasoning.strip()) > 0:
                     logger.debug(f"Generated LLM reasoning for {self.role.value}: {reasoning}...")
+                    
                     return reasoning
                     
             except Exception as e:
@@ -1485,11 +1490,12 @@ class RoleAgent:
     def generate_rl_influenced_opinion(
         self, 
         patient_state: PatientState, 
-        knowledge: Dict[str, Any]
+        knowledge: Dict[str, Any],
+        treatment_options: List[TreatmentOption]
     ) -> RoleOpinion:
         """生成受RL影响的初始意见"""
         # 首先生成原始意见
-        original_opinion = self.generate_initial_opinion(patient_state, knowledge)
+        original_opinion = self.generate_initial_opinion(patient_state, knowledge, treatment_options)
         self.original_preferences = original_opinion.treatment_preferences.copy()
         
         if self.rl_guidance is None or self.rl_influence_strength == 0.0:

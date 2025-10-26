@@ -19,6 +19,7 @@ from ..core.data_models import (
     DialogueMessage,
     DialogueRound,
     ConsensusResult,
+    RoleOpinion
 )
 from .role_agents import RoleAgent
 from ..knowledge.rag_system import MedicalKnowledgeRAG
@@ -40,7 +41,7 @@ class MultiAgentDialogueManager:
         self.convergence_threshold = 0.8
 
 
-    def conduct_mdt_discussion(self, patient_state: PatientState) -> ConsensusResult:
+    def conduct_mdt_discussion(self, patient_state: PatientState, treatment_options: List[TreatmentOption]) -> ConsensusResult:
         """
         进行MDT讨论
         
@@ -54,7 +55,7 @@ class MultiAgentDialogueManager:
         logger.info(f"Starting MDT discussion for patient {patient_state.patient_id}")
 
         # 初始化对话 - 各角色生成基于证据的初始意见
-        self._initialize_discussion(patient_state)
+        self._initialize_discussion(patient_state, treatment_options)
 
         # 进行多轮对话协商
         while self.current_round < self.max_rounds and not self._check_convergence():
@@ -81,7 +82,7 @@ class MultiAgentDialogueManager:
         logger.info(f"Final consensus result: {final_result}")
         return final_result
 
-    def _initialize_discussion(self, patient_state: PatientState) -> None:
+    def _initialize_discussion(self, patient_state: PatientState, treatment_options: List[TreatmentOption]) -> None:
         """
         初始化讨论
         - RAG知识检索 ：从医学知识库中检索与患者状态相关的初始评估知识
@@ -104,17 +105,19 @@ class MultiAgentDialogueManager:
             focus_treatment=None,
             consensus_status="discussing",
         )
-
         # 遍历每个角色智能体，生成其初始意见并构建首轮对话消息
         for role, agent in self.agents.items():
-            opinion = agent.generate_initial_opinion(patient_state, initial_knowledge)
-
+            # 构建初始意见
+            opinion = agent.generate_initial_opinion(patient_state, initial_knowledge, treatment_options)
+            logger.info(f"Generated initial opinion for {role}: {opinion}")
+            
             # 生成初始发言
             initial_message = self._create_initial_message(
-                agent, opinion, patient_state
+                agent, opinion, patient_state, treatment_options
             )
 
-            logger.info(f"Generated initial message for {role}: {initial_message.content}")
+            logger.info(f"c {role}: {initial_message.content}")
+            
             initial_round.messages.append(initial_message)
 
         self.dialogue_rounds.append(initial_round)
@@ -123,18 +126,19 @@ class MultiAgentDialogueManager:
         )
 
     def _create_initial_message(
-        self, agent: RoleAgent, opinion, patient_state: PatientState
+        self, agent: RoleAgent, opinion: RoleOpinion, patient_state: PatientState, treatment_options: List[TreatmentOption]
     ) -> DialogueMessage:
         """创建初始消息"""
         # 智能选择治疗方案（仅仅是最高分）
         focus_treatment = self._select_focus_treatment_for_role(
-            agent, opinion, patient_state
+            agent, opinion, patient_state, treatment_options
         )
+        focus_treatment = TreatmentOption(focus_treatment)
         logger.info(f"focus_treament: {focus_treatment}")
     
         # 尝试使用LLM生成个性化初始消息
-        content = self._generate_llm_initial_message(agent, opinion, patient_state, focus_treatment)
-        
+        content = self._generate_llm_initial_message(agent, opinion, patient_state, focus_treatment, treatment_options)
+        logger.info(f"测试Generated initial message for {agent.role}: {content}")
         # 如果LLM生成失败，降级到模板化方法
         if not content:
             content = self._generate_template_initial_message(agent, opinion, focus_treatment)
@@ -150,7 +154,7 @@ class MultiAgentDialogueManager:
         )
 
     def _select_focus_treatment_for_role(
-        self, agent: RoleAgent, opinion, patient_state: PatientState
+        self, agent: RoleAgent, opinion, patient_state: PatientState, treatment_options: List[TreatmentOption]
     ) -> TreatmentOption:
         """为特定角色智能选择焦点治疗方案"""
         prefs = opinion.treatment_preferences
@@ -282,7 +286,7 @@ class MultiAgentDialogueManager:
         return max(viable_treatments.items(), key=lambda x: x[1])[0]
 
     def _generate_llm_initial_message(
-        self, agent: RoleAgent, opinion, patient_state: PatientState, focus_treatment: TreatmentOption
+        self, agent: RoleAgent, opinion: RoleOpinion, patient_state: PatientState, focus_treatment: TreatmentOption, treatment_options: List[TreatmentOption]   
     ) -> str:
         """使用LLM生成个性化初始消息"""
         if not hasattr(agent, 'llm_interface') or not agent.llm_interface:
@@ -290,14 +294,18 @@ class MultiAgentDialogueManager:
             
         try:
             # 使用专门的治疗推理方法生成基础推理
-            if hasattr(agent.llm_interface, 'generate_treatment_reasoning'):
-                reasoning = agent.llm_interface.generate_treatment_reasoning(
+            if hasattr(agent.llm_interface, 'generate_focus_treatment_reasoning'):
+                reasoning = agent.llm_interface.generate_focus_treatment_reasoning(
                     patient_state=patient_state,
                     role=agent.role,
+                    opinion=opinion,
                     treatment_option=focus_treatment,
-                    knowledge_context={}
+                    knowledge_context={},
+                    treatment_options=treatment_options
                 )
-                
+                logger.info(
+                    f"生成初始化发言, 治疗选项: {focus_treatment}, 推理: {reasoning}"
+                )
                 if reasoning and len(reasoning.strip()) > 0:
                     # 基于推理生成MDT发言格式的消息
                     content = self._format_reasoning_as_mdt_message(
@@ -337,7 +345,7 @@ class MultiAgentDialogueManager:
         self, agent: RoleAgent, opinion, focus_treatment: TreatmentOption
     ) -> str:
         """生成模板化初始消息（降级方案）"""
-        content = f"As the {agent.role.value}, I {self._get_recommendation_phrase(opinion.treatment_preferences[focus_treatment])} {focus_treatment.value}. "
+        content = f"As the {agent.role.value}, I {self._get_recommendation_phrase(opinion.treatment_preferences[focus_treatment.value])} {focus_treatment.value}. "
         content += f"My reasoning: {opinion.reasoning}"
 
         if opinion.concerns:
@@ -359,7 +367,7 @@ class MultiAgentDialogueManager:
             return "have concerns about "
         else:
             return "strongly advise against "
-
+    
     def _conduct_dialogue_round(self, patient_state: PatientState) -> DialogueRound:
         """进行一轮对话 - 增强版本，支持更自然的对话流程"""
         current_round = DialogueRound(
