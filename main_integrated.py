@@ -351,8 +351,6 @@ class EnhancedPatientDialogueManager:
                         content=f"[历史] {dialogue['user_query']}",
                         timestamp=datetime.fromisoformat(dialogue.get("timestamp", datetime.now().isoformat())),
                         message_type="user_query",
-                        referenced_roles=[],
-                        evidence_cited=[],
                         treatment_focus=TreatmentOption.WATCHFUL_WAITING  # 默认值
                     ))
                 # 添加历史系统回复
@@ -362,8 +360,6 @@ class EnhancedPatientDialogueManager:
                         content=f"[历史回复] {dialogue['agent_response'][:200]}...",  # 截取前200字符
                         timestamp=datetime.fromisoformat(dialogue.get("timestamp", datetime.now().isoformat())),
                         message_type="system_response",
-                        referenced_roles=[],
-                        evidence_cited=[],
                         treatment_focus=TreatmentOption.WATCHFUL_WAITING  # 默认值
                     ))
         
@@ -373,8 +369,6 @@ class EnhancedPatientDialogueManager:
             content=query,
             timestamp=datetime.now(),
             message_type="user_query",
-            referenced_roles=[],
-            evidence_cited=[],
             treatment_focus=TreatmentOption.WATCHFUL_WAITING  # 默认值
         )
         messages.append(current_message)
