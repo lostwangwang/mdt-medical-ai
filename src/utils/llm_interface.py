@@ -102,7 +102,7 @@ class LLMInterface:
                 response = self.client.chat.completions.create(
                     model=self.config.model_name,
                     messages=[
-                        {"role": "system", "content": f"你是一位专业的{role.value}，请基于患者信息和角色专业性提供治疗推理,并对每个治疗选项的置信度进行打分"},
+                        {"role": "system", "content": f"你是一位专业的{role.value}，请基于患者信息、角色专业性、对话上下文、上一轮对话和当前对话，更新角色意见、治疗偏好、置信度"},
                         {"role": "user", "content": prompt}
                     ],
                     temperature=self.config.temperature,
@@ -151,9 +151,12 @@ class LLMInterface:
 
 角色身份: {role_descriptions.get(role, role.value)}
 
+当前对话的观点: {agent_dialogue.content}
+
+{role.value}当前的治疗偏好: 
 治疗选项列表：{[option.value for option in treatment_options]}
 
-请从{role.value}专业角度，为每个治疗选项完成以下任务（结果需适配RoleOpinion类）：
+请从{role.value}专业角度，综合角色当前对话的观点，为每个治疗选项进行重新评估（结果需适配RoleOpinion类）：
 1. treatment_preferences：字典，键为治疗选项（如"surgery"），值为-1~1的偏好度分；
 2. reasoning：字符串，≤80字，说明打分理由；
 3. confidence：0~1的浮点数，自身判断的可靠性；
@@ -367,20 +370,6 @@ class LLMInterface:
         }
         
         prompt = f"""
-患者信息：
-- 患者ID: {patient_state.patient_id}
-- 诊断: {patient_state.diagnosis}
-- 分期: {patient_state.stage}
-- 年龄: {patient_state.age}
-- 症状: {', '.join(patient_state.symptoms)}
-- 合并症: {', '.join(patient_state.comorbidities)}
-- 实验室结果: {json.dumps(patient_state.lab_results, ensure_ascii=False, indent=2)}
-- vital_signs: {json.dumps(patient_state.vital_signs, ensure_ascii=False, indent=2)}
-- 心理状态: {patient_state.psychological_status}
-- 生活质量评分: {patient_state.quality_of_life_score}
-
-角色身份: {role_descriptions.get(role, role.value)}
-
 患者信息：
 - 患者ID: {patient_state.patient_id}
 - 诊断: {patient_state.diagnosis}

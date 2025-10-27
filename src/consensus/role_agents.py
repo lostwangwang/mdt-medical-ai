@@ -197,15 +197,16 @@ class RoleAgent:
         }
         return specializations.get(self.role, {})
 
-    def _update_agent_opinions_and_preferences(self, patient_state: PatientState, current_round: DialogueRound, opinions_list: List[RoleOpinion]):
+    def _update_agent_opinions_and_preferences(self, patient_state: PatientState, current_round: DialogueRound, opinions_dict: Dict[RoleType, RoleOpinion]):
         """根据当前轮次的对话内容,更新角色的治疗偏好和治疗意见以及置信度"""
         agent_dialogue = [msg for msg in current_round.messages if msg.role == self.role]
         logger.info(f"[{self.role.value}] Agent dialogue: {agent_dialogue}")
         reasoning = self._generate_update_agent_opinions_reasoning(patient_state, agent_dialogue, opinions_list)
         
+        return reasoning
 
     
-    def _generate_update_agent_opinions_reasoning(self, patient_state: PatientState, agent_dialogue: DialogueMessage, opinions_list: List[RoleOpinion]) -> str:
+    def _generate_update_agent_opinions_reasoning(self, patient_state: PatientState, agent_dialogue: DialogueMessage, opinions_dict: Dict[RoleType, RoleOpinion]) -> str:
         """根据当前轮次的对话内容,生成更新角色意见的推理"""
         
        # 如果有LLM接口，使用智能推理

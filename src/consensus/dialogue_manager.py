@@ -77,7 +77,8 @@ class MultiAgentDialogueManager:
             self.dialogue_rounds.append(current_round)
 
             # 基于对话内容更新各角色立场
-            self._update_agent_opinions(patient_state, current_round, opinions_list)
+            opinions_dict = self._update_agent_opinions(patient_state, current_round, opinions_dict, treatment_options)
+            logger.info(f"Updated opinions dict: {opinions_dict}")
 
         logger.info("\n==生成共识结果开始：==")
         # 生成最终共识结果
@@ -99,23 +100,25 @@ class MultiAgentDialogueManager:
         return False  # 所有角色意见未变化，讨论收敛
 
     def _update_agent_opinions(
-        self, patient_state: PatientState, current_round: DialogueRound, opinions_list: List[RoleOpinion]
-    ) -> List[RoleOpinion]:
+        self, patient_state: PatientState, current_round: DialogueRound, opinions_dict: Dict[RoleType, RoleOpinion], treatment_options: List[TreatmentOption]
+    ) -> Dict[RoleType, RoleOpinion]:
         """
         更新各角色立场
         - 基于当前轮对话内容，更新每个角色的治疗意见
         - 以及每个角色的治疗偏好、置信度、治疗意见
         - 考虑其他角色的观点，调整自己的立场
         """
-        new_opinions_list:List[RoleOpinion] = []
+        new_opinions_dict: Dict[RoleType, RoleOpinion] = {}
 
         # 大模型分析当前的治疗意见
         for role, agent in self.agents.items():
             # 根据当前的对话内容,更新角色的治疗偏好和治疗意见
-            new_opintion = agent._update_agent_opinions_and_preferences(patient_state, current_round, opinions_list)
-            new_opinions_list.append(new_opintion)
+            # current_dialogue = current_round.messages[-1]
+            previous_opinion = opinions_dict[role]
+            new_opintion = agent._update_agent_opinions_and_preferences(patient_state, current_round, previous_opinion, treatment_options)
+            new_opinions_dict[role] = new_opintion
 
-        return new_opinions_list
+        return new_opinions_dict
 
     def _initialize_discussion(
         self, patient_state: PatientState, treatment_options: List[TreatmentOption]
