@@ -316,8 +316,6 @@ class RLGuidedDialogueManager(MultiAgentDialogueManager):
                 content=response["content"],
                 timestamp=datetime.now(),
                 message_type="rl_guided",
-                referenced_roles=[],
-                evidence_cited=response.get("references", []),
                 treatment_focus=response.get("treatment_preference", focus_treatment)
             )
             
@@ -736,8 +734,6 @@ class RLGuidedDialogueManager(MultiAgentDialogueManager):
             content=content,
             timestamp=datetime.now(),
             message_type="rl_influenced",
-            referenced_roles=[],
-            evidence_cited=[],
             treatment_focus=recommended_treatment
         )
     

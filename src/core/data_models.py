@@ -130,8 +130,6 @@ class DialogueMessage:
         content (str): 对话内容
         timestamp (datetime): 消息发送时间
         message_type (str): 消息类型，如"initial_opinion", "response", "rebuttal", "consensus"
-        referenced_roles (List[RoleType]): 引用的其他医疗角色列表
-        evidence_cited (List[str]): 引用的证据列表
         treatment_focus (TreatmentOption): 当前治疗焦点
     """
 
@@ -139,8 +137,6 @@ class DialogueMessage:
     content: str
     timestamp: datetime
     message_type: str  # "initial_opinion", "response", "rebuttal", "consensus"
-    referenced_roles: List[RoleType]
-    evidence_cited: List[str]
     treatment_focus: TreatmentOption
 
 
@@ -162,6 +158,7 @@ class DialogueRound:
     messages: List[DialogueMessage]
     focus_treatment: Optional[TreatmentOption]
     consensus_status: str  # "discussing", "converging", "concluded"
+
 
 
 @dataclass
