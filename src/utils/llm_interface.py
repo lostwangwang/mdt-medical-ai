@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import os
 
-from ..core.data_models import PatientState, TreatmentOption, RoleType, RoleOpinion, DialogueMessage
+from ..core.data_models import PatientState, TreatmentOption, RoleType, RoleOpinion, DialogueRound
 
 logger = logging.getLogger(__name__)
 
@@ -90,12 +90,13 @@ class LLMInterface:
         self, 
         patient_state: PatientState, 
         role: RoleType,
-        agent_dialogue: DialogueMessage,
-        opinions_list: List[RoleOpinion]
+        current_round: DialogueRound,
+        previous_opinion: RoleOpinion,
+        treatment_options: List[TreatmentOption],
     ) -> str:
         """生成更新角色意见的推理"""
         prompt = self._build_update_agent_opinions_reasoning_prompt(
-            patient_state, role, agent_dialogue, opinions_list
+            patient_state, role, current_round, previous_opinion, treatment_options
         )
         try:
             if self.client:
@@ -121,8 +122,9 @@ class LLMInterface:
         self, 
         patient_state: PatientState, 
         role: RoleType,
-        agent_dialogue: DialogueMessage,
-        opinions_list: List[RoleOpinion]
+        current_round: DialogueRound,
+        previous_opinion: RoleOpinion,
+        treatment_options: List[TreatmentOption],
     ) -> str:
         """构建更新角色意见的推理提示"""
          
@@ -135,7 +137,8 @@ class LLMInterface:
             RoleType.NUTRITIONIST: "营养师，关注患者营养状况和营养支持治疗",
             RoleType.REHABILITATION_THERAPIST: "康复治疗师，关注患者功能恢复和生活质量改善"
         }
-        
+        dialogue_text = "\n".join([f"{msg.role.value}当前的观点是: {msg.content}" for msg in current_round.messages])
+        logger.info("dialogue_text: %s", dialogue_text)
         prompt = f"""
 患者信息：
 - 患者ID: {patient_state.patient_id}
@@ -149,14 +152,20 @@ class LLMInterface:
 - 心理状态: {patient_state.psychological_status}
 - 生活质量评分: {patient_state.quality_of_life_score}
 
-角色身份: {role_descriptions.get(role, role.value)}
+{role.value}之前的角色意见：
+- 角色身份: {role_descriptions.get(role, role.value)}
+- 角色推理: {previous_opinion.reasoning}
+- 角色偏好: {json.dumps(previous_opinion.treatment_preferences, ensure_ascii=False, indent=2)}
+- 角色的意见：{json.dumps(previous_opinion.__dict__, ensure_ascii=False, indent=2)}
+- 角色的关注的问题列表：{json.dumps(previous_opinion.concerns, ensure_ascii=False, indent=2)}
 
-当前对话的观点: {agent_dialogue.content}
+{dialogue_text}
 
 {role.value}当前的治疗偏好: 
+
 治疗选项列表：{[option.value for option in treatment_options]}
 
-请从{role.value}专业角度，综合角色当前对话的观点，为每个治疗选项进行重新评估（结果需适配RoleOpinion类）：
+请从{role.value}专业角度，综合分析之前的角色意见，以及参考本轮对话中{role.value}的对话观点和其他各个角色的观点，为每个治疗选项进行重新评估，生成以下内容（结果需适配RoleOpinion类）：
 1. treatment_preferences：字典，键为治疗选项（如"surgery"），值为-1~1的偏好度分；
 2. reasoning：字符串，≤80字，说明打分理由；
 3. confidence：0~1的浮点数，自身判断的可靠性；
@@ -169,14 +178,14 @@ class LLMInterface:
 
 示例输出：
 {{
+    "role": "{role.value}",
     "treatment_preferences": {{"surgery": 0.8, "chemotherapy": 0.5, ...}},
     "reasoning": "根据患者情况，积极治疗更优，手术获益明确",
     "confidence": 0.8,
     "concerns": ["手术并发症风险", "化疗耐受性"]
 }}
 """
-    
-        
+        logger.info("更新立场的prompt: %s", prompt)
         return prompt
 
 

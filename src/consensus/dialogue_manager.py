@@ -5,6 +5,7 @@
 功能: 管理医疗团队多智能体间的对话协商过程
 """
 
+from os import name
 import numpy as np
 from typing import Dict, List, Any, Optional
 from datetime import datetime
@@ -23,8 +24,7 @@ from ..core.data_models import (
 from .role_agents import RoleAgent
 from ..knowledge.rag_system import MedicalKnowledgeRAG
 from ..utils.llm_interface import LLMInterface, LLMConfig
-
-
+from .calcuate_consensus import CalculateConsensus
 logger = logging.getLogger(__name__)
 
 
@@ -39,10 +39,11 @@ class MultiAgentDialogueManager:
         self.agents = {
             role: RoleAgent(role, llm_interface=llm_interface) for role in RoleType
         }
+        self.consensus_calculator = CalculateConsensus()
         self.rag_system = rag_system
         self.dialogue_rounds = []
         self.current_round = 0
-        self.max_rounds = 3
+        self.max_rounds = 5
         self.convergence_threshold = 0.8
 
     def conduct_mdt_discussion(
@@ -67,7 +68,7 @@ class MultiAgentDialogueManager:
         opinions_dict = {opinion.role: opinion for opinion in opinions_list}
         logger.info(f"Initial opinions dict: {opinions_dict}")
         # 进行多轮对话协商
-        while self.current_round < self.max_rounds:
+        while self.current_round < self.max_rounds and not self._check_discussion_convergence(opinions_dict):
             self.current_round += 1
             logger.info(f"Starting dialogue round {self.current_round}")
 
@@ -75,10 +76,10 @@ class MultiAgentDialogueManager:
             current_round = self._conduct_dialogue_round(patient_state, opinions_dict)
             logger.info(f"dialogue round {self.current_round}: {current_round}")
             self.dialogue_rounds.append(current_round)
-
+            logger.info(f"previous opinions dict: {opinions_dict}")
             # 基于对话内容更新各角色立场
-            opinions_dict = self._update_agent_opinions(patient_state, current_round, opinions_dict, treatment_options)
-            logger.info(f"Updated opinions dict: {opinions_dict}")
+            new_opinions_dict = self._update_agent_opinions(patient_state, current_round, opinions_dict, treatment_options)
+            logger.info(f"Updated opinions dict: {new_opinions_dict}")
 
         logger.info("\n==生成共识结果开始：==")
         # 生成最终共识结果
@@ -88,17 +89,17 @@ class MultiAgentDialogueManager:
         logger.info(f"Final consensus result: {final_result}")
         return final_result
 
-    def _check_discussion_convergence(self, opinions_list: List[RoleOpinion]) -> bool:
+    def _check_discussion_convergence(self, opinions_dict: Dict[RoleType, RoleOpinion]) -> bool:
         """
         检查讨论是否收敛
-        - 基于当前轮对话内容，更新每个角色的治疗意见
-        - 考虑其他角色的观点，调整自己的立场
         """
         if self.current_round <= 2:
             return False
-
-        return False  # 所有角色意见未变化，讨论收敛
-
+        self.consensus_calculator.build_weighted_matrix(opinions_dict)
+        self.consensus_calculator.summarize()
+        self.consensus_calculator.compute_kendalls_w()
+        df, W, p_value, consensus = self.consensus_calculator.summarize()
+        return consensus
     def _update_agent_opinions(
         self, patient_state: PatientState, current_round: DialogueRound, opinions_dict: Dict[RoleType, RoleOpinion], treatment_options: List[TreatmentOption]
     ) -> Dict[RoleType, RoleOpinion]:
@@ -112,12 +113,14 @@ class MultiAgentDialogueManager:
 
         # 大模型分析当前的治疗意见
         for role, agent in self.agents.items():
-            # 根据当前的对话内容,更新角色的治疗偏好和治疗意见
+            # 根据当前的对话对话内容以及其他角色的对话进行分析,更新角色的治疗偏好和治疗意见
             # current_dialogue = current_round.messages[-1]
-            previous_opinion = opinions_dict[role]
+            previous_opinion = opinions_dict[role.value]
+            logger.info(f"Previous opinion for {role.value}: {previous_opinion}")
             new_opintion = agent._update_agent_opinions_and_preferences(patient_state, current_round, previous_opinion, treatment_options)
-            new_opinions_dict[role] = new_opintion
-
+            new_opinions_dict[role.value] = new_opintion
+        
+        logger.info(f"Updated opinions dict: {new_opinions_dict}")
         return new_opinions_dict
 
     def _initialize_discussion(
@@ -1127,3 +1130,15 @@ class MultiAgentDialogueManager:
             transcript += "\n"
 
         return transcript
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    dialogue_manager = MultiAgentDialogueManager(
+        max_rounds=10, convergence_threshold=0.5
+    )
+    opintions_dict = {
+        'oncologist': RoleOpinion(role='oncologist', treatment_preferences={'surgery': 0.9, 'chemotherapy': 0.7, 'radiotherapy': 0.8, 'immunotherapy': 0.3, 'palliative_care': -0.5, 'watchful_waiting': -0.8}, reasoning='手术为根治基石，多学科支持可降低风险，综合治疗提升生存率', confidence=0.95, concerns=['围术期心脏事件', '化疗耐受性', '血糖波动']), 'radiologist': RoleOpinion(role='radiologist', treatment_preferences={'surgery': 0.9, 'chemotherapy': 0.7, 'radiotherapy': 0.8, 'immunotherapy': 0.3, 'palliative_care': -0.5, 'watchful_waiting': -0.8}, reasoning='影像学支持根治性手术，多学科协同可降低围术期风险，术后放疗强化局部控制。', confidence=0.95, concerns=['围术期心血管事件', '放疗耐受性', '血糖波动影响愈合']), 'nurse': RoleOpinion(role='nurse', treatment_preferences={'surgery': 0.9, 'chemotherapy': 0.6, 'radiotherapy': 0.7, 'immunotherapy': 0.4, 'palliative_care': -0.3, 'watchful_waiting': -0.6}, reasoning='患者状态稳定，多学科支持下手术风险可控，术后恢复预期良好。', confidence=0.95, concerns=['围术期心功能波动', '血糖波动风险', '术后感染可能']), 'psychologist': RoleOpinion(role='psychologist', treatment_preferences={'surgery': 0.85, 'chemotherapy': 0.65, 'radiotherapy': 0.55, 'immunotherapy': 0.3, 'palliative_care': -0.2, 'watchful_waiting': -0.4}, reasoning='患者心理状态良好，手术可增强掌控感，多学科支持降低心理负担', confidence=0.9, concerns=['术后心理适应', '治疗依从性波动', '康复信心波动']), 'patient_advocate': RoleOpinion(role='patient_advocate', treatment_preferences={'surgery': 0.95, 'chemotherapy': 0.65, 'radiotherapy': 0.75, 'immunotherapy': 0.3, 'palliative_care': -0.1, 'watchful_waiting': -0.6}, reasoning='多学科支持手术，患者状态稳定，围术期管理可控，根治性治疗优先', confidence=0.9, concerns=['围术期并发症', '术后恢复挑战', '合并症叠加风险']), 'nutritionist': RoleOpinion(role='nutritionist', treatment_preferences={'surgery': 0.8, 'chemotherapy': 0.6, 'radiotherapy': 0.5, 'immunotherapy': 0.4, 'palliative_care': -0.3, 'watchful_waiting': -0.6}, reasoning='术前营养优化可提升手术耐受，术后肠内营养支持促进恢复，整体获益显著', confidence=0.9, concerns=['术后吸收障碍', '化疗食欲下降', '合并症恶化']), 'rehabilitation_therapist': RoleOpinion(role='rehabilitation_therapist', treatment_preferences={'surgery': 0.9, 'chemotherapy': 0.6, 'radiotherapy': 0.5, 'immunotherapy': 0.3, 'palliative_care': -0.2, 'watchful_waiting': -0.6}, reasoning='手术获益明确，多学科支持下风险可控，术前康复可提升耐受力', confidence=0.9, concerns=['术后功能障碍', '治疗依从性', '康复延迟'])}
+    
+    check_convergence = dialogue_manager._check_discussion_convergence(opintions_dict, TreatmentOption)
+    print(check_convergence)

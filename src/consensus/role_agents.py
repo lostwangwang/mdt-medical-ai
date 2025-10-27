@@ -197,16 +197,23 @@ class RoleAgent:
         }
         return specializations.get(self.role, {})
 
-    def _update_agent_opinions_and_preferences(self, patient_state: PatientState, current_round: DialogueRound, opinions_dict: Dict[RoleType, RoleOpinion]):
+    def _update_agent_opinions_and_preferences(self, patient_state: PatientState, current_round: DialogueRound, previous_opinion: RoleOpinion, treatment_options: List[TreatmentOption])->RoleOpinion:
         """根据当前轮次的对话内容,更新角色的治疗偏好和治疗意见以及置信度"""
-        agent_dialogue = [msg for msg in current_round.messages if msg.role == self.role]
-        logger.info(f"[{self.role.value}] Agent dialogue: {agent_dialogue}")
-        reasoning = self._generate_update_agent_opinions_reasoning(patient_state, agent_dialogue, opinions_list)
-        
-        return reasoning
+        reasoning = self._generate_update_agent_opinions_reasoning(patient_state, current_round, previous_opinion, treatment_options)
+        reasoning = json.loads(reasoning)
+        role_option = RoleOpinion(
+            role=self.role.value,
+            treatment_preferences=reasoning["treatment_preferences"],
+            reasoning=reasoning["reasoning"],
+            confidence=reasoning["confidence"],
+            concerns=reasoning["concerns"],
+        )
+
+        self.current_stance = role_option.treatment_preferences
+        return role_option
 
     
-    def _generate_update_agent_opinions_reasoning(self, patient_state: PatientState, agent_dialogue: DialogueMessage, opinions_dict: Dict[RoleType, RoleOpinion]) -> str:
+    def _generate_update_agent_opinions_reasoning(self, patient_state: PatientState, current_round: DialogueRound, previous_opinion: RoleOpinion, treatment_options: List[TreatmentOption]):
         """根据当前轮次的对话内容,生成更新角色意见的推理"""
         
        # 如果有LLM接口，使用智能推理
@@ -216,17 +223,17 @@ class RoleAgent:
                 reasoning = self.llm_interface.generate_update_agent_opinions_reasoning(
                     patient_state=patient_state,
                     role=self.role,
-                    treatment_option=agent_dialogue.treatment_focus,
-                    knowledge_context=knowledge,
+                    current_round=current_round,
+                    previous_opinion=previous_opinion,
                     treatment_options=treatment_options,
                 )
                 if reasoning and len(reasoning.strip()) > 0:
-                    logger.debug(f"Generated LLM reasoning for {self.role.value}: {reasoning}...")
+                    logger.debug(f"[更新立场生成推理]Generated LLM reasoning for {self.role.value}: {reasoning}...")
                     
                     return reasoning
                     
             except Exception as e:
-                logger.warning(f"LLM reasoning generation failed for {self.role}: {e}")
+                logger.warning(f"[更新立场生成推理] LLM reasoning generation failed for {self.role}: {e}")
 
         
     def generate_initial_opinion(
