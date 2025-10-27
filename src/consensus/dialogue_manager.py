@@ -80,7 +80,9 @@ class MultiAgentDialogueManager:
             # 基于对话内容更新各角色立场
             new_opinions_dict = self._update_agent_opinions(patient_state, current_round, opinions_dict, treatment_options)
             logger.info(f"Updated opinions dict: {new_opinions_dict}")
-
+        logger.info(f"the last round: {self.current_round}")
+        logger.info(f"final opinions dict: {new_opinions_dict}")
+        logger.info("达成共识!!!")
         logger.info("\n==生成共识结果开始：==")
         # 生成最终共识结果
         final_result = self._generate_final_consensus(patient_state)

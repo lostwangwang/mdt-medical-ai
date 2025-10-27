@@ -904,24 +904,6 @@ class FullyIntegratedMDTSystem:
                 "conflicts": len(consensus_result.conflicts),
                 "agreements": len(consensus_result.agreements),
             },
-            # 🔥 新增：角色智能体结果
-            # "role_agent_analysis": {
-            #     "participating_roles": len(role_opinions),
-            #     "role_opinions": [opinion.to_dict() for opinion in role_opinions],
-            #     "role_consensus_score": enhanced_consensus.get("consensus_score", 0.0),
-            #     "role_convergence": enhanced_consensus.get("convergence_achieved", False)
-            # },
-            # 🔥 新增：强化学习结果
-            # "rl_optimization": {
-            #     "rl_recommended_action": rl_optimization.get("rl_recommended_action"),
-            #     "rl_confidence": rl_optimization.get("rl_confidence", 0.0),
-            #     "consensus_rl_alignment": rl_optimization.get("consensus_rl_alignment", 0.0)
-            # },
-            # # 其他信息
-            # "dialogue_transcript": self.dialogue_manager.get_dialogue_transcript(),
-            # "visualizations": visualizations,
-            # "analysis_timestamp": datetime.now().isoformat(),
-            # "fully_integrated": True
         }
 
         self.logger.info("完全集成分析完成")
