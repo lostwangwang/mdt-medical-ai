@@ -15,6 +15,7 @@ import json
 from ..utils.llm_interface import LLMConfig, LLMInterface
 
 from ..core.data_models import (
+    DialogueRound,
     RoleType,
     TreatmentOption,
     PatientState,
@@ -196,16 +197,37 @@ class RoleAgent:
         }
         return specializations.get(self.role, {})
 
-    def update_agent_opinions_and_preferences(self, current_round: DialogueRound, opinions_list: List[RoleOpinion]):
+    def _update_agent_opinions_and_preferences(self, patient_state: PatientState, current_round: DialogueRound, opinions_list: List[RoleOpinion]):
         """根据当前轮次的对话内容,更新角色的治疗偏好和治疗意见以及置信度"""
-        agent_dialogue = current_round.messages.filter(role=self.role.value)
-        reasoning = self._generate_update_agent_opinions_reasoning(current_round, opinions_list)
-        pass
+        agent_dialogue = [msg for msg in current_round.messages if msg.role == self.role]
+        logger.info(f"[{self.role.value}] Agent dialogue: {agent_dialogue}")
+        reasoning = self._generate_update_agent_opinions_reasoning(patient_state, agent_dialogue, opinions_list)
+        
+
     
-    def _generate_update_agent_opinions_reasoning(self, current_round: DialogueRound, opinions_list: List[RoleOpinion]) -> str:
+    def _generate_update_agent_opinions_reasoning(self, patient_state: PatientState, agent_dialogue: DialogueMessage, opinions_list: List[RoleOpinion]) -> str:
         """根据当前轮次的对话内容,生成更新角色意见的推理"""
         
-        pass
+       # 如果有LLM接口，使用智能推理
+        if self.llm_interface:
+            try:
+                # 使用LLM生成专业推理
+                reasoning = self.llm_interface.generate_update_agent_opinions_reasoning(
+                    patient_state=patient_state,
+                    role=self.role,
+                    treatment_option=agent_dialogue.treatment_focus,
+                    knowledge_context=knowledge,
+                    treatment_options=treatment_options,
+                )
+                if reasoning and len(reasoning.strip()) > 0:
+                    logger.debug(f"Generated LLM reasoning for {self.role.value}: {reasoning}...")
+                    
+                    return reasoning
+                    
+            except Exception as e:
+                logger.warning(f"LLM reasoning generation failed for {self.role}: {e}")
+
+        
     def generate_initial_opinion(
         self, patient_state: PatientState, knowledge: Dict[str, Any], treatment_options: List[TreatmentOption]
     ) -> RoleOpinion:
@@ -419,34 +441,6 @@ class RoleAgent:
 
         return base_confidence * data_completeness * complexity_penalty
 
-    def _identify_concerns(self, patient_state: PatientState) -> List[str]:
-        """识别关注点"""
-        concerns = []
-
-        # 通用关注点
-        if patient_state.age > 70:
-            concerns.append("高龄患者")
-
-        if len(patient_state.comorbidities) > 2:
-            concerns.append("合并症较多")
-
-        if patient_state.quality_of_life_score < 0.5:
-            concerns.append("生活质量较差")
-
-        # 角色特异性关注点（中文）
-        role_specific_concerns = {
-            RoleType.ONCOLOGIST: ["疾病进展", "治疗耐药性"],
-            RoleType.NURSE: ["患者依从性", "护理复杂度"],
-            RoleType.PSYCHOLOGIST: ["心理负担", "家庭压力"],
-            RoleType.RADIOLOGIST: ["解剖结构限制", "技术可行性"],
-            RoleType.PATIENT_ADVOCATE: ["患者自主权", "知情同意"],
-            RoleType.NUTRITIONIST: ["营养不良", "饮食管理难度"],
-            RoleType.REHABILITATION_THERAPIST: ["术后康复挑战", "功能障碍风险"],
-        }
-
-        concerns.extend(role_specific_concerns.get(self.role, [])[:2])
-
-        return concerns[:3]  # 限制最多3个关注点
 
     def generate_dialogue_response(
         self,
@@ -481,7 +475,7 @@ class RoleAgent:
         opinions_dict: Dict[RoleType, RoleOpinion] = None,
         last_round_messages: List[DialogueMessage] = None,
     ) -> str:
-        """构建回应内容 - 增强版本，减少模板化"""
+        """构建回应内容 - 基于患者状态、知识、治疗选项、对话上下文、立场和上一轮对话, 要用"""
         logger.info(f"开始构建{self.role.value}的回应内容")
         # 优先使用LLM生成自然对话
         if self.llm_interface:
@@ -539,93 +533,5 @@ class RoleAgent:
                 continue
             history_list.append({"role": role_name, "content": content})
         return history_list
-    
-    def _get_dialogue_history(self, discussion_context: Dict[str, Any]) -> List[Dict[str, str]]:
-        """获取对话历史，增强上下文感知"""
-        dialogue_history = []
-        
-        # 从讨论上下文中提取历史对话
-        if 'previous_rounds' in discussion_context:
-            for round_data in discussion_context['previous_rounds']:
-                if 'responses' in round_data:
-                    for response in round_data['responses']:
-                        dialogue_history.append({
-                            'role': response.get('role', 'unknown'),
-                            'content': response.get('content', ''),
-                            'stance': response.get('stance', 'neutral'),
-                            'round': round_data.get('round_number', 0)
-                        })
-        
-        # 限制历史长度，保留最近的对话
-        return dialogue_history[-10:] if len(dialogue_history) > 10 else dialogue_history
 
-    def _get_professional_reasoning(
-        self,
-        patient_state: PatientState,
-        treatment: TreatmentOption,
-        knowledge: Dict[str, Any],
-    ) -> str:
-        """获取专业推理"""
-        # 如果有LLM接口，使用智能专业推理生成
-        if self.llm_interface:
-            try:
-                # 使用LLM生成角色特异性的专业推理
-                reasoning = self.llm_interface.generate_professional_reasoning(
-                    patient_state=patient_state,
-                    role=self.role,
-                    treatment_option=treatment,
-                    knowledge_context=knowledge
-                )
-                
-                if reasoning and len(reasoning.strip()) > 0:
-                    logger.debug(f"Generated LLM professional reasoning for {self.role.value}: {reasoning}...")
-                    return reasoning
-                    
-            except Exception as e:
-                logger.warning(f"LLM professional reasoning generation failed for {self.role}: {e}")
-        
-        # 降级到扩展的模板化专业推理
-        reasoning_map = {
-            RoleType.ONCOLOGIST: {
-                TreatmentOption.SURGERY: f"surgical resection offers the best chance for cure in {patient_state.diagnosis} stage {patient_state.stage}, with acceptable operative risk given patient's age {patient_state.age}",
-                TreatmentOption.CHEMOTHERAPY: f"systemic therapy is essential for micrometastatic disease control in {patient_state.diagnosis}, considering the patient's performance status and comorbidities {patient_state.comorbidities}",
-                TreatmentOption.RADIOTHERAPY: f"radiation therapy provides excellent local control for {patient_state.diagnosis} with minimal systemic toxicity",
-                TreatmentOption.IMMUNOTHERAPY: f"immunotherapy shows promising results for {patient_state.diagnosis} with manageable side effect profile",
-                TreatmentOption.PALLIATIVE_CARE: f"palliative care is appropriate given the advanced stage and patient's quality of life priorities"
-            },
-            RoleType.NURSE: {
-                TreatmentOption.SURGERY: f"this patient appears capable of handling the post-operative care requirements based on current functional status and support system",
-                TreatmentOption.CHEMOTHERAPY: f"we need to carefully monitor for side effects and ensure compliance, considering the patient's current symptoms {patient_state.symptoms}",
-                TreatmentOption.RADIOTHERAPY: f"radiation therapy is well-tolerated with manageable daily treatment schedule",
-                TreatmentOption.IMMUNOTHERAPY: f"immunotherapy requires careful monitoring but has fewer immediate side effects than traditional chemotherapy",
-                TreatmentOption.PALLIATIVE_CARE: f"palliative care focuses on comfort and quality of life, which aligns with comprehensive nursing care goals"
-            },
-            RoleType.PSYCHOLOGIST: {
-                TreatmentOption.SURGERY: f"surgery may cause anxiety but offers hope for cure, which can positively impact psychological well-being",
-                TreatmentOption.CHEMOTHERAPY: f"chemotherapy's side effects may impact mood and cognition, requiring psychological support throughout treatment",
-                TreatmentOption.RADIOTHERAPY: f"radiation therapy's daily schedule provides routine while minimizing psychological burden",
-                TreatmentOption.IMMUNOTHERAPY: f"immunotherapy's novel approach may provide hope while requiring adjustment to new treatment paradigm",
-                TreatmentOption.PALLIATIVE_CARE: f"palliative care addresses psychological distress and helps with acceptance and coping"
-            },
-            RoleType.RADIOLOGIST: {
-                TreatmentOption.SURGERY: f"imaging findings support surgical feasibility with clear anatomical landmarks for resection",
-                TreatmentOption.CHEMOTHERAPY: f"baseline imaging establishes measurable disease for treatment response monitoring",
-                TreatmentOption.RADIOTHERAPY: f"imaging-guided radiation planning ensures optimal target coverage while sparing critical structures",
-                TreatmentOption.IMMUNOTHERAPY: f"imaging will be crucial for monitoring immune-related response patterns",
-                TreatmentOption.PALLIATIVE_CARE: f"imaging can guide palliative interventions for symptom management"
-            },
-            RoleType.PATIENT_ADVOCATE: {
-                TreatmentOption.SURGERY: f"surgery aligns with patient's desire for aggressive treatment while respecting informed consent",
-                TreatmentOption.CHEMOTHERAPY: f"chemotherapy provides active treatment option while maintaining patient autonomy in decision-making",
-                TreatmentOption.RADIOTHERAPY: f"radiation therapy offers effective treatment with preserved quality of life",
-                TreatmentOption.IMMUNOTHERAPY: f"immunotherapy represents cutting-edge care that patients often prefer when available",
-                TreatmentOption.PALLIATIVE_CARE: f"palliative care honors patient's values and preferences for comfort-focused care"
-            },
-        }
-
-        role_reasoning = reasoning_map.get(self.role, {})
-        template_reasoning = role_reasoning.get(treatment, f"from {self.role.value} perspective, {treatment.value} is a reasonable treatment option for this patient")
-        
-        logger.debug(f"Using template professional reasoning for {self.role.value}")
-        return template_reasoning
     

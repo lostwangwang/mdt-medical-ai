@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import os
 
-from ..core.data_models import PatientState, TreatmentOption, RoleType, RoleOpinion
+from ..core.data_models import PatientState, TreatmentOption, RoleType, RoleOpinion, DialogueMessage
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +86,97 @@ class LLMInterface:
             logger.info("Falling back to template-based responses")
             self.client = None
     
+    def generate_update_agent_opinions_reasoning(
+        self, 
+        patient_state: PatientState, 
+        role: RoleType,
+        agent_dialogue: DialogueMessage,
+        opinions_list: List[RoleOpinion]
+    ) -> str:
+        """生成更新角色意见的推理"""
+        prompt = self._build_update_agent_opinions_reasoning_prompt(
+            patient_state, role, agent_dialogue, opinions_list
+        )
+        try:
+            if self.client:
+                response = self.client.chat.completions.create(
+                    model=self.config.model_name,
+                    messages=[
+                        {"role": "system", "content": f"你是一位专业的{role.value}，请基于患者信息和角色专业性提供治疗推理,并对每个治疗选项的置信度进行打分"},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=self.config.temperature,
+                    max_tokens=self.config.max_tokens
+                )
+                logger.debug(f"LLM response debug: {response}")
+                return response.choices[0].message.content.strip()
+            else:
+                # 降级到模板化回复
+                return self._generate_template_reasoning(patient_state, role, treatment_option)
+        except Exception as e:
+            logger.error(f"LLM generation failed: {e}")
+
+
+    def _build_update_agent_opinions_reasoning_prompt(
+        self, 
+        patient_state: PatientState, 
+        role: RoleType,
+        agent_dialogue: DialogueMessage,
+        opinions_list: List[RoleOpinion]
+    ) -> str:
+        """构建更新角色意见的推理提示"""
+         
+        role_descriptions = {
+            RoleType.ONCOLOGIST: "肿瘤科医生，关注治疗效果和生存率",
+            RoleType.NURSE: "护士，关注护理可行性和患者舒适度",
+            RoleType.PSYCHOLOGIST: "心理医生，关注患者心理健康",
+            RoleType.RADIOLOGIST: "放射科医生，关注影像学表现和放射治疗",
+            RoleType.PATIENT_ADVOCATE: "患者代表，关注患者权益、自主选择和生活质量",
+            RoleType.NUTRITIONIST: "营养师，关注患者营养状况和营养支持治疗",
+            RoleType.REHABILITATION_THERAPIST: "康复治疗师，关注患者功能恢复和生活质量改善"
+        }
+        
+        prompt = f"""
+患者信息：
+- 患者ID: {patient_state.patient_id}
+- 诊断: {patient_state.diagnosis}
+- 分期: {patient_state.stage}
+- 年龄: {patient_state.age}
+- 症状: {', '.join(patient_state.symptoms)}
+- 合并症: {', '.join(patient_state.comorbidities)}
+- 实验室结果: {json.dumps(patient_state.lab_results, ensure_ascii=False, indent=2)}
+- vital_signs: {json.dumps(patient_state.vital_signs, ensure_ascii=False, indent=2)}
+- 心理状态: {patient_state.psychological_status}
+- 生活质量评分: {patient_state.quality_of_life_score}
+
+角色身份: {role_descriptions.get(role, role.value)}
+
+治疗选项列表：{[option.value for option in treatment_options]}
+
+请从{role.value}专业角度，为每个治疗选项完成以下任务（结果需适配RoleOpinion类）：
+1. treatment_preferences：字典，键为治疗选项（如"surgery"），值为-1~1的偏好度分；
+2. reasoning：字符串，≤80字，说明打分理由；
+3. confidence：0~1的浮点数，自身判断的可靠性；
+4. concerns：列表，含2-3个字符串，每项≤20字，核心担忧。
+
+**输出要求**：
+- 仅返回JSON，不包含任何额外文本；
+- 字段名严格匹配上述名称，类型符合要求；
+- 治疗选项必须完整包含列表中的所有项。
+
+示例输出：
+{{
+    "treatment_preferences": {{"surgery": 0.8, "chemotherapy": 0.5, ...}},
+    "reasoning": "根据患者情况，积极治疗更优，手术获益明确",
+    "confidence": 0.8,
+    "concerns": ["手术并发症风险", "化疗耐受性"]
+}}
+"""
+    
+        
+        return prompt
+
+
     def generate_treatment_reasoning(
         self, 
         patient_state: PatientState, 
@@ -156,68 +247,6 @@ class LLMInterface:
             logger.error(f"LLM generation failed: {e}")
             return self._generate_template_reasoning(patient_state, role, treatment_option)
 
-    def generate_treatment_plan(
-        self,
-        patient_state: PatientState,
-        memory_context: Dict[str, Any],
-        knowledge_context: Dict[str, Any] = None
-    ) -> Dict[str, Any]:
-        """生成完整的治疗方案"""
-        
-        prompt = self._build_treatment_plan_prompt(
-            patient_state, memory_context, knowledge_context
-        )
-        
-        try:
-            if self.client:
-                response = self.client.chat.completions.create(
-                    model=self.config.model_name,
-                    messages=[
-                        {"role": "system", "content": "你是一位资深的肿瘤科医生，请基于患者的完整病史和当前状态制定综合治疗方案。"},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=self.config.temperature,
-                    max_tokens=self.config.max_tokens
-                )
-                
-                # 解析LLM响应为结构化数据
-                return self._parse_treatment_plan_response(response.choices[0].message.content)
-            else:
-                return self._generate_template_treatment_plan(patient_state)
-        except Exception as e:
-            logger.error(f"Treatment plan generation failed: {e}")
-            return self._generate_template_treatment_plan(patient_state)
-    
-    def generate_patient_timeline_events(
-        self,
-        patient_state: PatientState,
-        memory_context: Dict[str, Any],
-        days_ahead: int = 30
-    ) -> List[Dict[str, Any]]:
-        """生成患者时间线事件"""
-        
-        prompt = self._build_timeline_events_prompt(
-            patient_state, memory_context, days_ahead
-        )
-        
-        try:
-            if self.client:
-                response = self.client.chat.completions.create(
-                    model=self.config.model_name,
-                    messages=[
-                        {"role": "system", "content": "你是一位医疗数据分析师，请基于患者状态生成合理的医疗事件时间线。"},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=self.config.temperature,
-                    max_tokens=self.config.max_tokens
-                )
-                
-                return self._parse_timeline_events_response(response.choices[0].message.content)
-            else:
-                return self._generate_template_timeline_events(patient_state, days_ahead)
-        except Exception as e:
-            logger.error(f"Timeline events generation failed: {e}")
-            return self._generate_template_timeline_events(patient_state, days_ahead)
     
     def generate_dialogue_response(
         self,
