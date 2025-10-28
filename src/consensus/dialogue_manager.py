@@ -46,7 +46,11 @@ class MultiAgentDialogueManager:
         self.dialogue_rounds = []
         self.current_round = 0
         self.max_rounds = 5
-        self.convergence_threshold = 0.8
+        self.convergence_threshold = 0.75
+        self.df = None
+        self.W = None
+        self.p_value = None
+        self.consensus = None
 
     def conduct_mdt_discussion_medqa(
         self,
@@ -77,9 +81,10 @@ class MultiAgentDialogueManager:
         # 进行多轮对话协商
         while (
             self.current_round < self.max_rounds
-            and not self._check_discussion_convergence(opinions_dict)
+            and not self._check_discussion_convergence_medqa(opinions_dict, question_options)
         ):
             self.current_round += 1
+            print(f"当前是第{self.current_round}轮对话")
             logger.info(f"Starting dialogue round {self.current_round}")
 
             # 进行一轮结构化对话
@@ -90,21 +95,30 @@ class MultiAgentDialogueManager:
             self.dialogue_rounds.append(current_round)
             logger.info(f"previous opinions dict: {opinions_dict}")
             # 基于对话内容更新各角色立场
-            new_opinions_dict = self._update_agent_opinions(
-                patient_state, current_round, opinions_dict, treatment_options
+            new_opinions_dict = self._update_agent_opinions_medqa(
+                question_state, current_round, opinions_dict, question_options
             )
             logger.info(f"Updated opinions dict: {new_opinions_dict}")
+        
         logger.info(f"the last round: {self.current_round}")
         logger.info(f"final opinions dict: {new_opinions_dict}")
+        print(self.current_round)
+        print("达成共识")
         logger.info("达成共识!!!")
         logger.info("\n==生成共识结果开始：==")
-        # 生成最终共识结果
-        final_result = self._generate_final_consensus(patient_state)
-
-        logger.info(f"MDT discussion completed after {self.current_round} rounds")
-        logger.info(f"Final consensus result: {final_result}")
+        final_result = {
+            "question_state": question_state,
+            "question_options": question_options,
+            "final_opinions_dict": new_opinions_dict,
+            "final_consensus": {
+                "df": self.df,
+                "W": self.W,
+                "p_value": self.p_value,
+                "consensus": self.consensus,
+            },
+        }
         return final_result
-    
+
     def _conduct_dialogue_round_medqa(
         self, question_state: MedicalQuestionState,
         question_options: List[QuestionOption],
@@ -305,7 +319,7 @@ class MultiAgentDialogueManager:
         # 进行多轮对话协商
         while (
             self.current_round < self.max_rounds
-            and not self._check_discussion_convergence(opinions_dict)
+            and not self._check_discussion_convergence(opinions_dict, treatment_options)
         ):
             self.current_round += 1
             logger.info(f"Starting dialogue round {self.current_round}")
@@ -330,9 +344,26 @@ class MultiAgentDialogueManager:
         logger.info(f"MDT discussion completed after {self.current_round} rounds")
         logger.info(f"Final consensus result: {final_result}")
         return final_result
+    
+    def _check_discussion_convergence_medqa(self, opinions_dict: Dict[RoleType, RoleOpinion], question_options: List[QuestionOption]) -> bool:
+        """
+        检查讨论是否收敛
+        """
+        print("判断是否收敛")
+        if self.current_round <= 2:
+            return False
+        self.consensus_calculator.set_treatments(question_options)
+        print("行数:", self.consensus_calculator.m)
+        print("列数:", self.consensus_calculator.n)
 
+        self.consensus_calculator.build_weighted_matrix(opinions_dict)
+        self.consensus_calculator.compute_kendalls_w()
+        self.df, self.W, self.p_value, self.consensus = self.consensus_calculator.summarize()
+        print(self.df, self.W, self.p_value, self.consensus)
+        return self.consensus
+    
     def _check_discussion_convergence(
-        self, opinions_dict: Dict[RoleType, RoleOpinion]
+        self, opinions_dict: Dict[RoleType, RoleOpinion], treatment_options: List[TreatmentOption]
     ) -> bool:
         """
         检查讨论是否收敛
@@ -344,6 +375,29 @@ class MultiAgentDialogueManager:
         self.consensus_calculator.compute_kendalls_w()
         df, W, p_value, consensus = self.consensus_calculator.summarize()
         return consensus
+
+    def _update_agent_opinions_medqa(self, question_state: MedicalQuestionState, current_round: DialogueRound, opinions_dict: Dict[RoleType, RoleOpinion], question_options: List[QuestionOption]):
+        """
+        更新各角色立场
+        - 基于当前轮对话内容，更新每个角色的治疗意见
+        - 以及每个角色的治疗偏好、置信度、治疗意见
+        - 考虑其他角色的观点，调整自己的立场
+        """
+        new_opinions_dict: Dict[RoleType, RoleOpinion] = {}
+
+        # 大模型分析当前的治疗意见
+        for role, agent in self.agents.items():
+            # 根据当前的对话对话内容以及其他角色的对话进行分析,更新角色的治疗偏好和治疗意见
+            # current_dialogue = current_round.messages[-1]
+            previous_opinion = opinions_dict[role.value]
+            logger.info(f"Previous opinion for {role.value}: {previous_opinion}")
+            new_opintion = agent._update_agent_opinions_and_preferences_medqa(
+                question_state, current_round, previous_opinion, question_options
+            )
+            new_opinions_dict[role.value] = new_opintion
+
+        logger.info(f"Updated opinions dict: {new_opinions_dict}")
+        return new_opinions_dict
 
     def _update_agent_opinions(
         self,
@@ -1006,18 +1060,17 @@ class MultiAgentDialogueManager:
     def _conduct_sequential_presentation_medqa(
         self,
         round_data: DialogueRound,
-        patient_state: PatientState,
+        question_state: MedicalQuestionState,
+        question_options: List[QuestionOption],
         opinions_dict: Dict[RoleType, RoleOpinion],
     ) -> DialogueRound:
         """进行顺序陈述式对话"""
         # 传统的顺序发言
-        for role in speaking_order:
+        for role in self.agents.keys():
             agent = self.agents[role]
             last_round_messages = self._get_last_round_previous_messages()
-            logger.info(f"Last round messages: {last_round_messages}")
-            logger.info(f"All previous messages: {all_previous_messages}")
-            response = agent.generate_dialogue_response(
-                patient_state,
+            response = agent.generate_dialogue_response_medqa(
+                question_state,
                 round_data.focus_treatment,
                 opinions_dict,
                 last_round_messages,

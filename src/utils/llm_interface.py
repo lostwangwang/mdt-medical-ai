@@ -98,6 +98,42 @@ class LLMInterface:
             logger.warning(f"Failed to initialize LLM client: {e}")
             logger.info("Falling back to template-based responses")
             self.client = None
+    def generate_update_agent_opinions_reasoning_medqa(
+        self, 
+        question_state: medqa_types.MedicalQuestionState, 
+        role: RoleType, 
+        current_round: DialogueRound, 
+        previous_opinion: RoleOpinion, \
+        question_options: List[medqa_types.QuestionOption]):
+        """生成更新角色有关医学问题的推理"""
+        prompt = self._build_update_agent_opinions_reasoning_prompt_medqa(
+            question_state, role, current_round, previous_opinion, question_options
+        )
+        try:
+            if self.client:
+                response = self.client.chat.completions.create(
+                    model=self.config.model_name,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": f"你是一位专业的{role.value}，请基于问题信息、角色专业性、对话上下文、上一轮对话和当前对话，更新角色有关医学问题的意见、选项偏好、置信度",
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=self.config.temperature,
+                    max_tokens=self.config.max_tokens,
+                )
+                logger.debug(f"LLM response debug: {response}")
+                return response.choices[0].message.content.strip()
+            else:
+                # 降级到模板化回复
+                return self._generate_template_reasoning(
+                    patient_state, role, treatment_option
+                )
+        except Exception as e:
+            logger.error(f"LLM generation failed: {e}")
+        pass
+
 
     def generate_update_agent_opinions_reasoning(
         self,
@@ -134,6 +170,76 @@ class LLMInterface:
                 )
         except Exception as e:
             logger.error(f"LLM generation failed: {e}")
+        
+    def _build_update_agent_opinions_reasoning_prompt_medqa(
+        self,
+        question_state: medqa_types.MedicalQuestionState,
+        role: RoleType,
+        current_round: DialogueRound,
+        previous_opinion: RoleOpinion,
+        question_options: List[medqa_types.QuestionOption],
+    ) -> str:
+        """构建更新角色意见的推理提示"""
+
+        role_descriptions = {
+            RoleType.ONCOLOGIST: "肿瘤科医生，关注治疗效果和生存率",
+            RoleType.NURSE: "护士，关注护理可行性和患者舒适度",
+            RoleType.PSYCHOLOGIST: "心理医生，关注患者心理健康",
+            RoleType.RADIOLOGIST: "放射科医生，关注影像学表现和放射治疗",
+            RoleType.PATIENT_ADVOCATE: "患者代表，关注患者权益、自主选择和生活质量",
+            RoleType.NUTRITIONIST: "营养师，关注患者营养状况和营养支持治疗",
+            RoleType.REHABILITATION_THERAPIST: "康复治疗师，关注患者功能恢复和生活质量改善",
+        }
+        dialogue_text = "\n".join(
+            [
+                f"{msg.role.value}当前的观点是: {msg.content}"
+                for msg in current_round.messages
+            ]
+        )
+        logger.info("dialogue_text: %s", dialogue_text)
+        prompt = f"""
+医疗问题信息：
+- 问题描述: {question_state.question}
+- 相关背景: {question_state.meta_info or '无特殊背景'}
+
+角色身份: {role_descriptions.get(role, role.value)}
+
+问题选项列表：{[f"{option.value}: {question_state.options[option.name]}" for option in question_options]}  # 如"A: 苯溴马隆, B: 别嘌呤醇..."
+
+{role.value}之前的角色意见：
+- 角色身份: {role_descriptions.get(role, role.value)}
+- 角色推理: {previous_opinion.reasoning}
+- 角色偏好: {json.dumps(previous_opinion.treatment_preferences, ensure_ascii=False, indent=2)}
+- 角色的意见：{json.dumps(previous_opinion.__dict__, ensure_ascii=False, indent=2)}
+- 角色的关注的问题列表：{json.dumps(previous_opinion.concerns, ensure_ascii=False, indent=2)}
+
+{dialogue_text}
+
+{role.value}当前的问题偏好: {json.dumps(previous_opinion.treatment_preferences, ensure_ascii=False, indent=2)}
+
+问题选项列表：{[option.value for option in question_options]}
+
+请从{role.value}专业角度，综合分析之前的角色意见，以及参考本轮对话中{role.value}的对话观点和其他各个角色的观点，为每个问题进行重新评估，生成以下内容（结果需适配RoleOpinion类）：
+1. treatment_preferences：字典，键为治疗选项（如"surgery"），值为-1~1的偏好度分；
+2. reasoning：字符串，≤80字，说明打分理由；
+3. confidence：0~1的浮点数，自身判断的可靠性；
+4. concerns：列表，含2-3个字符串，每项≤20字，核心担忧。
+
+**输出要求**：
+- 仅返回JSON，不包含任何额外文本；
+- 字段名严格匹配上述名称，类型符合要求；
+- 治疗选项必须完整包含列表中的所有项。
+
+示例输出：
+{{
+    "role": "{role.value}",
+    "treatment_preferences": {{"surgery": 0.8, "chemotherapy": 0.5, ...}},
+    "reasoning": "根据患者情况，积极治疗更优，手术获益明确",
+    "confidence": 0.8,
+    "concerns": ["手术并发症风险", "化疗耐受性"]
+}}
+"""
+        return prompt
 
     def _build_update_agent_opinions_reasoning_prompt(
         self,
@@ -183,7 +289,7 @@ class LLMInterface:
 
 {dialogue_text}
 
-{role.value}当前的治疗偏好: 
+{role.value}当前的治疗偏好: {json.dumps(previous_opinion.treatment_preferences, ensure_ascii=False, indent=2)}
 
 治疗选项列表：{[option.value for option in treatment_options]}
 
@@ -292,6 +398,7 @@ class LLMInterface:
             return self._generate_template_reasoning(
                 patient_state, role, treatment_option
             )
+
     def _build_focus_treatment_reasoning_prompt_meqa(
         self,
         question_state: medqa_types.MedicalQuestionState,
@@ -463,6 +570,76 @@ class LLMInterface:
             return self._generate_template_reasoning(
                 patient_state, role, treatment_option
             )
+    def generate_dialogue_response_medqa(
+        self,
+        question_state: medqa_types.MedicalQuestionState,
+        role: RoleType,
+        treatment_option: medqa_types.QuestionOption,
+        current_stance: RoleOpinion = None,
+        dialogue_history: List[Dict] = None,
+    ) -> str:
+        """生成自然的多轮对话回应 - 减少模板化"""
+
+        prompt = self._build_dialogue_response_prompt_medqa(
+            question_state,
+            role,
+            treatment_option,
+            current_stance,
+            dialogue_history,
+        )
+
+        try:
+            print(f"DEBUG: self.client = {self.client}")
+            if self.client:
+                print("DEBUG: 使用LLM客户端生成对话")
+                # 使用更高的temperature增加多样性
+                response = self.client.chat.completions.create(
+                    model=self.config.model_name,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": f"{self._get_role_system_prompt(role)}，请和其他智能体进行讨论，并保持一致的立场，可能需要讨论多轮。",
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=min(self.config.temperature + 0.2, 1.0),  # 增加随机性
+                    max_tokens=self.config.max_tokens,
+                    presence_penalty=0.3,  # 减少重复
+                    frequency_penalty=0.3,  # 增加词汇多样性
+                )
+                print("DEBUG: LLM响应原始内容:", response)
+                logger.info(f"生成response:{response}")
+                response_text = response.choices[0].message.content.strip()
+                logger.info(f"DEBUG: LLM响应 response_text: {response_text}")
+                return response_text
+            else:
+                print("DEBUG: 没有LLM客户端，使用模板回退")
+                # 如果没有LLM，使用模板化回退
+                try:
+                    print("DEBUG: 尝试调用 _generate_template_dialogue_fallback")
+                    result = self._generate_template_dialogue_fallback(
+                        patient_state, role, treatment_option, discussion_context
+                    )
+                    print(f"DEBUG: 模板方法返回: {result}")
+                    return result
+                except AttributeError as ae:
+                    print(f"🚨🚨🚨 DEBUG: AttributeError caught: {ae}")
+                    print(f"🚨🚨🚨 DEBUG: Returning hardcoded fallback")
+                    return f"考虑到患者{patient_state.age}岁，诊断为{patient_state.diagnosis}（{patient_state.stage}），作为{role.value}，我认为{treatment_option.value}是值得考虑的治疗选择。"
+                except Exception as e:
+                    print(f"🚨🚨🚨 DEBUG: Other exception: {type(e).__name__}: {e}")
+                    print(f"🚨🚨🚨 DEBUG: Returning hardcoded fallback")
+                    return f"考虑到患者{patient_state.age}岁，诊断为{patient_state.diagnosis}（{patient_state.stage}），作为{role.value}，我认为{treatment_option.value}是值得考虑的治疗选择。"
+                except Exception as ee:
+                    print(f"DEBUG: 其他异常: {ee}")
+                    return f"考虑到患者{patient_state.age}岁，诊断为{patient_state.diagnosis}（{patient_state.stage}），作为{role.value}，我认为{treatment_option.value}是值得考虑的治疗选择。"
+        except Exception as e:
+            print(f"DEBUG: 异常发生: {e}")
+            logger.error(f"Dialogue response generation failed: {e}")
+            return self._generate_template_dialogue_fallback(
+                patient_state, role, treatment_option, discussion_context
+            )
+
 
     def generate_dialogue_response(
         self,
@@ -907,6 +1084,66 @@ class LLMInterface:
         return self._generate_template_dialogue_fallback_NEW(
             patient_state, role, treatment_option, discussion_context
         )
+    def _build_dialogue_response_prompt_medqa(
+        self,
+        question_state: medqa_types.MedicalQuestionState,
+        role: RoleType,
+        treatment_option: medqa_types.QuestionOption,
+        current_stance: RoleOpinion,
+        dialogue_history: List[Dict[str, str]]
+    ):
+        """构建对话回应提示词 - 强调自然性和个性化"""
+
+        # 构建对话历史上下文
+        history_context = ""
+        if dialogue_history:
+            recent_exchanges = dialogue_history
+            history_context = "\n上一轮对话:\n"
+            for i, exchange in enumerate(recent_exchanges):
+                history_context += f"上一轮{i+1}: {exchange.get('role', 'Unknown')} - {exchange.get('content', '')}...\n"
+
+        logger.info(f"上一轮非自己的对话: {history_context}")
+
+        # 构建立场信息
+        stance_info = ""
+
+        if current_stance:
+            stance_value = current_stance.treatment_preferences.get(
+                treatment_option.value, 0
+            )
+            if stance_value > 0.7:
+                stance_info = "你对该治疗方案持积极态度"
+            elif stance_value > 0:
+                stance_info = "你对该治疗方案持谨慎支持态度"
+            elif stance_value < -0.5:
+                stance_info = "你对该治疗方案有较大担忧"
+            else:
+                stance_info = "你对该治疗方案持中性态度"
+        logger.info(f"{role.value}当前立场Stance info: {stance_info}")
+        prompt = f"""
+作为{role.value}，请针对以下情况给出自然、专业的回应：
+
+患者问题信息：
+- 问题描述: {question_state.question}
+- 相关背景: {question_state.meta_info or '无特殊背景'}
+
+讨论的问题选项: {treatment_option.value}
+
+当前讨论背景: {history_context}
+
+当前的立场信息：{stance_info}
+
+
+
+请注意：
+1. 回应要自然流畅，避免模板化表达
+2. 体现你的专业角色特点
+3. 考虑之前的对话内容，保持连贯性
+4. 表达要有个人色彩，不要千篇一律
+5. 长度控制在2-3句话，简洁有力
+6. 如果有不同意见，要礼貌但坚定地表达
+"""
+        return prompt
 
     def _build_dialogue_response_prompt(
         self,
@@ -937,7 +1174,7 @@ class LLMInterface:
             stance_value = current_stance.treatment_preferences.get(
                 treatment_option.value, 0
             )
-            if stance_value > 0.5:
+            if stance_value > 0.7:
                 stance_info = "你对该治疗方案持积极态度"
             elif stance_value > 0:
                 stance_info = "你对该治疗方案持谨慎支持态度"
