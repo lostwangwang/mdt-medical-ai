@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Any, Optional, Union
 from enum import Enum
 from datetime import datetime
+from experiments.medqa_types import MedicalQuestionState, QuestionOption
 
 
 class RoleType(Enum):
@@ -137,7 +138,7 @@ class DialogueMessage:
     content: str
     timestamp: datetime
     message_type: str  # "initial_opinion", "response", "rebuttal", "consensus"
-    treatment_focus: TreatmentOption
+    treatment_focus: Union[TreatmentOption, QuestionOption] = None
 
 
 @dataclass
@@ -156,7 +157,7 @@ class DialogueRound:
 
     round_number: int
     messages: List[DialogueMessage]
-    focus_treatment: Optional[TreatmentOption]
+    focus_treatment: Union[TreatmentOption, QuestionOption]
     consensus_status: str  # "discussing", "converging", "concluded"
 
 

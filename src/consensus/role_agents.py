@@ -25,13 +25,20 @@ from ..core.data_models import (
     ChatRole,
 )
 
+from experiments.medqa_types import MedicalQuestionState, QuestionOption
+
 logger = logging.getLogger(__name__)
 
 
 class RoleAgent:
     """角色智能体基类"""
 
-    def __init__(self, role: RoleType, llm_interface: Optional[LLMInterface] = None, llm_config: Optional[LLMConfig] = None):
+    def __init__(
+        self,
+        role: RoleType,
+        llm_interface: Optional[LLMInterface] = None,
+        llm_config: Optional[LLMConfig] = None,
+    ):
         """初始化角色智能体
         Args:
             role: 角色类型
@@ -45,10 +52,12 @@ class RoleAgent:
         else:
             cfg = llm_config or LLMConfig()
             self.llm_interface = LLMInterface(cfg)
-        self.specialization = self._get_specialization() # 通过内部方法获取实例的"专业领域"
+        self.specialization = (
+            self._get_specialization()
+        )  # 通过内部方法获取实例的"专业领域"
         self.dialogue_history = []
         self.current_stance = {}  # 当前立场
-        
+
         # RL指导相关属性
         # 用于存储RL模型的指导，包括推荐的治疗方案、置信度和解释
         # 默认为None，在RL训练完成后会被赋值
@@ -62,7 +71,7 @@ class RoleAgent:
         # 用于存储角色的原始偏好
         # 默认为空字典，在初始化时会被赋值
         self.original_preferences = {}  # 保存原始偏好
-        
+
         logger.info(f"Initialized {role.value} agent")
 
     def _get_specialization(self) -> Dict[str, Any]:
@@ -197,9 +206,18 @@ class RoleAgent:
         }
         return specializations.get(self.role, {})
 
-    def _update_agent_opinions_and_preferences(self, patient_state: PatientState, current_round: DialogueRound, previous_opinion: RoleOpinion, treatment_options: List[TreatmentOption])->RoleOpinion:
-        """根据当前轮次的对话内容,更新角色的治疗偏好和治疗意见以及置信度"""
-        reasoning = self._generate_update_agent_opinions_reasoning(patient_state, current_round, previous_opinion, treatment_options)
+    def _update_agent_opinions_and_preferences_medqa(
+        self,
+        question_state: MedicalQuestionState,
+        current_round: DialogueRound,
+        previous_opinion: RoleOpinion,
+        question_options: List[QuestionOption],
+    ) -> RoleOpinion:
+        """根据当前轮次的对话内容,更新角色的医疗问题偏好和医疗问题意见以及置信度"""
+        reasoning = self._generate_update_agent_opinions_reasoning_medqa(
+            question_state, current_round, previous_opinion, question_options
+        )
+        print(reasoning)
         reasoning = json.loads(reasoning)
         role_option = RoleOpinion(
             role=self.role.value,
@@ -212,11 +230,70 @@ class RoleAgent:
         self.current_stance = role_option.treatment_preferences
         return role_option
 
+    def _update_agent_opinions_and_preferences(
+        self,
+        patient_state: PatientState,
+        current_round: DialogueRound,
+        previous_opinion: RoleOpinion,
+        treatment_options: List[TreatmentOption],
+    ) -> RoleOpinion:
+        """根据当前轮次的对话内容,更新角色的治疗偏好和治疗意见以及置信度"""
+        reasoning = self._generate_update_agent_opinions_reasoning(
+            patient_state, current_round, previous_opinion, treatment_options
+        )
+        reasoning = json.loads(reasoning)
+        role_option = RoleOpinion(
+            role=self.role.value,
+            treatment_preferences=reasoning["treatment_preferences"],
+            reasoning=reasoning["reasoning"],
+            confidence=reasoning["confidence"],
+            concerns=reasoning["concerns"],
+        )
+
+        self.current_stance = role_option.treatment_preferences
+        return role_option
     
-    def _generate_update_agent_opinions_reasoning(self, patient_state: PatientState, current_round: DialogueRound, previous_opinion: RoleOpinion, treatment_options: List[TreatmentOption]):
+    def _generate_update_agent_opinions_reasoning_medqa(
+        self,
+        question_state: MedicalQuestionState,
+        current_round: DialogueRound,
+        previous_opinion: RoleOpinion,
+        question_options: List[QuestionOption],
+    ):
+        """根据当前轮次的对话内容,生成更新角色医疗问题意见的推理"""
+        # 如果有LLM接口，使用智能推理
+        if self.llm_interface:
+            try:
+                # 使用LLM生成专业推理
+                reasoning = self.llm_interface.generate_update_agent_opinions_reasoning_medqa(
+                    question_state=question_state,
+                    role=self.role,
+                    current_round=current_round,
+                    previous_opinion=previous_opinion,
+                    question_options=question_options,
+                )
+                if reasoning and len(reasoning.strip()) > 0:
+                    logger.debug(
+                        f"[更新立场生成推理]Generated LLM reasoning for {self.role.value}: {reasoning}..."
+                    )
+
+                    return reasoning
+
+            except Exception as e:
+                logger.warning(
+                    f"[更新立场生成推理] LLM reasoning generation failed for {self.role}: {e}"
+                )
+
+    def _generate_update_agent_opinions_reasoning(
+        self,
+        patient_state: PatientState,
+        current_round: DialogueRound,
+        previous_opinion: RoleOpinion,
+        treatment_options: List[TreatmentOption],
+    ):
         """根据当前轮次的对话内容,生成更新角色意见的推理"""
-        
-       # 如果有LLM接口，使用智能推理
+
+        # 如果有LLM接口，使用智能推理
         if self.llm_interface:
             try:
                 # 使用LLM生成专业推理
@@ -228,16 +305,80 @@ class RoleAgent:
                     treatment_options=treatment_options,
                 )
                 if reasoning and len(reasoning.strip()) > 0:
-                    logger.debug(f"[更新立场生成推理]Generated LLM reasoning for {self.role.value}: {reasoning}...")
-                    
-                    return reasoning
-                    
-            except Exception as e:
-                logger.warning(f"[更新立场生成推理] LLM reasoning generation failed for {self.role}: {e}")
+                    logger.debug(
+                        f"[更新立场生成推理]Generated LLM reasoning for {self.role.value}: {reasoning}..."
+                    )
 
-        
+                    return reasoning
+
+            except Exception as e:
+                logger.warning(
+                    f"[更新立场生成推理] LLM reasoning generation failed for {self.role}: {e}"
+                )
+
+    def generate_initial_opinion_medqa(
+        self,
+        question_state: MedicalQuestionState,
+        question_options: List[QuestionOption],
+    ) -> RoleOpinion:
+        """生成初始意见 - 专为MedQA场景设计"""
+        reasoning = self._generate_reasoning_medqa(
+            question_state,
+            question_options=question_options,
+        )
+        reasoning = json.loads(reasoning)
+        print(reasoning)
+        role_option = RoleOpinion(
+            role=self.role.value,
+            treatment_preferences=reasoning["treatment_preferences"],
+            reasoning=reasoning["reasoning"],
+            confidence=reasoning["confidence"],
+            concerns=reasoning["concerns"],
+        )
+
+        self.current_stance = role_option.treatment_preferences
+
+        return role_option
+
+    def _generate_reasoning_medqa(
+        self,
+        question_state: MedicalQuestionState,
+        question_options: List[QuestionOption],
+    ) -> str:
+        """生成决策推理 - 专为MedQA场景设计"""
+        # 找到最推荐的治疗
+        # best_treatment = max(treatment_prefs.items(), key=lambda x: x[1])
+
+        # 如果有LLM接口，使用智能推理
+        if self.llm_interface:
+            try:
+                # 使用LLM生成专业推理
+                reasoning = self.llm_interface.generate_treatment_reasoning_medqa(
+                    question_state=question_state,
+                    role=self.role,
+                    question_options=question_options,
+                )
+                if reasoning and len(reasoning.strip()) > 0:
+                    logger.debug(
+                        f"Generated LLM reasoning for {self.role.value}: {reasoning}..."
+                    )
+
+                    return reasoning
+
+            except Exception as e:
+                logger.warning(f"LLM reasoning generation failed for {self.role}: {e}")
+
+        # 降级到改进的模板化推理
+        template_reasoning = f"Based on the patient's condition and relevant knowledge, the recommended treatment"
+
+        logger.debug(f"Using template reasoning for {self.role.value}")
+        return template_reasoning
+
     def generate_initial_opinion(
-        self, patient_state: PatientState, knowledge: Dict[str, Any], treatment_options: List[TreatmentOption]
+        self,
+        patient_state: PatientState,
+        knowledge: Dict[str, Any],
+        treatment_options: List[TreatmentOption],
     ) -> RoleOpinion:
         """生成初始意见"""
         # 我可以调用大模型吗? 可以，基于患者状态和相关知识，调用llm_interface.generate_text方法生成初始意见
@@ -246,10 +387,17 @@ class RoleAgent:
         treatment_prefs = self._calculate_treatment_preferences(
             patient_state, knowledge
         )
-        logger.debug(f"[{self.role.value}] Generated initial treatment preferences: {treatment_prefs}")
-        
+        logger.debug(
+            f"[{self.role.value}] Generated initial treatment preferences: {treatment_prefs}"
+        )
+
         # reasoning是什么？ 它是一个字符串，描述了基于患者状态和治疗偏好的推理过程
-        reasoning = self._generate_reasoning(patient_state, treatment_prefs, knowledge, treatment_options=treatment_options)
+        reasoning = self._generate_reasoning(
+            patient_state,
+            treatment_prefs,
+            knowledge,
+            treatment_options=treatment_options,
+        )
         reasoning = json.loads(reasoning)
         role_option = RoleOpinion(
             role=self.role.value,
@@ -261,8 +409,41 @@ class RoleAgent:
 
         self.current_stance = role_option.treatment_preferences
         # 更新共识矩阵的置信度
-        
+
         return role_option
+
+    def _calculate_treatment_preferences_medqa(
+        self, patient_state: PatientState, knowledge: Dict[str, Any]
+    ) -> Dict[TreatmentOption, float]:
+        """计算治疗偏好评分 - 专为MedQA场景设计"""
+        prefs = {}
+
+        for treatment in TreatmentOption:
+            # 基于角色特征计算偏好评分
+            score = self._evaluate_treatment_for_role_medqa(treatment, patient_state)
+            prefs[treatment] = np.clip(score, -1.0, 1.0)
+
+        return prefs
+
+    def _evaluate_treatment_for_role_medqa(
+        self, treatment: TreatmentOption, patient_state: PatientState
+    ) -> float:
+        """角色特异性治疗评估 - 专为MedQA场景设计"""
+        # 基础评分表
+        base_scores = {
+            RoleType.ONCOLOGIST: {},
+            # 其他角色的评分保持不变
+        }
+
+        role_scores = base_scores.get(self.role, {})
+        base_score = role_scores.get(treatment, 0.0)
+
+        # 根据患者状态调整评分
+        adjusted_score = self._adjust_score_by_patient_state(
+            base_score, treatment, patient_state
+        )
+
+        return adjusted_score
 
     def _calculate_treatment_preferences(
         self, patient_state: PatientState, knowledge: Dict[str, Any]
@@ -389,7 +570,7 @@ class RoleAgent:
         """生成决策推理"""
         # 找到最推荐的治疗
         best_treatment = max(treatment_prefs.items(), key=lambda x: x[1])
-        
+
         # 如果有LLM接口，使用智能推理
         if self.llm_interface:
             try:
@@ -402,13 +583,15 @@ class RoleAgent:
                     treatment_options=treatment_options,
                 )
                 if reasoning and len(reasoning.strip()) > 0:
-                    logger.debug(f"Generated LLM reasoning for {self.role.value}: {reasoning}...")
-                    
+                    logger.debug(
+                        f"Generated LLM reasoning for {self.role.value}: {reasoning}..."
+                    )
+
                     return reasoning
-                    
+
             except Exception as e:
                 logger.warning(f"LLM reasoning generation failed for {self.role}: {e}")
-        
+
         # 降级到改进的模板化推理
         reasoning_templates = {
             RoleType.ONCOLOGIST: f"Based on clinical evidence and {patient_state.diagnosis} stage {patient_state.stage}, considering the patient's age {patient_state.age} and comorbidities {patient_state.comorbidities}, {best_treatment[0].value} offers the best survival benefit with acceptable risk profile.",
@@ -421,9 +604,10 @@ class RoleAgent:
         }
 
         template_reasoning = reasoning_templates.get(
-            self.role, f"From {self.role.value} perspective, {best_treatment[0].value} is the recommended approach for this patient"
+            self.role,
+            f"From {self.role.value} perspective, {best_treatment[0].value} is the recommended approach for this patient",
         )
-        
+
         logger.debug(f"Using template reasoning for {self.role.value}")
         return template_reasoning
 
@@ -448,8 +632,31 @@ class RoleAgent:
         base_confidence = role_relevance.get(self.role, 0.7)
 
         return base_confidence * data_completeness * complexity_penalty
+    
+    def generate_dialogue_response_medqa(
+        self,
+        question_state: MedicalQuestionState,
+        target_treatment: TreatmentOption,
+        opinions_dict: Dict[RoleType, RoleOpinion] = None,
+        last_round_messages: List[DialogueMessage] = None,
+    ):
+        # 生成回应内容
+        response_content = self._construct_response_medqa(
+            question_state,
+            target_treatment,
+            opinions_dict=opinions_dict,
+            last_round_messages=last_round_messages,
+        )
 
-
+        return DialogueMessage(
+            role=self.role,
+            content=response_content,
+            timestamp=datetime.now(),
+            message_type="response",
+            treatment_focus=target_treatment,
+        )
+    
+    
     def generate_dialogue_response(
         self,
         patient_state: PatientState,
@@ -463,7 +670,12 @@ class RoleAgent:
 
         # 生成回应内容
         response_content = self._construct_response(
-            patient_state, knowledge, target_treatment, full_dialogue_context=dialogue_context, opinions_dict=opinions_dict, last_round_messages=last_round_messages
+            patient_state,
+            knowledge,
+            target_treatment,
+            full_dialogue_context=dialogue_context,
+            opinions_dict=opinions_dict,
+            last_round_messages=last_round_messages,
         )
 
         return DialogueMessage(
@@ -473,6 +685,41 @@ class RoleAgent:
             message_type="response",
             treatment_focus=target_treatment,
         )
+    def _construct_response_medqa(
+        self,
+        question_state: MedicalQuestionState,
+        treatment: QuestionOption,
+        opinions_dict: Dict[RoleType, RoleOpinion] = None,
+        last_round_messages: List[DialogueMessage] = None,
+    ) -> str:
+        """构建回应内容 - 基于患者状态、知识、治疗选项、对话上下文、立场和上一轮对话, 要用"""
+        logger.info(f"开始构建{self.role.value}的回应内容")
+        # 优先使用LLM生成自然对话
+        if self.llm_interface:
+            try:
+                current_stance = opinions_dict[self.role.value]
+                logger.info(f"当前{self.role.value}立场: {current_stance}")
+
+                # 使用LLM生成自然对话回应
+                response = self.llm_interface.generate_dialogue_response_medqa(
+                    question_state=question_state,
+                    role=self.role,
+                    treatment_option=treatment,
+                    current_stance=current_stance,
+                    dialogue_history=self._get_last_round_history(
+                        last_round_messages
+                    ),
+                )
+
+                if response and len(response.strip()) > 0:
+                    logger.debug(
+                        f"Generated LLM response for {self.role.value}: {response}..."
+                    )
+                    return response
+
+            except Exception as e:
+                logger.warning(f"LLM response generation failed for {self.role}: {e}")
+
 
     def _construct_response(
         self,
@@ -491,7 +738,7 @@ class RoleAgent:
                 dialogue_context = ""
                 current_stance = opinions_dict[self.role.value]
                 logger.info(f"当前{self.role.value}立场: {current_stance}")
-                
+
                 # 使用LLM生成自然对话回应
                 response = self.llm_interface.generate_dialogue_response(
                     patient_state=patient_state,
@@ -500,33 +747,40 @@ class RoleAgent:
                     discussion_context=dialogue_context,
                     knowledge_context=knowledge,
                     current_stance=current_stance,
-                    dialogue_history=self._get_recent_dialogue_history(last_round_messages),
+                    dialogue_history=self._get_recent_dialogue_history(
+                        last_round_messages
+                    ),
                 )
-                
+
                 if response and len(response.strip()) > 0:
-                    logger.debug(f"Generated LLM response for {self.role.value}: {response}...")
+                    logger.debug(
+                        f"Generated LLM response for {self.role.value}: {response}..."
+                    )
                     return response
-                    
+
             except Exception as e:
                 logger.warning(f"LLM response generation failed for {self.role}: {e}")
-        
-        
-    def _get_last_round_history(self, last_round_messages: List[DialogueMessage])->List[Dict[str, Any]]:
+
+    def _get_last_round_history(
+        self, last_round_messages: List[DialogueMessage]
+    ) -> List[Dict[str, Any]]:
         """提取上一轮非当前角色的对话历史"""
         last_round_history: List[Dict[str, Any]] = []
         for item in last_round_messages:
             if item.role != self.role:
-                last_round_history.append({"role": item.role.value, "content": item.content})
+                last_round_history.append(
+                    {"role": item.role.value, "content": item.content}
+                )
         return last_round_history
 
     def _get_recent_dialogue_history(
-        self,
-        messages: Optional[List[DialogueMessage]] = None,
-        limit: int = 5
+        self, messages: Optional[List[DialogueMessage]] = None, limit: int = 5
     ) -> List[Dict[str, Any]]:
         """提取最近对话历史供LLM提示使用（仅需role与content）"""
         history_list: List[Dict[str, Any]] = []
-        source = messages if messages is not None else getattr(self, "dialogue_history", [])
+        source = (
+            messages if messages is not None else getattr(self, "dialogue_history", [])
+        )
         if not source:
             return history_list
         recent = source[-limit:] if len(source) > limit else source
@@ -535,11 +789,13 @@ class RoleAgent:
                 role_name = item.get("role", "Unknown")
                 content = item.get("content", "")
             else:
-                role_name = item.role.value if hasattr(item, "role") and hasattr(item.role, "value") else str(getattr(item, "role", "Unknown"))
+                role_name = (
+                    item.role.value
+                    if hasattr(item, "role") and hasattr(item.role, "value")
+                    else str(getattr(item, "role", "Unknown"))
+                )
                 content = getattr(item, "content", "")
             if not content:
                 continue
             history_list.append({"role": role_name, "content": content})
         return history_list
-
-    
