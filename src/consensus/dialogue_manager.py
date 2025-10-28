@@ -125,7 +125,7 @@ class MultiAgentDialogueManager:
             f"Generated messages for round {self.current_round}: {current_round}"
         )
         return current_round
-        pass
+    
     def _select_focus_treatment_medqa(
         self, question_options: List[QuestionOption],
         opinions_dict: Dict[RoleType, RoleOpinion],
