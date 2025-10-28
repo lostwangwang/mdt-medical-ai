@@ -1010,18 +1010,14 @@ class MultiAgentDialogueManager:
         opinions_dict: Dict[RoleType, RoleOpinion],
     ) -> DialogueRound:
         """进行顺序陈述式对话"""
-
         # 传统的顺序发言
         for role in speaking_order:
             agent = self.agents[role]
             last_round_messages = self._get_last_round_previous_messages()
             logger.info(f"Last round messages: {last_round_messages}")
-            all_previous_messages = self._get_all_previous_messages(round_data)
             logger.info(f"All previous messages: {all_previous_messages}")
             response = agent.generate_dialogue_response(
                 patient_state,
-                knowledge,
-                all_previous_messages,
                 round_data.focus_treatment,
                 opinions_dict,
                 last_round_messages,
