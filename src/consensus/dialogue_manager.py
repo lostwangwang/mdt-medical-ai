@@ -102,9 +102,8 @@ class MultiAgentDialogueManager:
         
         logger.info(f"the last round: {self.current_round}")
         logger.info(f"final opinions dict: {new_opinions_dict}")
-        print(self.current_round)
-        print("达成共识")
-        logger.info("达成共识!!!")
+        print(f"第{self.current_round}轮达成共识")
+        logger.info(f"第{self.current_round}轮达成共识!!!")
         logger.info("\n==生成共识结果开始：==")
         final_result = {
             "question_state": question_state,
@@ -154,11 +153,16 @@ class MultiAgentDialogueManager:
                 treatment_mentions[treatment] = 0
             treatment_mentions[treatment] += 1
         max_mentions = max(treatment_mentions.values())
+        
+        logger.info(f"treatment mentions: {treatment_mentions}")
+        logger.info(f"max mentions: {max_mentions}")
+
         focus_treatment = next(
             treatment
             for treatment, mentions in treatment_mentions.items()
             if mentions == max_mentions
         )
+
         return focus_treatment
 
     def _initialize_discussion_medqa(
@@ -359,7 +363,10 @@ class MultiAgentDialogueManager:
         self.consensus_calculator.build_weighted_matrix(opinions_dict)
         self.consensus_calculator.compute_kendalls_w()
         self.df, self.W, self.p_value, self.consensus = self.consensus_calculator.summarize()
-        print(self.df, self.W, self.p_value, self.consensus)
+        logger.info(f"第{self.current_round}轮df: {self.df}")
+        logger.info(f"第{self.current_round}轮W: {self.W}")
+        logger.info(f"第{self.current_round}轮p_value: {self.p_value}")
+        logger.info(f"第{self.current_round}轮共识结果：consensus: {self.consensus}")
         return self.consensus
     
     def _check_discussion_convergence(
@@ -700,7 +707,7 @@ class MultiAgentDialogueManager:
         """将LLM推理格式化为MDT发言消息"""
 
         # 获取推荐强度
-        treatment_score = opinion.treatment_preferences.get(focus_treatment, 0.0)
+        treatment_score = opinion.treatment_preferences.get(focus_treatment.name, 0.0)
         logger.debug(f"treatment_score: {treatment_score}")
         recommendation_phrase = self._get_recommendation_phrase(treatment_score)
         logger.debug(f"recommendation_phrase: {recommendation_phrase}")
@@ -731,15 +738,15 @@ class MultiAgentDialogueManager:
     def _get_recommendation_phrase(self, score: float) -> str:
         """获取推荐措辞"""
         if score > 0.7:
-            return "strongly recommend "
+            return "强烈推荐 "
         elif score > 0.3:
-            return "recommend "
+            return "推荐 "
         elif score > -0.3:
-            return "have mixed feelings about "
+            return "观点不一，对该方案持保留态度 "
         elif score > -0.7:
-            return "have concerns about "
+            return "对此方案存在担忧 "
         else:
-            return "strongly advise against "
+            return "强烈不建议 "
 
     def _conduct_dialogue_round(
         self, patient_state: PatientState, opinions_dict: Dict[RoleType, RoleOpinion]

@@ -326,6 +326,7 @@ class RoleAgent:
             question_state,
             question_options=question_options,
         )
+        logging.debug(f"[生成初始立场推理]Generated LLM reasoning for {self.role.value}: {reasoning}")
         reasoning = json.loads(reasoning)
         print(reasoning)
         role_option = RoleOpinion(
@@ -699,16 +700,16 @@ class RoleAgent:
             try:
                 current_stance = opinions_dict[self.role.value]
                 logger.info(f"当前{self.role.value}立场: {current_stance}")
-
+                dialogue_history = self._get_last_round_history(
+                    last_round_messages
+                )
                 # 使用LLM生成自然对话回应
                 response = self.llm_interface.generate_dialogue_response_medqa(
                     question_state=question_state,
                     role=self.role,
                     treatment_option=treatment,
                     current_stance=current_stance,
-                    dialogue_history=self._get_recent_dialogue_history(
-                        last_round_messages
-                    ),
+                    dialogue_history=dialogue_history,
                 )
 
                 if response and len(response.strip()) > 0:
