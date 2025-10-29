@@ -46,7 +46,7 @@ class MultiAgentDialogueManager:
         self.dialogue_rounds = []
         self.current_round = 0
         self.max_rounds = 5
-        self.convergence_threshold = 0.75
+        self.convergence_threshold = 0.7
         self.df = None
         self.W = None
         self.p_value = None
@@ -354,7 +354,7 @@ class MultiAgentDialogueManager:
         检查讨论是否收敛
         """
         print("判断是否收敛")
-        if self.current_round <= 2:
+        if self.current_round < 2:
             return False
         self.consensus_calculator.set_treatments(question_options)
         print("行数:", self.consensus_calculator.m)
@@ -362,7 +362,7 @@ class MultiAgentDialogueManager:
 
         self.consensus_calculator.build_weighted_matrix(opinions_dict)
         self.consensus_calculator.compute_kendalls_w()
-        self.df, self.W, self.p_value, self.consensus = self.consensus_calculator.summarize()
+        self.df, self.W, self.p_value, self.consensus = self.consensus_calculator.summarize(consensus_threshold=self.convergence_threshold)
         logger.info(f"第{self.current_round}轮df: {self.df}")
         logger.info(f"第{self.current_round}轮W: {self.W}")
         logger.info(f"第{self.current_round}轮p_value: {self.p_value}")
