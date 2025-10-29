@@ -25,6 +25,7 @@ from ..core.data_models import (
     ChatRole,
 )
 
+from ..tools.fix_json import fix_and_parse_single_json
 from experiments.medqa_types import MedicalQuestionState, QuestionOption
 
 logger = logging.getLogger(__name__)
@@ -218,7 +219,19 @@ class RoleAgent:
             question_state, current_round, previous_opinion, question_options
         )
         print(reasoning)
-        reasoning = json.loads(reasoning)
+        if isinstance(reasoning, str):
+            try:
+                reasoning = fix_and_parse_single_json(reasoning)
+            except Exception as e:
+                logger.warning(
+                    f"json解析失败:{e}, 原始字符串:{reasoning}"
+                )
+        elif isinstance(reasoning, dict):
+            pass
+        else:
+            logger.error(f"未知的推理类型:{type(reasoning)}, 原始字符串:{reasoning}")
+            return None
+        
         role_option = RoleOpinion(
             role=self.role.value,
             treatment_preferences=reasoning["treatment_preferences"],
@@ -322,13 +335,28 @@ class RoleAgent:
         question_options: List[QuestionOption],
     ) -> RoleOpinion:
         """生成初始意见 - 专为MedQA场景设计"""
+        
+
         reasoning = self._generate_reasoning_medqa(
             question_state,
             question_options=question_options,
         )
+        logger.warning(f"[DEBUG生成初始立场推理]原始推理:{reasoning}, 类型:{type(reasoning)}")
+        if isinstance(reasoning, str):
+            try:
+                reasoning = fix_and_parse_single_json(reasoning)
+            except Exception as e:
+                logger.warning(
+                    f"json解析失败:{e}, 原始字符串:{reasoning}"
+                )
+        elif isinstance(reasoning, dict):
+            pass
+        else:
+            logger.error(f"未知的推理类型:{type(reasoning)}, 原始字符串:{reasoning}")
+            return None
         logging.debug(f"[生成初始立场推理]Generated LLM reasoning for {self.role.value}: {reasoning}")
-        reasoning = json.loads(reasoning)
-        print(reasoning)
+        # reasoning = json.loads(reasoning)
+        logger.info(f"DEBUG: 看看转换对了吗:{type(reasoning)}, {reasoning}")
         role_option = RoleOpinion(
             role=self.role.value,
             treatment_preferences=reasoning["treatment_preferences"],
@@ -359,6 +387,7 @@ class RoleAgent:
                     role=self.role,
                     question_options=question_options,
                 )
+                logger.info(f"DEBUG: 我想知道这里返回的类型是什么:{type(reasoning)}")
                 if reasoning and len(reasoning.strip()) > 0:
                     logger.debug(
                         f"Generated LLM reasoning for {self.role.value}: {reasoning}..."

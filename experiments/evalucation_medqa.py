@@ -11,9 +11,7 @@ sys.path.append(project_root)
 from dataclasses import dataclass
 from datetime import datetime
 import experiments.medqa_types as medqa_types
-from typing import Dict, List, Optional
-from src.core.data_models import RoleType, TreatmentOption, RoleOpinion
-from src.core.data_models import PatientState
+from typing import Dict, List
 from src.consensus.dialogue_manager import MultiAgentDialogueManager
 from src.knowledge.rag_system import MedicalKnowledgeRAG
 from src.utils.llm_interface import LLMConfig, LLMInterface
@@ -37,6 +35,7 @@ if __name__ == "__main__":
 
     path = os.path.join(project_root, "data/examples/medqa/data_clean/questions/Mainland/dev.jsonl")
     data = read_jsonl(path, 5)
+    # data = data[1:2] # 只取第2个问题
     right_cnt = 0
     for idx, item in enumerate(data, start=1):
         print(f"执行第{idx}个问题: {item['question']}")
@@ -58,9 +57,15 @@ if __name__ == "__main__":
         # 打印结果
         final_result = dialogue_manager.conduct_mdt_discussion_medqa(question_state, question_options)
         df = final_result["final_consensus"]["df"]
-        logging.info(f"第{idx}轮df共识矩阵: {df}")
+        logging.info(f"第{idx}个问题的共识矩阵: {df}")
         best_treatment = df['mean'].idxmax()
+        logging.info(f"第{idx}个问题的最佳治疗方案: {best_treatment}")
+        logging.info(f"第{idx}个问题的平均投票: {df['mean']}")
         if medqa_types.QuestionOption(best_treatment).name == question_state.answer_idx:
+            logging.info(f"第{idx}个问题的智能体给的答案: {best_treatment}，正确")
             right_cnt += 1
+        else:
+            logging.info(f"第{idx}个问题的最佳治疗方案: {best_treatment}，错误")
+        logging.info(f"第{idx}个问题的正确答案: {question_state.answer_idx}")
     
     logging.info(f"总体准确率: {right_cnt / len(data):.2f}")
