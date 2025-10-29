@@ -267,24 +267,24 @@ class MultiAgentDialogueManager:
         prefs = opinion.treatment_preferences  # 格式：{"A": 0.9, "B": -0.2, ...}
         
         # 1. 过滤出有效选项（确保选项在偏好字典中存在）
-        valid_options = [
-            option for option in question_options 
-            # option.name 是选项标识（如"A"/"B"），需与prefs的键匹配
-            if option.name in prefs  
-            # 同时确保该选项在问题的原始选项中（双重校验，可选）
-            and option.name in question_state.options  
-        ]
+        # valid_options = [
+        #     option for option in question_options 
+        #     # option.name 是选项标识（如"A"/"B"），需与prefs的键匹配
+        #     if option.name in prefs  
+        #     # 同时确保该选项在问题的原始选项中（双重校验，可选）
+        #     and option.name in question_state.options  
+        # ]
         
-        if not valid_options:
-            raise ValueError("没有找到有效的选项偏好映射")
+        # if not valid_options:
+        #     raise ValueError("没有找到有效的选项偏好映射")
         
         # 2. 找到最高得分
-        max_score = max(prefs[option.name] for option in valid_options)
+        max_score = max(prefs[option.name] for option in question_options if option.name in prefs)
         
         # 3. 筛选出所有得分等于最高分的选项（处理并列情况）
         top_options = [
-            option for option in valid_options 
-            if prefs[option.name] == max_score
+            option for option in question_options 
+            if option.name in prefs and prefs[option.name] == max_score
         ]
         
         # 4. 如果有多个并列最高分，返回第一个；否则返回唯一的最高分选项
