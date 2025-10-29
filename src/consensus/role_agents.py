@@ -706,7 +706,7 @@ class RoleAgent:
                     role=self.role,
                     treatment_option=treatment,
                     current_stance=current_stance,
-                    dialogue_history=self._get_last_round_history(
+                    dialogue_history=self._get_recent_dialogue_history(
                         last_round_messages
                     ),
                 )

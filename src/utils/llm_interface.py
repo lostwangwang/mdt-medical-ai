@@ -238,6 +238,7 @@ class LLMInterface:
     "confidence": 0.8,
     "concerns": ["手术并发症风险", "化疗耐受性"]
 }}
+注意：treatment_preferences 的键必须是选项索引（如 \"A\"、\"B\"），不要使用选项全文。
 """
         return prompt
 
@@ -312,6 +313,7 @@ class LLMInterface:
     "confidence": 0.8,
     "concerns": ["手术并发症风险", "化疗耐受性"]
 }}
+注意：treatment_preferences 的键必须是选项索引（如 \"A\"、\"B\"），不要使用选项全文。
 """
         logger.info("更新立场的prompt: %s", prompt)
         return prompt
@@ -470,9 +472,10 @@ class LLMInterface:
 4. concerns：列表，含2-3个字符串，每项≤20字，对首选/次选选项的核心担忧。
 
 **输出要求**：
+- 请严格按以下JSON格式返回（仅返回JSON;
 - 仅返回JSON，不包含任何额外文本；
 - 字段名严格匹配上述名称，类型符合要求；
-- 选项必须完整包含列表中的所有项。
+- 问题选项必须完整包含列表中的所有项。
 
 示例输出：
 {{
@@ -481,6 +484,7 @@ class LLMInterface:
     "confidence": 0.85,
     "concerns": ["可能加重胃黏膜刺激", "需观察患者用药后反应"]
 }}
+注意：treatment_preferences 的键必须是选项索引（如 \"A\"、\"B\"），不要使用选项全文。
 """
         return prompt
 
@@ -820,6 +824,7 @@ class LLMInterface:
     "confidence": 0.8,
     "concerns": ["手术并发症风险", "化疗耐受性"]
 }}
+注意：treatment_preferences 的键必须是选项索引（如 \"A\"、\"B\"），不要使用选项全文。
 """
 
         if knowledge_context:

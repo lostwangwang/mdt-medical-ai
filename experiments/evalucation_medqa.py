@@ -27,7 +27,7 @@ def read_jsonl(file_path: str, n: int = None) -> List[Dict]:
 if __name__ == "__main__":
 
     path = os.path.join(project_root, "data/examples/medqa/data_clean/questions/Mainland/dev.jsonl")
-    data = read_jsonl(path, 10)
+    data = read_jsonl(path, 5)
     right_cnt = 0
     for idx, item in enumerate(data, start=1):
         print(f"执行第{idx}个问题: {item['question']}")
