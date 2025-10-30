@@ -559,7 +559,7 @@ class LLMInterface:
 
         ==============================
         【问题选项】
-        {[f"{option.value}: {question_state.options[option.name]}" for option in question_options]}  
+        {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}  
         （如示例："A: 苯溴马隆", "B: 别嘌呤醇"...）
 
         ==============================
