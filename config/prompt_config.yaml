@@ -1,0 +1,11 @@
+# MDT医疗智能体YAML配置文件
+# 文件路径: config/prompt_config.yaml
+# 作者: 姚刚
+# 功能: 定义MDT医疗智能体的提示模板
+
+# ===== MDT系统提示模板 =====
+
+# =====MEDQA数据集提示模板=====
+
+# =====PubMedQA数据集提示模板=====
+pubmedqa_mdt_initial_prompt:
