@@ -1,0 +1,19 @@
+symcat:
+  role: "system"
+  content: |
+    You are a medical expert.
+  prompt: |
+    You are a medical expert.
+
+    A {age}-year-old {gender} patient presents with the following findings:
+    
+    Race: {race}, Ethnicity: {ethnicity}
+    
+    Symptoms: 
+    {symptoms}
+    
+    Options:
+    {options}
+    
+    Which option is most likely?
+    Answer now with the option name only.
