@@ -1,11 +1,11 @@
+import os
 import random
 from datetime import datetime
 import pandas as pd
 import logging
 import yaml
 
-from llm.llm_client import LLMClient
-
+from experiments.one_agent_evaluation.llm.llm_client import LLMClient
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -98,6 +98,7 @@ df = pd.DataFrame(
     ]
 )
 
+
 def build_prompt(data: PatientRecord, dataset_name: str) -> str:
     path = "prompt.yaml"
     with open(path, "r", encoding="utf-8") as f:
@@ -127,15 +128,15 @@ if __name__ == "__main__":
     #     # 运行一些测试代码
     logging.info("开始运行....")
     llm_client = LLMClient(
-        model_name="qwen3-max",
-        api_key="sk-c014435c54c24ff594b5c0cfe1c951b4",
-        api_base="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        model_name=os.getenv("MODEL_NAME"),
+        api_key=os.getenv("DASHSCOPE_API_KEY"),
+        api_base=os.getenv("DASHSCOPE_BASE_URL"),
     )
     llm_client.init_client()
     random.seed()
     random_records = random.sample(records, 50)
     right_count = 0
-    for i,record in enumerate(random_records,start=1):
+    for i, record in enumerate(random_records, start=1):
         print(f"======第{i}个问题=====")
         role, content, prompt = build_prompt(record, "symcat")
         response = llm_client.ask_model(role="system", content=content, prompt=prompt)

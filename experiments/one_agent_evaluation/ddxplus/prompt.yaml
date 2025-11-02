@@ -1,0 +1,52 @@
+#==ddxplus===
+ddxplus:
+  role: "system"
+  content: |
+    You are a medical expert.
+  prompt: |
+    You are a medical expert.
+
+    A {age}-year-old {gender} presents with the following findings:
+
+    Initial evidence: {initial_evidence}
+
+    Clinical findings:
+    {clinical_diagnosis}
+
+    Possible diagnoses:
+    {all_diagnosis}
+
+    Which disease is most likely from the list above?
+
+    **Strict rules (must follow exactly):**
+    1. You MUST choose **only one** disease from the "Possible diagnoses" list above.  
+    2. You MUST respond with the disease name **only** — no explanation, no extra text, no punctuation, no code blocks, no quotes, and no newlines.  
+    3. Use the exact spelling/casing of the items in the "Possible diagnoses" list if possible; if not possible, return the closest exact phrase.  
+    4. If more than one candidate seems equally likely, choose the single best option from the list.  
+    5. Do NOT invent diagnoses that are not present in the list.
+
+    Answer now with the disease name only.
+
+symcat:
+  role: "system"
+  content: |
+    You are a medical expert.
+  prompt: |
+    You are a medical expert.
+
+    A {age}-year-old {gender} presents with the following findings:
+
+    Initial evidence: {initial_evidence}
+
+    Clinical findings:
+    {clinical_diagnosis}
+
+    Possible diagnoses:
+    {all_diagnosis}
+
+    Which disease is most likely from the list above?
+
+    **Strict rules (must follow exactly):**
+    1. You MUST choose **only one** disease from the "Possible diagnoses" list above.  
+    2. You MUST respond with the disease name **only** — no explanation, no extra text, no punctuation, no code blocks, no quotes, and no newlines.  
+    3. Use the exact spelling/casing of the items in the "Possible

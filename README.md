@@ -16,34 +16,15 @@
 
 ### 🎯 核心特性
 
-- **🤖 多智能体协商**：5个专业角色的智能对话与决策
-- **🧠 动态记忆演化**：患者状态的时间序列建模
+- **🤖 多智能体协商**：7个专业角色的智能对话与决策
 - **📊 共识量化分析**：可解释的决策透明性
 - **🚀 强化学习优化**：持续改进的决策质量
-- **📈 丰富的可视化**：全面的分析仪表板
-
-## 🏗️ 系统架构
-
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Memory        │    │   Knowledge     │    │   Consensus     │
-│   Controller    │───▶│   RAG System    │───▶│   Matrix        │
-│   (杜军)        │    │   (共同维护)    │    │   (姚刚)        │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                        │                        │
-         ▼                        ▼                        ▼
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Multi-Agent   │    │   RL Training   │    │   Integrated    │
-│   Dialogue      │───▶│   Environment   │───▶│   Workflow      │
-│   (姚刚)        │    │   (姚刚)        │    │   (Tianyu)      │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-```
 
 ## 🚀 快速开始
 
 ### 环境要求
 
-- Python 3.10+
+- Python 3.12+
 - 8GB+ RAM推荐
 - CUDA支持（可选，用于大规模训练）
 
@@ -66,95 +47,62 @@ pip install -r requirements.txt
 
 #### 1. 演示模式（推荐首次使用）
 
+##### 执行前可以先导入模型的环境变量，上传代码时请不要上传到版本控制
 ```bash
-python main.py --mode demo
+export QWEN_API_KEY=""
+export MODEL_NAME=""
+export BASE_URL=""
+```
+
+##### 执行演示模式
+```bash
+python main_integrated.py --mode demo
 ```
 
 这将分析3个预设的患者案例，展示系统的完整功能。
 
-#### 2. 单患者分析
+#### 2. 单患者分析 --- 先别用这个
 
 ```bash
 # 准备患者数据文件 patient.json
 python main.py --mode patient --patient-file data/examples/patient.json
 ```
 
-#### 3. 强化学习训练
+#### 3. 强化学习训练 --- 先别用这个
 
 ```bash
 python main.py --mode training --episodes 1000
 ```
 
-#### 4. 基线模型对比
-
-```bash
-python main.py --mode comparison --num-patients 100 --num-trials 50
-```
-
-#### 5. 时序模拟
-
-```bash
-python main.py --mode simulation --simulation-days 30
-```
-
-## 📊 使用示例
-
-### 基本用法
-
-```python
-from src.consensus.dialogue_manager import MultiAgentDialogueManager
-from src.knowledge.rag_system import MedicalKnowledgeRAG
-from src.core.data_models import PatientState
-
-# 初始化系统
-rag_system = MedicalKnowledgeRAG()
-dialogue_manager = MultiAgentDialogueManager(rag_system)
-
-# 创建患者状态
-patient = PatientState(
-    patient_id="DEMO_001",
-    age=65,
-    diagnosis="breast_cancer",
-    stage="II",
-    lab_results={"creatinine": 1.2, "hemoglobin": 11.5},
-    vital_signs={"bp_systolic": 140, "heart_rate": 78},
-    symptoms=["fatigue", "pain"],
-    comorbidities=["diabetes", "hypertension"],
-    psychological_status="anxious",
-    quality_of_life_score=0.7,
-    timestamp=datetime.now()
-)
-
-# 进行MDT讨论
-result = dialogue_manager.conduct_mdt_discussion(patient)
-
-# 获取推荐结果
-recommended_treatment = max(result.aggregated_scores.items(), key=lambda x: x[1])
-print(f"推荐治疗: {recommended_treatment[0].value}")
-print(f"共识得分: {recommended_treatment[1]:.3f}")
-```
-
-### 高级集成使用
-
-```python
-from src.integration.workflow_manager import IntegratedWorkflowManager
-
-# 创建工作流程管理器
-workflow = IntegratedWorkflowManager()
-
-# 注册患者
-workflow.register_patient("P001", {"age": 65, "diagnosis": "breast_cancer"})
-
-# 运行30天时序模拟
-results = workflow.run_temporal_simulation("P001", days=30)
-
-print(f"总决策次数: {results['performance_metrics']['total_mdt_discussions']}")
-print(f"平均共识得分: {results['performance_metrics']['avg_consensus_score']:.3f}")
-```
-
 ## 🧪 实验与评估
 
-### 基线模型对比
+### 数据集
+MedQA: https://github.com/jind11/MedQA
+PubMedQA: https://github.com/pubmedqa/pubmedqa
+DDXPlus: https://github.com/mila-iqia/ddxplus
+SymCat: https://github.com/teliov/SymCat-to-synthea
+JAMA & Medbullets: https://github.com/HanjieChen/ChallengeClinicalQA
+
+### 单智能体评估
+代码路径: mdt_medical_ai/experiments/one_agent_evaluation
+- 评估单一专家在不同数据集上的表现
+- 对比不同大语言模型的诊断准确率
+- 分析模型在医学问答任务中的表现
+
+> [!NOTE]
+> 1. 运行代码时，请修改代码中的数据集路径
+> 2. 请修改大模型的参数
+
+```python
+if __name__ == "__main__":
+    # 运行一些测试代码
+    llm_client = LLMClient(
+        model_name=os.getenv("MODEL_NAME"),
+        api_key=os.getenv("API_KEY"),
+        api_base=os.getenv("API_BASE"),
+    )
+```
+
 
 系统与以下基线模型进行对比：
 
@@ -171,22 +119,6 @@ print(f"平均共识得分: {results['performance_metrics']['avg_consensus_score
 - **共识对齐**: 与团队共识的一致程度
 - **解释质量**: 决策推理的可解释性
 - **响应时间**: 系统决策速度
-
-### 运行完整评估
-
-```bash
-# 运行所有实验
-python experiments/baseline_comparison.py
-
-# 查看结果
-ls results/
-# ├── figures/
-# │   ├── baseline_comparison.png
-# │   ├── consensus_heatmap.png
-# │   └── learning_curves.png
-# ├── comparison_results.json
-# └── training_results.json
-```
 
 ## 📁 项目结构
 
@@ -234,30 +166,6 @@ mdt_medical_ai/
 | **杜军**   | Memory Controller                  | 个体-群体记忆演化与数据管理      |
 | **姚刚**   | Consensus Matrix & RL              | 多智能体对话、共识分析、强化学习 |
 
-## 📈 性能基准
-
-| 指标     | 我们的系统 | 最佳基线 | 提升   |
-| -------- | ---------- | -------- | ------ |
-| 准确性   | 0.847      | 0.723    | +17.1% |
-| 一致性   | 0.912      | 0.834    | +9.4%  |
-| 共识对齐 | 0.889      | 0.756    | +17.6% |
-| 解释质量 | 0.950      | 0.820    | +15.9% |
-
-*基于100个测试患者的平均结果*
-
-## 🔬 研究贡献
-
-1. **动态记忆驱动的多智能体医学决策**
-   - 首次结合时序演化记忆与多角色协商
-   - 发表目标：AAAI 2024
-
-2. **可解释的共识形成机制**
-   - 量化医生间分歧，提供决策透明性
-   - 发表目标：CHI 2024
-
-3. **强化学习优化的MDT协同**
-   - 系统能从历史会诊中学习最优策略
-   - 发表目标：JBHI 2024
 
 ## 📝 引用
 
@@ -322,24 +230,6 @@ mdt_medical_ai/
 
 - `docs/paper_top_conference.md`
 - `docs/paper_top_conference.typ`
-
-一键编译 PDF：
-
-```bash
-python scripts/build_papers.py               # 同时编译 MD 与 Typst
-python scripts/build_papers.py --md-only     # 仅编译 Markdown
-python scripts/build_papers.py --typ-only    # 仅编译 Typst
-```
-
-生成结果：
-
-- `docs/paper_top_conference_md.pdf`
-- `docs/paper_top_conference_typst.pdf`
-
-编译依赖：
-
-- Markdown → PDF：`pandoc`（推荐）与 `xelatex` 或 `wkhtmltopdf`
-- Typst → PDF：`typst`（已采用自包含样式，无需外部模板）
 
 ## ⭐ 如果本项目对您有帮助，请给个星星支持！
 

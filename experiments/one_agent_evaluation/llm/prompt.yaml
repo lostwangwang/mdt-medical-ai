@@ -1,0 +1,27 @@
+# ==== ddxplus ====
+ddxplus:
+  role: "system",
+  content: |
+    You are a helpful assistant.
+  prompt: |
+    You are a medical expert.
+    
+    A {{age}}-year-old {{gender}} presents with the following findings:
+    
+    初始证据为: {{initial_evidence}}
+    
+    
+    临床诊断为: {{clinical_diagnosis}}
+    Possible diagnoses:
+    - Bronchitis
+    - GERD
+    - NSTEMI / STEMI
+    - Unstable angina
+    - Pericarditis
+    - Anemia
+    - Stable angina
+    - Boerhaave syndrome
+    
+    Which disease is most likely?
+    
+    Answer with the disease name only.

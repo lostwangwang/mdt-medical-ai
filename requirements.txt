@@ -1,154 +1,19 @@
-# MDT Medical AI System - Python 3.12 Compatible Dependencies
-# 更新时间: 2025-10-19
-# Python版本要求: >=3.12
-
-# 核心数据处理
-numpy>=1.26.0
-pandas>=2.1.0
-scipy>=1.11.0
-
-# 机器学习和深度学习
-scikit-learn>=1.3.2
-torch>=2.1.0
-torchvision>=0.16.0
-torchaudio>=2.1.0
-tensorflow>=2.15.0
-gymnasium>=0.29.0  # gym的新版本
-stable-baselines3>=2.2.0
-
-# 自然语言处理
-transformers>=4.36.0
-sentence-transformers>=2.2.2
-openai>=1.3.0
-langchain>=0.0.350
-langchain-community>=0.0.10
-
-# 数据可视化
-matplotlib>=3.8.0
-seaborn>=0.13.0
-plotly>=5.17.0
-wordcloud>=1.9.2
-networkx>=3.2.0
-
-# Web界面和API
-fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
-streamlit>=1.28.0
-gradio>=4.7.0
-flask>=3.0.0
-
-# 数据存储和处理
-pymongo>=4.6.0
-redis>=5.0.0
-psycopg2-binary>=2.9.9
-sqlalchemy>=2.0.23
-
-# 文件处理
-openpyxl>=3.1.2
-xlsxwriter>=3.1.9
-python-docx>=1.1.0
-PyPDF2>=3.0.1
-python-multipart>=0.0.6
-
-# 医学数据和知识库
-biopython>=1.81
-medspacy>=1.0.0
-scispacy>=0.5.3
-
-# 时间和日期处理
-python-dateutil>=2.8.2
-pytz>=2023.3
-
-# 配置和环境管理
-python-dotenv>=1.0.0
-pydantic>=2.5.0
-hydra-core>=1.3.2
-omegaconf>=2.3.0
-
-# 日志和监控
-loguru>=0.7.2
-tqdm>=4.66.0
-rich>=13.7.0
-wandb>=0.16.0
-
-# 测试框架
-pytest>=7.4.3
-pytest-cov>=4.1.0
-pytest-mock>=3.12.0
-pytest-asyncio>=0.21.1
-
-# 代码质量
-black>=23.11.0
-isort>=5.12.0
-flake8>=6.1.0
-mypy>=1.7.0
-pre-commit>=3.6.0
-
-# 并发和异步
-aiohttp>=3.9.0
-celery>=5.3.4
-
-# 数学和统计
-statsmodels>=0.14.0
-sympy>=1.12.0
-
-# 图像处理
-Pillow>=10.1.0
-opencv-python>=4.8.1.78
-SimpleITK>=2.3.1
-
-# 网络和HTTP
-requests>=2.31.0
-httpx>=0.25.0
-beautifulsoup4>=4.12.2
-
-# 加密和安全
-cryptography>=41.0.8
-bcrypt>=4.1.2
-
-# 实用工具
-click>=8.1.7
-typer>=0.9.0
-pyyaml>=6.0.1
-jsonschema>=4.20.0
-
-# Jupyter支持
-jupyter>=1.0.0
-ipykernel>=6.27.0
-ipywidgets>=8.1.0
-notebook>=7.0.0
-
-# 医学术语和标准
-pydicom>=2.4.3
-hl7apy>=1.3.4
-
-# 性能优化
-numba>=0.58.0
-joblib>=1.3.2
-dask>=2023.12.0
-
-# 云服务集成
-boto3>=1.34.0
-google-cloud-storage>=2.10.0
-azure-storage-blob>=12.19.0
-
-# 开发工具
-ipdb>=0.13.13
-memory-profiler>=0.61.0
-
-# 基础工具
-setuptools>=69.0.0
-wheel>=0.42.0
-pip>=23.3.0
-
-# 医学AI特定依赖
-monai>=1.3.0
-nibabel>=5.2.0
-
-# 中文支持
-zhconv>=1.4.3
-jieba>=0.42.1
-
-# 生产环境部署
-gunicorn>=21.2.0
-supervisor>=4.2.5
+datasets==4.1.1
+faiss==1.9.0
+gymnasium==1.2.1
+langchain_community==0.4.1
+matplotlib==3.10.7
+networkx==3.5
+numpy==2.3.4
+openai==2.6.1
+pandas==1.5.3
+plotly==6.3.1
+psutil==7.1.0
+PyYAML==6.0.3
+Requests==2.32.5
+scikit_learn==1.7.2
+scipy==1.16.3
+seaborn==0.13.2
+sentence_transformers==5.1.1
+torch==2.6.0+cu124
+wordcloud==1.9.4

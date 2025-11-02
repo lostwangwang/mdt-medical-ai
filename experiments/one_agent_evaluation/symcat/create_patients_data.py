@@ -2,7 +2,8 @@ import pandas as pd
 import random
 import json
 
-path = "/mnt/e/project/LLM/baseline/synthea/output/symptoms/csv/symptoms.csv"
+# 请修改路径
+path = ""
 # 1️⃣ 读取 CSV
 df = pd.read_csv(path)
 
