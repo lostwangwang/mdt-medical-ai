@@ -58,8 +58,8 @@ export BASE_URL=""
 ```bash
 python main_integrated.py --mode demo
 ```
-
-这将分析3个预设的患者案例，展示系统的完整功能。
+##### 代码查看
+1. 在`main_integrated.py` 搜索 `demo`, 查找到的第三个，即可找到演示的这段代码。
 
 #### 2. 单患者分析 --- 先别用这个
 
