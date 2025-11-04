@@ -20,6 +20,7 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
 import os
+from dotenv import load_dotenv
 
 from ..core.data_models import (
     PatientState,
