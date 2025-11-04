@@ -1,59 +1,93 @@
-# from experiments.medqa_types import MedicalQuestionState, QuestionOption
-import os
-import sys
+import ast
 import logging
+import os
 
-# 获取当前脚本所在目录（experiments/）
-current_script_dir = os.path.dirname(os.path.abspath(__file__))
-# 获取项目根目录（mdt_medical_ai/，即 experimentsexperiments 的父目录）
-project_root = os.path.dirname(current_script_dir)
-# 将项目根目录添加到 Python 搜索路径
-sys.path.append(project_root)
+from pandas import DataFrame, read_csv
+from experiments.evaluation_ddxplus.convert_evidences import decode_evidence
+from experiments.evaluation_symcat.evaluation_symcat import model_name, api_key
+from src.tools.read_files import read_jsonl
 from datetime import datetime
 import experiments.medqa_types as medqa_types
 from typing import Dict, List
 from src.consensus.dialogue_manager import MultiAgentDialogueManager
 from src.knowledge.rag_system import MedicalKnowledgeRAG
 from src.utils.llm_interface import LLMConfig, LLMInterface
-import json
+from src.tools.list_to_options import create_letter_options
+from dotenv import load_dotenv
+
+load_dotenv()
+
+model_name = os.getenv("MODEL_NAME")
+api_key = os.getenv("QWEN_API_KEY")
+base_url = os.getenv("BASE_URL")
 
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - %(filename)s:%(lineno)d - %(funcName)s() - %(levelname)s - %(message)s",
-    filename=f'app_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log',  # 日志文件路径
+    filename=f'./logs/app_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log',  # 日志文件路径
     filemode="a",  # 追加模式（默认）
 )
 
 
-def read_jsonl(file_path: str, n: int = None) -> List[Dict]:
-    with open(file_path, "r", encoding="utf-8") as f:
-        lines = f.readlines()
-    if n is not None:
-        lines = lines[:n]
-    return [json.loads(line.strip()) for line in lines]
+# 注解：df 是 DataFrame，columns 是字符串列表，返回值是 DataFrame
+def convert_str_columns_to_lists(df: DataFrame, columns: List[str]) -> DataFrame:
+    for col in columns:
+        df[col] = df[col].apply(
+            lambda x: ast.literal_eval(x) if isinstance(x, str) else x
+        )
+    return df
 
 
 if __name__ == "__main__":
-
-    path = os.path.join(
-        project_root, "data/examples/medqa/data_clean/questions/Mainland/dev.jsonl"
-    )
-    data = read_jsonl(path, 5)
+    path = "/mnt/e/project/LLM/mdt_medical_ai/data/examples/ddxplus/release_test_patients.csv"
+    data = read_csv(path)
+    list_columns = ["DIFFERENTIAL_DIAGNOSIS", "EVIDENCES"]
+    df = convert_str_columns_to_lists(data, list_columns)
+    medical_objects = []
+    df_sample = df.sample(n=50)
+    for idx, row in df_sample.iterrows():
+        medical_object = medqa_types.DDXPlusMedicalRecord(
+            age=row["AGE"],
+            differential_diagnosis=row["DIFFERENTIAL_DIAGNOSIS"],
+            sex=row["SEX"],
+            pathology=row["PATHOLOGY"],
+            evidences=row["EVIDENCES"],
+            initial_evidence=row["INITIAL_EVIDENCE"],
+        )
+        medical_objects.append(medical_object)
+    medical_objects = medical_objects[:10]  # 仅测试前10个病例
     right_cnt = 0
-    for idx, item in enumerate(data, start=1):
-        print(f"执行第{idx}个问题: {item['question']}")
+    for idx, item in enumerate(medical_objects, start=1):
+        print(f"执行第{idx}个问题")
+        print(f"item: {item}")
+        init_diagnosis = decode_evidence(item.initial_evidence)
+        print(f"init_diagnosis: {init_diagnosis}")
+        formatted_init_diagnosis = f"{init_diagnosis}"
+        evidences = [decode_evidence(evidence) for evidence in item.evidences]
+        formatted_evidences = "\n".join(f"- {item}" for item in evidences)
+        question = (
+            f"A {item.age} year old {item.sex} patient with the initial evidence: {formatted_init_diagnosis} \n "
+            f"And has the following evidences: {formatted_evidences}.\n"
+            f"What is the most likely diagnosis?"
+        )
+        print(f"question: {question}")
+        print(f"item.all_diagnosis: {item.all_diagnosis}")
+        logging.info((f"第{idx}个问题的答案:{item.pathology}"))
+        options = create_letter_options(item.all_diagnosis)
+        print(options)
+
         question_state = medqa_types.MedicalQuestionState(
             patient_id=str(idx),
-            question=item["question"],
-            options=item["options"],
-            answer=item["answer"],
-            meta_info=item["meta_info"],
-            answer_idx=item["answer_idx"],
+            question=question,
+            options=options,
+            answer=item.pathology,
+            meta_info="",
+            answer_idx=item.pathology,
         )
-        medqa_types.init_question_option(item["options"])
+        medqa_types.init_question_option(options)
         print("枚举成员列表：", list(medqa_types.QuestionOption))
         question_options = list(medqa_types.QuestionOption)
-        llm_config = LLMConfig(model_name=None, api_key=None, base_url=None)
+        llm_config = LLMConfig(model_name=model_name, api_key=api_key, base_url=base_url)
         llm_interface = LLMInterface(config=llm_config)
         rag_system = MedicalKnowledgeRAG()
         dialogue_manager = MultiAgentDialogueManager(rag_system, llm_interface)
@@ -61,16 +95,15 @@ if __name__ == "__main__":
         final_result = dialogue_manager.conduct_mdt_discussion_medqa(
             question_state, question_options
         )
-        df = final_result["final_consensus"]["df"]
-        logging.info(f"第{idx}个问题的共识矩阵: {df}")
-        best_treatment = df["mean"].idxmax()
+        final_df = final_result["final_consensus"]["df"]
+        best_treatment = final_df["mean"].idxmax()
         logging.info(f"第{idx}个问题的最佳治疗方案: {best_treatment}")
-        logging.info(f"第{idx}个问题的平均投票: {df['mean']}")
-        if medqa_types.QuestionOption(best_treatment).name == question_state.answer_idx:
+        logging.info(f"第{idx}个问题的平均投票: {final_df['mean']}")
+        if medqa_types.QuestionOption(best_treatment).value == question_state.answer_idx:
             logging.info(f"第{idx}个问题的智能体给的答案: {best_treatment}，正确")
             right_cnt += 1
         else:
             logging.info(f"第{idx}个问题的最佳治疗方案: {best_treatment}，错误")
         logging.info(f"第{idx}个问题的正确答案: {question_state.answer_idx}")
 
-    logging.info(f"总体准确率: {right_cnt / len(data):.2f}")
+    logging.info(f"总体准确率: {right_cnt / len(medical_objects):.2f}")

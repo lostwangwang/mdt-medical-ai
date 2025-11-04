@@ -2,6 +2,8 @@
 import os
 import sys
 import logging
+import random
+
 # 获取当前脚本所在目录（experiments/）
 current_script_dir = os.path.dirname(os.path.abspath(__file__))
 # 获取项目根目录（mdt_medical_ai/，即 experimentsexperiments 的父目录）
@@ -23,11 +25,13 @@ logging.basicConfig(
     filemode='a'  # 追加模式（默认）
 )
 
-def read_jsonl(file_path: str, n: int = None) -> List[Dict]:
+def read_jsonl(file_path: str, random_sample: int = None) -> List[Dict]:
     with open(file_path, 'r', encoding='utf-8') as f:
         lines = f.readlines()
-    if n is not None:
-        lines = lines[:n]
+    if random_sample is not None:
+        # 确保抽取数量不超过现有条数
+        sample_size = min(random_sample, len(lines))
+        lines = random.sample(lines, sample_size)
     return [json.loads(line.strip()) for line in lines]
 
 if __name__ == "__main__":
