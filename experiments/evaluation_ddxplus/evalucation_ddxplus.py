@@ -55,7 +55,7 @@ if __name__ == "__main__":
             initial_evidence=row["INITIAL_EVIDENCE"],
         )
         medical_objects.append(medical_object)
-    medical_objects = medical_objects[:10]  # 仅测试前10个病例
+    medical_objects = medical_objects[:1]  # 仅测试前10个病例
     right_cnt = 0
     for idx, item in enumerate(medical_objects, start=1):
         print(f"执行第{idx}个问题")

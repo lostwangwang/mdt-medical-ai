@@ -14,6 +14,13 @@ from src.consensus.dialogue_manager import MultiAgentDialogueManager
 from src.knowledge.rag_system import MedicalKnowledgeRAG
 from src.utils.llm_interface import LLMConfig, LLMInterface
 from datasets import load_dataset
+from dotenv import load_dotenv
+
+load_dotenv()
+
+model_name = os.getenv("MODEL_NAME")
+api_key = os.getenv("QWEN_API_KEY")
+base_url = os.getenv("BASE_URL")
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -54,7 +61,7 @@ if __name__ == "__main__":
         question_options = list(medqa_types.QuestionOption)
         print(ds)
         question_options = list(medqa_types.QuestionOption)
-        llm_config = LLMConfig(model_name=None, api_key=None, base_url=None)
+        llm_config = LLMConfig(model_name=model_name, api_key=api_key, base_url=base_url)
         llm_interface = LLMInterface(config=llm_config)
         rag_system = MedicalKnowledgeRAG()
         dialogue_manager = MultiAgentDialogueManager(rag_system, llm_interface)
