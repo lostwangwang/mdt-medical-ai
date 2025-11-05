@@ -213,10 +213,11 @@ class RoleAgent:
         current_round: DialogueRound,
         previous_opinion: RoleOpinion,
         question_options: List[QuestionOption],
+        dataset_name: str = None
     ) -> RoleOpinion:
         """根据当前轮次的对话内容,更新角色的医疗问题偏好和医疗问题意见以及置信度"""
         reasoning = self._generate_update_agent_opinions_reasoning_medqa(
-            question_state, current_round, previous_opinion, question_options
+            question_state, current_round, previous_opinion, question_options, dataset_name
         )
         print(reasoning)
         if isinstance(reasoning, str):
@@ -272,6 +273,7 @@ class RoleAgent:
         current_round: DialogueRound,
         previous_opinion: RoleOpinion,
         question_options: List[QuestionOption],
+        dataset_name: str = None
     ):
         """根据当前轮次的对话内容,生成更新角色医疗问题意见的推理"""
         # 如果有LLM接口，使用智能推理
@@ -284,6 +286,7 @@ class RoleAgent:
                     current_round=current_round,
                     previous_opinion=previous_opinion,
                     question_options=question_options,
+                    dataset_name=dataset_name
                 )
                 if reasoning and len(reasoning.strip()) > 0:
                     logger.debug(
@@ -333,13 +336,15 @@ class RoleAgent:
         self,
         question_state: MedicalQuestionState,
         question_options: List[QuestionOption],
+        dataset_name: str = None
     ) -> RoleOpinion:
         """生成初始意见 - 专为MedQA场景设计"""
         
 
         reasoning = self._generate_reasoning_medqa(
             question_state,
-            question_options=question_options,
+            question_options,
+            dataset_name
         )
         logger.warning(f"[DEBUG生成初始立场推理]原始推理:{reasoning}, 类型:{type(reasoning)}")
         if isinstance(reasoning, str):
@@ -373,6 +378,7 @@ class RoleAgent:
         self,
         question_state: MedicalQuestionState,
         question_options: List[QuestionOption],
+        dataset_name: str = None
     ) -> str:
         """生成决策推理 - 专为MedQA场景设计"""
         # 找到最推荐的治疗
@@ -386,6 +392,7 @@ class RoleAgent:
                     question_state=question_state,
                     role=self.role,
                     question_options=question_options,
+                    dataset_name=dataset_name
                 )
                 logger.info(f"DEBUG: 我想知道这里返回的类型是什么:{type(reasoning)}")
                 if reasoning and len(reasoning.strip()) > 0:
@@ -669,6 +676,7 @@ class RoleAgent:
         target_treatment: TreatmentOption,
         opinions_dict: Dict[RoleType, RoleOpinion] = None,
         last_round_messages: List[DialogueMessage] = None,
+        dataset_name: str = None
     ):
         # 生成回应内容
         response_content = self._construct_response_medqa(
@@ -676,6 +684,7 @@ class RoleAgent:
             target_treatment,
             opinions_dict=opinions_dict,
             last_round_messages=last_round_messages,
+            dataset_name=dataset_name
         )
 
         return DialogueMessage(
@@ -721,6 +730,7 @@ class RoleAgent:
         treatment: QuestionOption,
         opinions_dict: Dict[RoleType, RoleOpinion] = None,
         last_round_messages: List[DialogueMessage] = None,
+        dataset_name: str = None
     ) -> str:
         """构建回应内容 - 基于患者状态、知识、治疗选项、对话上下文、立场和上一轮对话, 要用"""
         logger.info(f"开始构建{self.role.value}的回应内容")
@@ -739,6 +749,7 @@ class RoleAgent:
                     treatment_option=treatment,
                     current_stance=current_stance,
                     dialogue_history=dialogue_history,
+                    dataset_name=dataset_name
                 )
 
                 if response and len(response.strip()) > 0:

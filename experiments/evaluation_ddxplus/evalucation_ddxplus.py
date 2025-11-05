@@ -93,7 +93,7 @@ if __name__ == "__main__":
         dialogue_manager = MultiAgentDialogueManager(rag_system, llm_interface)
         # 打印结果
         final_result = dialogue_manager.conduct_mdt_discussion_medqa(
-            question_state, question_options
+            question_state, question_options, dataset_name="ddxplus"
         )
         final_df = final_result["final_consensus"]["df"]
         best_treatment = final_df["mean"].idxmax()

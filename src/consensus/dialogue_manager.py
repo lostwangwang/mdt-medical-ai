@@ -56,6 +56,7 @@ class MultiAgentDialogueManager:
         self,
         question_state: MedicalQuestionState,
         question_options: List[QuestionOption],
+        dataset_name: str = None
     ) -> ConsensusResult:
         """
         进行MDT讨论
@@ -72,7 +73,7 @@ class MultiAgentDialogueManager:
 
         # 初始化对话 - 各角色生成基于证据的初始意见
         opinions_list = self._initialize_discussion_medqa(
-            question_state, question_options
+            question_state, question_options, dataset_name
         )
         logger.info(f"Initial opinions: {opinions_list}")
         # 将意见列表转换为字典，方便按角色快速访问
@@ -89,14 +90,14 @@ class MultiAgentDialogueManager:
 
             # 进行一轮结构化对话
             current_round = self._conduct_dialogue_round_medqa(
-                question_state, question_options, opinions_dict
+                question_state, question_options, opinions_dict, dataset_name
             )
             logger.info(f"dialogue round {self.current_round}: {current_round}")
             self.dialogue_rounds.append(current_round)
             logger.info(f"previous opinions dict: {opinions_dict}")
             # 基于对话内容更新各角色立场
             new_opinions_dict = self._update_agent_opinions_medqa(
-                question_state, current_round, opinions_dict, question_options
+                question_state, current_round, opinions_dict, question_options, dataset_name
             )
             logger.info(f"Updated opinions dict: {new_opinions_dict}")
         
@@ -122,6 +123,7 @@ class MultiAgentDialogueManager:
         self, question_state: MedicalQuestionState,
         question_options: List[QuestionOption],
         opinions_dict: Dict[RoleType, RoleOpinion],
+        dataset_name: str = None
     ) -> DialogueRound:
         """进行一轮结构化对话"""
         current_round = DialogueRound(
@@ -132,7 +134,7 @@ class MultiAgentDialogueManager:
         )
 
         current_round = self._conduct_sequential_presentation_medqa(
-            current_round, question_state, question_options, opinions_dict
+            current_round, question_state, question_options, opinions_dict, dataset_name=dataset_name
         )
         logger.info(
             f"Generated messages for round {self.current_round}: {current_round}"
@@ -167,7 +169,7 @@ class MultiAgentDialogueManager:
 
     def _initialize_discussion_medqa(
         self, question_state: MedicalQuestionState,
-        question_options: List[QuestionOption],
+        question_options: List[QuestionOption], dataset_name: str = None
     ) -> None:
         # 生成各角色的初始意见
         initial_round = DialogueRound(
@@ -182,14 +184,14 @@ class MultiAgentDialogueManager:
         for role, agent in self.agents.items():
             # 构建初始意见
             opinion = agent.generate_initial_opinion_medqa(
-                question_state, question_options
+                question_state, question_options, dataset_name
             )
             logger.info(f"Generated initial opinion for {role}: {opinion}")
             opinions_list.append(opinion)
 
             # 生成初始发言
             initial_message = self._create_initial_message_medqa(
-                agent, opinion, question_state, question_options
+                agent, opinion, question_state, question_options, dataset_name
             )
 
             logger.info(
@@ -205,7 +207,7 @@ class MultiAgentDialogueManager:
         return opinions_list
 
     def _create_initial_message_medqa(
-        self, agent: RoleAgent, opinion: RoleOpinion, question_state: MedicalQuestionState, question_options: List[QuestionOption]
+        self, agent: RoleAgent, opinion: RoleOpinion, question_state: MedicalQuestionState, question_options: List[QuestionOption], dataset_name: str = None
     ) -> DialogueMessage:
         """创建初始消息"""
         # 智能选择治疗方案（仅仅是最高分）
@@ -215,7 +217,7 @@ class MultiAgentDialogueManager:
 
         # 尝试使用LLM生成个性化初始消息
         content = self._generate_llm_initial_message_meqa(
-            agent, opinion, question_state, focus_question, question_options
+            agent, opinion, question_state, focus_question, question_options, dataset_name
         )
         logger.info(f"测试Generated initial message for {agent.role}: {content}")
 
@@ -228,7 +230,7 @@ class MultiAgentDialogueManager:
         )
 
     def _generate_llm_initial_message_meqa(
-        self, agent: RoleAgent, opinion: RoleOpinion, question_state: MedicalQuestionState, focus_treatment: QuestionOption, question_options: List[QuestionOption]
+        self, agent: RoleAgent, opinion: RoleOpinion, question_state: MedicalQuestionState, focus_treatment: QuestionOption, question_options: List[QuestionOption], dataset_name: str = None
     ):
         """使用LLM生成个性化初始消息"""
         if not hasattr(agent, "llm_interface") or not agent.llm_interface:
@@ -243,6 +245,7 @@ class MultiAgentDialogueManager:
                     opinion=opinion,
                     treatment_option=focus_treatment,
                     question_options=question_options,
+                    dataset_name=dataset_name
                 )
                 logger.info(
                     f"生成初始化发言, 治疗选项: {focus_treatment}, 推理: {reasoning}"
@@ -383,7 +386,7 @@ class MultiAgentDialogueManager:
         df, W, p_value, consensus = self.consensus_calculator.summarize()
         return consensus
 
-    def _update_agent_opinions_medqa(self, question_state: MedicalQuestionState, current_round: DialogueRound, opinions_dict: Dict[RoleType, RoleOpinion], question_options: List[QuestionOption]):
+    def _update_agent_opinions_medqa(self, question_state: MedicalQuestionState, current_round: DialogueRound, opinions_dict: Dict[RoleType, RoleOpinion], question_options: List[QuestionOption], dataset_name: str = None):
         """
         更新各角色立场
         - 基于当前轮对话内容，更新每个角色的治疗意见
@@ -399,7 +402,7 @@ class MultiAgentDialogueManager:
             previous_opinion = opinions_dict[role.value]
             logger.info(f"Previous opinion for {role.value}: {previous_opinion}")
             new_opintion = agent._update_agent_opinions_and_preferences_medqa(
-                question_state, current_round, previous_opinion, question_options
+                question_state, current_round, previous_opinion, question_options, dataset_name
             )
             new_opinions_dict[role.value] = new_opintion
 
@@ -1070,6 +1073,7 @@ class MultiAgentDialogueManager:
         question_state: MedicalQuestionState,
         question_options: List[QuestionOption],
         opinions_dict: Dict[RoleType, RoleOpinion],
+        dataset_name: str = None
     ) -> DialogueRound:
         """进行顺序陈述式对话"""
         # 传统的顺序发言
@@ -1081,6 +1085,7 @@ class MultiAgentDialogueManager:
                 round_data.focus_treatment,
                 opinions_dict,
                 last_round_messages,
+                dataset_name
             )
             logger.info(f"{role.value} responded: {response.content}...")
             round_data.messages.append(response)

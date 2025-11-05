@@ -1,2 +1,13 @@
+common:
+  role
 ddxplus:
+  prompt: |
+    You are a helpful assistant.
+
+pubmedqa:
+  build_treatment_reasoning_prompt:
+
+  build_focus_treatment_reasoning_prompt:
+  build_dialogue_response_prompt_medqa:
+  build_update_agent_opinions_reasoning_prompt:
   

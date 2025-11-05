@@ -1,0 +1,27 @@
+# prompts/symcat.yaml
+
+version: "v2.0"
+updated: "2025-11-05"
+author: "wangwang"
+description: "SymCat数据集提示词模板"
+
+system: |
+  You are a medical expert specialized in symptom-based diagnosis.
+
+prompt: |
+  A {age}-year-old {gender} presents with the following symptoms:
+  {symptoms}
+
+  Possible diagnoses:
+  {diagnosis_list}
+
+  Based on the evidence above, select the most likely diagnosis.
+  Respond only with the disease name.
+
+meta:
+  dataset: symcat
+  variables:
+    - age
+    - gender
+    - symptoms
+    - diagnosis_list
