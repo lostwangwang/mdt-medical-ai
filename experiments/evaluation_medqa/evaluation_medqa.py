@@ -67,7 +67,7 @@ if __name__ == "__main__":
         rag_system = MedicalKnowledgeRAG()
         dialogue_manager = MultiAgentDialogueManager(rag_system, llm_interface)
         # 打印结果
-        final_result = dialogue_manager.conduct_mdt_discussion_medqa(question_state, question_options)
+        final_result = dialogue_manager.conduct_mdt_discussion_medqa(question_state, question_options, dataset_name="medqa")
         df = final_result["final_consensus"]["df"]
         logging.info(f"第{idx}个问题的共识矩阵: {df}")
         best_treatment = df['mean'].idxmax()

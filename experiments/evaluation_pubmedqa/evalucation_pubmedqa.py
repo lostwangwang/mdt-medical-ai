@@ -9,7 +9,6 @@ project_root = os.path.dirname(current_script_dir)
 sys.path.append(project_root)
 from datetime import datetime
 import experiments.medqa_types as medqa_types
-from typing import Dict, List
 from src.consensus.dialogue_manager import MultiAgentDialogueManager
 from src.knowledge.rag_system import MedicalKnowledgeRAG
 from src.utils.llm_interface import LLMConfig, LLMInterface
@@ -37,9 +36,10 @@ def get_datas():
 
 if __name__ == "__main__":
     ds = get_datas()
-    total = 5
+    total = 1
     print("ds的个数", len(ds))
     right_cnt = 0
+    dataset_name = "pubmedqa"
     for idx in range(total):
         print("第{}个问题".format(idx + 1))
         case = ds["train"][idx]
@@ -56,6 +56,7 @@ if __name__ == "__main__":
             meta_info=context_text,
             answer_idx=case["final_decision"],
         )
+        print("问题的状态:", question_state)
         medqa_types.init_question_option(options)
         print("枚举成员列表：", list(medqa_types.QuestionOption))
         question_options = list(medqa_types.QuestionOption)
@@ -65,9 +66,9 @@ if __name__ == "__main__":
         llm_interface = LLMInterface(config=llm_config)
         rag_system = MedicalKnowledgeRAG()
         dialogue_manager = MultiAgentDialogueManager(rag_system, llm_interface)
-        # 打印结果
+        # # 打印结果
         final_result = dialogue_manager.conduct_mdt_discussion_medqa(
-            question_state, question_options
+            question_state, question_options, dataset_name
         )
         df = final_result["final_consensus"]["df"]
 

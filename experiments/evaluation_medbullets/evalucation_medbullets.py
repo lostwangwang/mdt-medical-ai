@@ -137,7 +137,7 @@ if __name__ == "__main__":
         dialogue_manager = MultiAgentDialogueManager(rag_system, llm_interface)
 
         # 执行MDT协同讨论（复用MedQA流程）
-        final_result = dialogue_manager.conduct_mdt_discussion_medqa(question_state, question_options)
+        final_result = dialogue_manager.conduct_mdt_discussion_medqa(question_state, question_options, dataset_name="medbullets")
         df = final_result["final_consensus"]["df"]
         logging.info(f"第{idx}个问题的共识矩阵: {df}")
 
