@@ -1,2 +1,10 @@
+common:
+  prompt: |
+    You are a helpful assistant.
 ddxplus:
+  prompt: |
+    You are a helpful assistant.
+
+pubmedqa:
+  prompt:
   
