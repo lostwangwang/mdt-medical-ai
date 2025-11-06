@@ -39,8 +39,8 @@ if __name__ == "__main__":
     total = 2
     right_cnt = 0
     dataset_name = "pubmedqa"
-    for idx in range(total):
-        print("第{}个问题".format(idx + 1))
+    for idx in range(1, total + 1):
+        print("第{}个问题".format(idx))
         case = ds["train"][idx]
         options = {"A": "yes", "B": "no", "C": "maybe"}
         context_text = ""

@@ -210,78 +210,47 @@ class LLMInterface:
         logger.info("dialogue_text: %s", dialogue_text)
         if dataset_name == "pubmedqa":
             prompt = f"""
-你是多学科会诊（MDT, Multidisciplinary Team）的一名成员，当前身份为 **{role_descriptions.get(role, role.value)}**。
-你的任务是从本专业角度出发，对当前医疗问题进行再评估，并输出结构化结果。
+你是一名医疗多学科团队（MDT, Multidisciplinary Team）成员，当前身份为 **{role_descriptions.get(role, role.value)}**。
+
+请综合医疗问题与团队讨论，进行立场再评估。  
+请遵循以下原则：
+
+1. 若该问题属于你的专科，请以专业背景判断；若不属于，请以 **全科医生（General Internist）** 视角分析；
+2. 阅读团队讨论内容，判断是否已形成共识：
+   - 若大多数成员意见一致且无强烈反对理由，请沿用共识；
+   - 若你不同意共识，请在推理中说明具体理由；
+3. 仅当他人提出了**显著新证据或更强逻辑依据**时，才修正你的立场；
+4. 若讨论内容与原判断无冲突，请维持原评分；
+5. 输出清晰的 reasoning，说明你是否调整了立场及原因。
 
 ==============================
 【医疗问题信息】
 - 问题描述: {question_state.question}
 - 背景信息: {question_state.meta_info or '无特殊背景'}
 - 问题选项列表：
-  { [f"{option.value}: {question_state.options[option.name]}" for option in question_options] }
+{ [f"{option.name}: {question_state.options[option.name]}" for option in question_options] }
 
 ==============================
-【角色与历史信息】
-- 当前角色: {role.value}
-- 专业背景: {role_descriptions.get(role, role.value)}
+【历史信息】
 - 上轮推理: {previous_opinion.reasoning}
-- 上轮选项适合度评分: {json.dumps(previous_opinion.treatment_preferences, ensure_ascii=False, indent=2)}
-- 关注重点: {json.dumps(previous_opinion.concerns, ensure_ascii=False, indent=2)}
-
-==============================
-【多学科对话记录】
-以下是团队本轮的讨论过程，包含来自其他医生（如肿瘤科、影像科、外科、营养科、心理科等）的观点：
-{dialogue_text}
-
-==============================
-【当前任务】
-请你作为 **{role.value}** 专业医生，根据当前医疗问题和团队讨论，综合考虑：
-1. 医疗问题与背景；
-2. 本角色历史观点；
-3. 其他学科成员的最新发言与分歧；
-4. 各问题选项的风险、获益与正确答案的适合度；
-
-重新评估每个问题选项的适合度和置信度以及推理内容。
-1. 为每个选项进行独立的适合度评分，范围在-1到1之间（不包含-1和1）：
-- 若题目要求“选择不正确的选项”：
-    某个选项越符合“不正确”的特征（即该选项本身是错误的），评分越高（接近1）；
-    某个选项越不符合“不正确”的特征（即该选项本身是正确的），评分越低（接近-1）。
-- 若题目要求“选择正确的选项”：
-    某个选项越正确（符合医学事实），评分越高（接近1）；
-    某个选项越错误，评分越低（接近-1）。 
-2. 指出可能的风险与注意事项；  
-3. 分析该选项与正确答案的适合度。
-4. 指出每个选项可能的风险与注意事项；
-5. 分析各选项与正确治疗方案的匹配度；
-6. 输出需为严格的 JSON 格式。
+- 上轮评分: {json.dumps(previous_opinion.treatment_preferences, ensure_ascii=False, indent=2)}
+- 当前讨论: {dialogue_text or "（暂无讨论内容）"}
 
 ==============================
 【输出要求】
-请严格输出符合以下格式的 JSON（不要输出任何额外文字）：
+仅输出以下 JSON（不要多余文本）：
 
-1. `role`: 当前角色名；
-2. `treatment_preferences`: 字典类型，键为选项索引（如 "A"、"B"），值为选项的适合度评分（-1 ~ 1）；
-3. `reasoning`: 字符串（≤80字），概括主要打分逻辑；
-4. `confidence`: 0~1 之间的浮点数，表示判断的可信度；
-5. `concerns`: 列表，包含2~3条（每条≤20字）关键担忧。
-
-==============================
-【输出示例】
 {{
-    "role": "{role.value}",
-    "treatment_preferences": {{"A": 0.7, "B": 0.3, "C": -0.5}},
-    "reasoning": "结合问题描述与选项风险，A方案最优且风险可控",
-    "confidence": 0.85,
-    "concerns": ["药物不良反应", "肝肾功能负担", "依从性较低"]
+  "role": "{role.value}",
+  "treatment_preferences": {{
+    "A": 0.8,
+    "B": -0.3,
+    "C": -0.6
+  }},
+  "reasoning": "团队大多倾向A，我认为该证据充分，因此维持原判断。",
+  "confidence": 0.88,
+  "concerns": ["证据样本有限", "需进一步验证"]
 }}
-
-==============================
-【附加注意】
-- 请不要在 JSON 之外输出任何文字、说明或解释。
-- treatment_preferences 的键必须是选项索引（如 \"A\"、\"B\"），不要使用选项全文。
-- 所有选项索引（"A"、"B"、"C" 等）必须完整出现在 `treatment_preferences` 中。
-- 若团队存在意见分歧，请在 reasoning 中体现平衡考虑。
-- 生成结果需可直接适配 RoleOpinion 类。
 """
         elif dataset_name == "medqa":
             prompt = f"""
@@ -552,11 +521,11 @@ class LLMInterface:
             - 若题目要求“选择正确的选项”：
                 某个选项越正确（符合医学事实），评分越高（接近1）；
                 某个选项越错误，评分越低（接近-1）。 
-            2. 指出可能的风险与注意事项；  
-            3. 分析该选项与正确答案的适合度。
-            4. 指出每个选项可能的风险与注意事项；
-            5. 分析各选项与正确治疗方案的匹配度；
-            6. 输出需为严格的 JSON 格式。
+            在更新立场时，请遵循以下原则：
+            - 若团队大多数成员对某个选项持相似观点（评分方向一致），你应**适度靠拢共识**（即在原评分基础上微调）。
+            - 若有人提出与你相反的证据且有一定说服力，请**部分降低你原本的置信度**或调整对应选项分值。
+            - 若无新信息或明显共识，请**维持原判断，但略提升置信度**以反映稳定性。
+            - 你的目标是**逐步形成团队共识**，而非坚持己见。
 
             ==============================
             【输出要求】
@@ -585,6 +554,7 @@ class LLMInterface:
             - 所有选项索引（"A"、"B"、"C" 等）必须完整出现在 `treatment_preferences` 中。
             - 若团队存在意见分歧，请在 reasoning 中体现平衡考虑。
             - 生成结果需可直接适配 RoleOpinion 类。
+            -- 请注意：即使总体判断不变，也请对 `treatment_preferences` 中的各选项分值做**轻微调整（±0.05~0.2）**，以反映你根据讨论所做的细化分析。
             """
         return prompt
 
@@ -803,7 +773,8 @@ class LLMInterface:
             prompt = f"""
                 你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，当前身份为 **{role.value}**。
                 你根据问题描述和角色专业性，请基于问题描述和角色专业性提供医疗问题的推理,并对每个问题选项的进行详细的推理分析。
-                - 如果问题与你的专业关系不大，请以 **全科医生（General Internist）** 视角参与讨论；
+                - 首先判断问题与你的专业关系：
+                - 如果问题与你的专业关系无关，请以 **全科医生（General Internist）** 视角参与讨论；
                 - 在保持专业特色的同时，优先考虑通用医学逻辑。
                 请根据以下医疗问题信息，对指定选项 **{treatment_option.value}** 进行专业分析。
 
@@ -1039,11 +1010,20 @@ class LLMInterface:
         }
         if dataset_name == "pubmedqa":
             prompt = f"""
-                        你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，当前身份为 **{role_descriptions.get(role, role.value)}**。  
-                        请从你的专业角度，基于以下医疗问题，对每个选项进行专业分析。
-                        - 若当前问题与你的专业无直接关联，请以 **全科医生（General Internist）** 的角度分析；
-                        - 你的目标是基于循证医学与临床常识，做出中立、合理的判断；
-                        - 不要拒绝作答，也不要假设其他成员已分析该问题。
+                        你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，当前身份为 **{role_descriptions.get(role, role.value)}**。
+                        请从你的专业角度，基于以下医疗问题，对每个选项进行分析。
+                        规则：
+                        1. 若该问题与你的专业无直接关联，请立刻切换为 **全科医生（General Internist）** 的视角继续回答；
+                        2. 不允许输出“与我无关”、“我无法回答”这类内容；
+                        3. 请务必以JSON格式输出结果。  
+                        示例：
+                        若你是心理医生而问题与肿瘤相关，你应这样回答：
+                        {{
+                          "treatment_preferences": {{"A": 0.6, "B": -0.2, "C": -0.8}},
+                          "reasoning": "问题不在心理学范围，改用全科医生角度从整体医学判断。",
+                          "confidence": 0.7,
+                          "concerns": ["缺乏详细病理信息", "样本不足"]
+                        }}
                         ==============================
                         【医疗问题信息】
                         - 问题描述: {question_state.question}
@@ -1456,9 +1436,17 @@ class LLMInterface:
                     messages=[
                         {
                             "role": "system",
-                            "content": f"你是多学科会诊（MDT, Multidisciplinary Team）的一名成员，你是一位专业的{self._get_role_system_prompt(role)}，"
-                                       f"若该问题不属于你的专科，请以 **全科医生（General Internist）** 的视角进行推理；你应根据医学常识、循证研究与风险收益做出合理分析。"
-                                       f"请和其他智能体进行讨论，并保持一致的立场，可能需要讨论多轮。",
+                            "content": (
+                                f"你是多学科会诊系统（MDT, Multidisciplinary Team）的一员。"
+                                f"当前身份是 {role.value}。"
+                                f"若问题超出你的专业，请以全科医生（General Internist）的视角进行分析，"
+                                f"基于循证医学、常识与风险收益做出判断。"
+                                f"你的输出必须简洁、专业、自然，可直接用作多智能体对话内容。"
+                            )
+                            # "content": f"你是多学科会诊（MDT, Multidisciplinary Team）的一名成员，你是一位专业的{self._get_role_system_prompt(role)}，"
+                            #            f"若该问题不属于你的专科，请以 **全科医生（General Internist）** 的视角进行推理；你应根据医学常识、循证研究与风险收益做出合理分析。"
+                            #            f"请和其他智能体进行讨论，并保持一致的立场，可能需要讨论多轮。",
+
                         },
                         {"role": "user", "content": prompt},
                     ],
@@ -1467,7 +1455,7 @@ class LLMInterface:
                     presence_penalty=0.3,  # 减少重复
                     frequency_penalty=0.3,  # 增加词汇多样性
                 )
-                print("DEBUG: LLM响应原始内容:", response)
+                print("DEBUG查看错误: LLM响应原始内容:", response)
                 logger.info(f"生成response:{response}")
                 response_text = response.choices[0].message.content.strip()
                 logger.info(f"DEBUG: LLM响应 response_text: {response_text}")
@@ -1478,7 +1466,7 @@ class LLMInterface:
                 try:
                     print("DEBUG: 尝试调用 _generate_template_dialogue_fallback")
                     result = self._generate_template_dialogue_fallback(
-                        patient_state, role, treatment_option, discussion_context
+                        question_state, role, treatment_option, discussion_context
                     )
                     print(f"DEBUG: 模板方法返回: {result}")
                     return result
@@ -1904,7 +1892,7 @@ class LLMInterface:
             recent_exchanges = dialogue_history
             history_context = "\n上一轮对话:\n"
             for i, exchange in enumerate(recent_exchanges):
-                history_context += f"上一轮{i+1}: {exchange.get('role', 'Unknown')} 的观点:- {exchange.get('content', '')}...\n"
+                history_context += f"上一轮对话中{i+1}: {exchange.get('role', 'Unknown')} 的观点:- {exchange.get('content', '')}...\n"
 
         logger.info(f"上一轮非自己的对话: {history_context}")
 
@@ -1917,7 +1905,7 @@ class LLMInterface:
             )
             if stance_value > 0.7:
                 stance_info = "你对该治疗方案持积极态度"
-            elif stance_value > 0:
+            elif stance_value > 0.2:
                 stance_info = "你对该治疗方案持谨慎支持态度"
             elif stance_value < -0.5:
                 stance_info = "你对该治疗方案有较大担忧"
@@ -1926,48 +1914,49 @@ class LLMInterface:
         logger.info(f"{role.value}当前立场Stance info: {stance_info}")
         if dataset_name == "pubmedqa":
             prompt = f"""
-    你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，当前身份为 **{role.value}**。  
-    - 你需要根据医疗问题信息、讨论选项、历史讨论内容、当前立场信息，生成针对医疗问题的对话回应。
-    - 如果问题与你的专业关系不大，请以 **全科医生（General Internist）** 视角参与讨论；
-    - 在保持专业特色的同时，优先考虑患者整体健康与通用医学逻辑。
-    请针对以下医疗问题给出自然、专业且角色特色鲜明的回应：
-    
-    ==============================
-    【医疗问题信息】
-    - 问题描述: {question_state.question}
-    - 相关背景: {question_state.meta_info or '无特殊背景'}
-    
-    ==============================
-    【讨论选项】
-    - 当前讨论的问题选项: {treatment_option.value}
-    
-    ==============================
-    【讨论背景】
-    - 历史讨论内容: {history_context}
-    - 当前立场信息: {stance_info}
-    
-    ==============================
-    【任务要求】
-    请从 **{role.value}** 专业角度出发，生成对该问题的回应：
-    1. 为每个选项进行独立的适合度评分，范围在-1到1之间（不包含-1和1）：
-    - 若题目要求“选择不正确的选项”：
-        某个选项越符合“不正确”的特征（即该选项本身是错误的），评分越高（接近1）；
-        某个选项越不符合“不正确”的特征（即该选项本身是正确的），评分越低（接近-1）。
-    - 若题目要求“选择正确的选项”：
-        某个选项越正确（符合医学事实），评分越高（接近1）；
-        某个选项越错误，评分越低（接近-1）。
-    2. 回应要自然流畅，避免模板化；
-    3. 体现你的专业角色特点和判断逻辑；
-    4. 考虑之前对话内容，保持连贯性；
-    5. 语言带个人色彩，不千篇一律；
-    6. 长度控制在 2~3 句话，简洁有力；
-    7. 如果有不同意见，要礼貌但坚定表达。
-    
-    ==============================
-    【输出要求】
-    - 仅返回文字回应，不得包含 JSON、额外标记或说明；
-    - 回应应能直接用于多智能体对话系统。
-    """
+            你是多学科会诊（MDT, Multidisciplinary Team）的一名成员，当前身份为 **{role.value}**。
+            你的任务：基于医疗问题、讨论选项、历史讨论与当前立场，先快速综合历史观点（简要列出要点并说明你同意/不同意的角色），
+            然后以你本人的专业视角生成 2–3 句的自然、专业且有角色特色的回应。
+            ==============================
+            【身份与角色策略】
+            - 当前角色: {role.value}
+            - 若该问题与 **{role.value}** 的专业领域关联较弱，请**自动以全科医生（General Internist）** 视角发言；
+            - 仍需保持医学逻辑严谨；
+            - 结合通用医学知识、患者整体风险与临床可行性进行分析；
+            - 在语言中自然体现这种“跨专业分析”的风格（例如：可以使用“从全科角度看…”、“尽管这超出我专科范围，但…” 等表述）。
+            
+            ==============================
+            【医疗问题信息】
+            - 问题描述: {question_state.question}
+            - 相关背景: {question_state.meta_info or '无特殊背景'}
+
+            ==============================
+            【当前讨论选项】
+            - 本轮讨论的目标选项: {treatment_option.value}
+
+            ==============================
+            【历史观点（已结构化）】
+            请务必从下面的历史观点里抽取要点并在回应前短句说明你同意或不同意（示例格式：同意 — 放射科医生: “…”；不同意 — 护士: “…”）。
+            {history_context}
+            （history_context 应为多行结构化文本，每行格式建议：角色名: 简短观点）
+
+            ==============================
+            【当前立场信息】
+            {stance_info}
+
+            ==============================
+            【任务要求】
+            请遵循以下步骤并严格控制长度：
+            1. **（最多一小句）** 用 1–2 句话**概括并对比**历史观点中最重要的 2–3 点，并明确说出你**同意/不同意的角色与简短理由**（例如：“我部分同意放射科医生，因为……；不同意外科医生，因为……”）。  
+            2. **（接着 1–2 句）** 给出你作为 **{role.value}** 的结论性回应或建议，体现专业视角、风险-收益考量和对患者整体的关注。  
+            3. 总字数应为 **2–3 句话**，语言自然、不模板化、有个人色彩；若与他人意见不同，表达要礼貌但坚定。
+
+            ==============================
+            【格式与输出要求】
+            - 仅返回纯文本（不要 JSON、不要代码块、不要额外注释）。  
+            - 回应要能直接作为 MDT 系统中该角色的发言。  
+            - 必须在第一小句中显式提及 1–2 个历史观点并说明“同意/不同意”。
+            """
         elif dataset_name == "medqa":
             prompt = f"""
                 你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，当前身份为 **{role.value}**。  

@@ -7,6 +7,10 @@ def fix_and_parse_single_json(raw_text):
     :param raw_text: 大模型返回的单个JSON字符串（含可能错误）
     :return: 解析后的JSON字典
     """
+    # 新增：移除首尾的```json和```标记
+    # 正则匹配：去掉开头的```json（可选换行）和结尾的```（可选换行）
+    # raw_text = re.sub(r'^```json\s*', '', raw_text.strip())  # 移除开头的```json
+    # raw_text = re.sub(r'\s*```$', '', raw_text)  # 移除结尾的```
     # 1. 第一步：修复“末尾多}”的错误（匹配最后一个}后多余的}，并删除）
     # 正则逻辑：匹配字符串末尾的“任意空格+}”，只保留1个}
     fixed_text = re.sub(r'(\})\s*\}', r'\1', raw_text.strip(), count=1)

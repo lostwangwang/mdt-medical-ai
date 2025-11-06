@@ -20,11 +20,17 @@ import experiments.medqa_types as medqa_types
 from src.consensus.dialogue_manager import MultiAgentDialogueManager
 from src.knowledge.rag_system import MedicalKnowledgeRAG
 from src.utils.llm_interface import LLMConfig, LLMInterface
+from dotenv import load_dotenv
 
+load_dotenv()
+
+model_name = os.getenv("MODEL_NAME")
+api_key = os.getenv("QWEN_API_KEY")
+base_url = os.getenv("BASE_URL")
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(filename)s:%(lineno)d - %(funcName)s() - %(levelname)s - %(message)s',
-    filename=f'app_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log',
+    filename=f'medbullets_app_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log',
     filemode='a'
 )
 
@@ -101,9 +107,11 @@ def load_medbullets(path: str, n: Optional[int] = None) -> List[Dict]:
 
 
 if __name__ == "__main__":
-    path = os.path.join(project_root, "data/examples/medbullets/medbullets_op4.json")
+    # path = os.path.join(project_root, "data/examples/medbullets/medbullets_op4.json")
+    path = "/mnt/e/project/LLM/mdt_medical_ai/data/examples/medbullets/medbullets_op4.json"
     # 读取前若干条样本以快速验证
-    data = load_medbullets(path, n=50)
+    print(path)
+    data = load_medbullets(path, n=1)
 
     print(f"载入样本数: {len(data)}")
     if len(data) == 0:
@@ -131,7 +139,7 @@ if __name__ == "__main__":
         )
 
         # LLM与RAG系统
-        llm_config = LLMConfig(model_name=None, api_key=None, base_url=None)
+        llm_config = LLMConfig(model_name=model_name, api_key=api_key, base_url=base_url)
         llm_interface = LLMInterface(config=llm_config)
         rag_system = MedicalKnowledgeRAG()
         dialogue_manager = MultiAgentDialogueManager(rag_system, llm_interface)

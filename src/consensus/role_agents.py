@@ -219,7 +219,8 @@ class RoleAgent:
         reasoning = self._generate_update_agent_opinions_reasoning_medqa(
             question_state, current_round, previous_opinion, question_options, dataset_name
         )
-        print(reasoning)
+        logger.debug(f"debug: LLM推理结果:{reasoning}")
+        print("debug是不是这里输出none", reasoning)
         if isinstance(reasoning, str):
             try:
                 reasoning = fix_and_parse_single_json(reasoning)
