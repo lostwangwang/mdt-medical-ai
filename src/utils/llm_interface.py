@@ -124,7 +124,9 @@ class LLMInterface:
                     messages=[
                         {
                             "role": "system",
-                            "content": f"你是多学科会诊（MDT, Multidisciplinary Team）的一名成员,当前身份为一位专业的{role.value}，请基于问题信息、角色专业性、对话上下文、上一轮对话和当前对话，更新角色有关医学问题的意见、选项偏好、置信度",
+                            "content": f"你是多学科会诊（MDT, Multidisciplinary Team）的一名成员,当前身份为一位专业的{role.value}，"
+                                       f"若该问题不属于你的专科，请以全科医生（General Internist）的视角判断:你应根据医学常识、循证研究与风险收益做出合理分析。"
+                                       f"请基于问题信息、角色专业性、对话上下文、上一轮对话和当前对话，在自己观点基础上更新角色有关医学问题的意见、选项偏好、置信度",
                         },
                         {"role": "user", "content": prompt},
                     ],
@@ -136,7 +138,7 @@ class LLMInterface:
             else:
                 # 降级到模板化回复
                 return self._generate_template_reasoning(
-                    patient_state, role, treatment_option
+                    question_state, role, question_options
                 )
         except Exception as e:
             logger.error(f"LLM generation failed: {e}")
@@ -509,14 +511,17 @@ class LLMInterface:
         elif dataset_name == "medbullets":
             prompt = f"""
             你是多学科会诊（MDT, Multidisciplinary Team）的一名成员，当前身份为 **{role_descriptions.get(role, role.value)}**。
-            你的任务是从本专业角度出发，对当前医疗问题进行再评估，并输出结构化结果。
+            你需要根据当前医疗问题、团队讨论、历史信息，综合考虑：
+            - 若该问题不属于你的专科，请以 **全科医生（General Internist）** 的视角判断；
+            - 你应根据医学常识、循证研究与风险收益做出合理分析。
+            - 你的任务是从本专业角度出发，对当前医疗问题进行再评估，并输出结构化结果。
 
             ==============================
             【医疗问题信息】
             - 问题描述: {question_state.question}
             - 背景信息: {question_state.meta_info or '无特殊背景'}
             - 问题选项列表：
-              {[f"{option.value}: {question_state.options[option.name]}" for option in question_options]}
+              {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
 
             ==============================
             【角色与历史信息】
@@ -705,7 +710,7 @@ class LLMInterface:
                     messages=[
                         {
                             "role": "system",
-                            "content": f"你是多学科会诊（MDT, Multidisciplinary Team）的一名成员，当前身份是一位专业的{role.value}，请基于问题描述和角色专业性提供医疗问题进行推理,并对每个问题选项的适合度和置信度进行打分",
+                            "content": f"你是多学科会诊（MDT, Multidisciplinary Team）的一名成员，当前身份是一位专业的{role.value}，若该问题不属于你的专科，请以全科医生（General Internist）的视角判断:你应根据医学常识、循证研究与风险收益做出合理分析。请基于问题描述和角色专业性提供医疗问题进行推理,并对每个问题选项的适合度和置信度进行打分",
                         },
                         {"role": "user", "content": prompt},
                     ],
@@ -752,7 +757,9 @@ class LLMInterface:
                     messages=[
                         {
                             "role": "system",
-                            "content": f"你是多学科会诊（MDT, Multidisciplinary Team）的一名成员，当前身份是一位专业的{role.value}，请基于问题描述和角色专业性提供医疗问题的推理,并对每个问题选项的进行详细的推理分析",
+                            "content": f"你是多学科会诊（MDT, Multidisciplinary Team）的一名成员，当前身份是一位专业的{role.value}，"
+                                       f"若问题不属于你的专科，请以 **全科医生（General Internist）** 的角度进行分析,你需要结合常识、临床经验与循证医学，给出合理推理。"
+                                       f"接下来请基于问题描述和角色专业性提供医疗问题的推理,并对每个问题选项的进行详细的推理分析",
                         },
                         {"role": "user", "content": prompt},
                     ],
@@ -794,7 +801,10 @@ class LLMInterface:
         }
         if dataset_name == "pubmedqa":
             prompt = f"""
-                你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，当前身份为 **{role.value}**。  
+                你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，当前身份为 **{role.value}**。
+                你根据问题描述和角色专业性，请基于问题描述和角色专业性提供医疗问题的推理,并对每个问题选项的进行详细的推理分析。
+                - 如果问题与你的专业关系不大，请以 **全科医生（General Internist）** 视角参与讨论；
+                - 在保持专业特色的同时，优先考虑通用医学逻辑。
                 请根据以下医疗问题信息，对指定选项 **{treatment_option.value}** 进行专业分析。
 
                 ==============================
@@ -811,7 +821,7 @@ class LLMInterface:
 
                 ==============================
                 【问题选项列表】
-                {[f"{option.value}: {question_state.options[option.name]}" for option in question_options]}  
+                {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}  
                 （如示例："A: 苯溴马隆", "B: 别嘌呤醇"...）
 
                 ==============================
@@ -1031,8 +1041,9 @@ class LLMInterface:
             prompt = f"""
                         你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，当前身份为 **{role_descriptions.get(role, role.value)}**。  
                         请从你的专业角度，基于以下医疗问题，对每个选项进行专业分析。
-                        - 但当题目涉及非你专业时，仍需基于循证医学判断；
-                        - 不必考虑肿瘤本身，只需从你专业的视角推理合理性
+                        - 若当前问题与你的专业无直接关联，请以 **全科医生（General Internist）** 的角度分析；
+                        - 你的目标是基于循证医学与临床常识，做出中立、合理的判断；
+                        - 不要拒绝作答，也不要假设其他成员已分析该问题。
                         ==============================
                         【医疗问题信息】
                         - 问题描述: {question_state.question}
@@ -1445,7 +1456,9 @@ class LLMInterface:
                     messages=[
                         {
                             "role": "system",
-                            "content": f"你是多学科会诊（MDT, Multidisciplinary Team）的一名成员，你是一位专业的{self._get_role_system_prompt(role)}，请和其他智能体进行讨论，并保持一致的立场，可能需要讨论多轮。",
+                            "content": f"你是多学科会诊（MDT, Multidisciplinary Team）的一名成员，你是一位专业的{self._get_role_system_prompt(role)}，"
+                                       f"若该问题不属于你的专科，请以 **全科医生（General Internist）** 的视角进行推理；你应根据医学常识、循证研究与风险收益做出合理分析。"
+                                       f"请和其他智能体进行讨论，并保持一致的立场，可能需要讨论多轮。",
                         },
                         {"role": "user", "content": prompt},
                     ],
@@ -1914,6 +1927,9 @@ class LLMInterface:
         if dataset_name == "pubmedqa":
             prompt = f"""
     你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，当前身份为 **{role.value}**。  
+    - 你需要根据医疗问题信息、讨论选项、历史讨论内容、当前立场信息，生成针对医疗问题的对话回应。
+    - 如果问题与你的专业关系不大，请以 **全科医生（General Internist）** 视角参与讨论；
+    - 在保持专业特色的同时，优先考虑患者整体健康与通用医学逻辑。
     请针对以下医疗问题给出自然、专业且角色特色鲜明的回应：
     
     ==============================

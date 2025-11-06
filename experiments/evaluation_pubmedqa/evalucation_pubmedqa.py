@@ -36,8 +36,7 @@ def get_datas():
 
 if __name__ == "__main__":
     ds = get_datas()
-    total = 1
-    print("ds的个数", len(ds))
+    total = 2
     right_cnt = 0
     dataset_name = "pubmedqa"
     for idx in range(total):
