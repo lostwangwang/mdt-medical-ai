@@ -100,9 +100,11 @@ class MultiAgentDialogueManager:
                 question_state, current_round, opinions_dict, question_options, dataset_name
             )
             logger.info(f"Updated opinions dict: {new_opinions_dict}")
+            opinions_dict = new_opinions_dict
         
         logger.info(f"the last round: {self.current_round}")
         logger.info(f"final opinions dict: {new_opinions_dict}")
+
         print(f"第{self.current_round}轮达成共识")
         logger.info(f"第{self.current_round}轮达成共识!!!")
         logger.info("\n==生成共识结果开始：==")
@@ -356,7 +358,7 @@ class MultiAgentDialogueManager:
         """
         检查讨论是否收敛
         """
-        print("判断是否收敛")
+        print("判断是否收敛之前输出None吗?")
         if self.current_round < 2:
             return False
         self.consensus_calculator.set_treatments(question_options)
