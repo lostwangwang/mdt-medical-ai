@@ -120,6 +120,7 @@ if __name__ == "__main__":
     print(calc.df_scores)
     calc.compute_kendalls_w()
     df, W, p_value, consensus = calc.summarize()
+    print("W的类型", type(W))
     print(f"Kendall's W 协调系数: {W}, p 值: {p_value}, 共识: {consensus}")
     print(df['mean'])
     # 如何选出最优的治疗方案

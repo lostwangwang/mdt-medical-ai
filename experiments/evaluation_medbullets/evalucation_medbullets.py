@@ -1,9 +1,15 @@
+import json
+import logging
 import os
 import sys
-import logging
 from datetime import datetime
 from typing import Dict, List, Optional
-import json
+
+from experiments import medqa_types
+from src.consensus.dialogue_manager import MultiAgentDialogueManager
+from src.knowledge.rag_system import MedicalKnowledgeRAG
+from src.utils.llm_interface import LLMConfig, LLMInterface
+
 # 移除不再需要的抓取相关依赖
 # import re
 # import requests
@@ -16,10 +22,6 @@ project_root = os.path.dirname(current_script_dir)
 # 将项目根目录添加到 Python 搜索路径
 sys.path.append(project_root)
 
-import experiments.medqa_types as medqa_types
-from src.consensus.dialogue_manager import MultiAgentDialogueManager
-from src.knowledge.rag_system import MedicalKnowledgeRAG
-from src.utils.llm_interface import LLMConfig, LLMInterface
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -76,7 +78,8 @@ def load_medbullets(path: str, n: Optional[int] = None) -> List[Dict]:
         answer_text: Optional[str] = None
 
         # 仅使用直接字段
-        if (idx_key in opa_map) and (idx_key in opb_map) and (idx_key in opc_map) and (idx_key in opd_map) and (idx_key in ans_idx_map):
+        if (idx_key in opa_map) and (idx_key in opb_map) and (idx_key in opc_map) and (idx_key in opd_map) and (
+                idx_key in ans_idx_map):
             options_dict = {
                 'A': str(opa_map.get(idx_key)),
                 'B': str(opb_map.get(idx_key)),
@@ -111,8 +114,8 @@ if __name__ == "__main__":
     path = "/mnt/e/project/LLM/mdt_medical_ai/data/examples/medbullets/medbullets_op4.json"
     # 读取前若干条样本以快速验证
     print(path)
-    data = load_medbullets(path, n=1)
-
+    data = load_medbullets(path, n=3)
+    print(data)
     print(f"载入样本数: {len(data)}")
     if len(data) == 0:
         print("未找到可评估的样本：数据文件缺少 options/answer 字段。\n"
@@ -134,7 +137,7 @@ if __name__ == "__main__":
             question=item["question"],
             options=item["options"],
             answer=item["answer"],
-            meta_info=item.get("meta_info", ""),
+            meta_info="",
             answer_idx=item["answer_idx"],
         )
 
@@ -145,7 +148,8 @@ if __name__ == "__main__":
         dialogue_manager = MultiAgentDialogueManager(rag_system, llm_interface)
 
         # 执行MDT协同讨论（复用MedQA流程）
-        final_result = dialogue_manager.conduct_mdt_discussion_medqa(question_state, question_options, dataset_name="medbullets")
+        final_result = dialogue_manager.conduct_mdt_discussion_medqa(question_state, question_options,
+                                                                     dataset_name="medbullets")
         df = final_result["final_consensus"]["df"]
         logging.info(f"第{idx}个问题的共识矩阵: {df}")
 

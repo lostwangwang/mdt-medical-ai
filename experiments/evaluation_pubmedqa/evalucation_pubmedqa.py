@@ -1,4 +1,5 @@
 import os
+import random
 import sys
 import logging
 
@@ -29,14 +30,14 @@ logging.basicConfig(
 )
 
 
-def get_datas():
+def get_datas(seed=42):
     ds = load_dataset("qiaojin/PubMedQA", "pqa_labeled")
     return ds
 
 
 if __name__ == "__main__":
     ds = get_datas()
-    total = 2
+    total = 50
     right_cnt = 0
     dataset_name = "pubmedqa"
     for idx in range(1, total + 1):
@@ -47,9 +48,10 @@ if __name__ == "__main__":
         print(case["context"]["contexts"])
         for ctx in case["context"]["contexts"]:
             context_text += ctx + "\n"
+        question_context = case["question"] + "请从yes、no、maybe中选择一个你认为最合适的选项"
         question_state = medqa_types.MedicalQuestionState(
             patient_id=case["pubid"],
-            question=case["question"],
+            question=question_context,
             options=options,
             answer=case["final_decision"],
             meta_info=context_text,
@@ -76,8 +78,8 @@ if __name__ == "__main__":
         logging.info(f"第{idx}个问题的最佳治疗方案: {best_treatment}")
         logging.info(f"第{idx}个问题的平均投票: {df['mean']}")
         if (
-            medqa_types.QuestionOption(best_treatment).value
-            == question_state.answer_idx
+                medqa_types.QuestionOption(best_treatment).value
+                == question_state.answer_idx
         ):
             logging.info(f"第{idx}个问题的智能体给的答案: {best_treatment}，正确")
             right_cnt += 1
@@ -85,3 +87,56 @@ if __name__ == "__main__":
             logging.info(f"第{idx}个问题的最佳治疗方案: {best_treatment}，错误")
         logging.info(f"第{idx}个问题的正确答案: {question_state.answer_idx}")
     logging.info(f"总体准确率: {right_cnt / total:.2f}")
+
+    # ======= 随机种子======
+    # random.seed(42)
+    # 随机选 total 个索引
+    # # all_indices = list(range(len(ds["train"])))
+    # cases = ds["train"][1]
+    # # sample_indices = random.sample(case, total)
+    # for i, idx in enumerate(cases, start=1):
+    #     print(f"第{i}个问题 (索引 {idx})")
+    #     case = ds["train"][idx]
+    #     options = {"A": "yes", "B": "no", "C": "maybe"}
+    #     context_text = ""
+    #     print(case["context"]["contexts"])
+    #     for ctx in case["context"]["contexts"]:
+    #         context_text += ctx + "\n"
+    #     question_state = medqa_types.MedicalQuestionState(
+    #         patient_id=case["pubid"],
+    #         question=case["question"],
+    #         options=options,
+    #         answer=case["final_decision"],
+    #         meta_info=context_text,
+    #         answer_idx=case["final_decision"],
+    #     )
+    #     print("问题的状态:", question_state)
+    #     medqa_types.init_question_option(options)
+    #     print("枚举成员列表：", list(medqa_types.QuestionOption))
+    #     question_options = list(medqa_types.QuestionOption)
+    #     print(ds)
+    #     question_options = list(medqa_types.QuestionOption)
+    #     llm_config = LLMConfig(model_name=model_name, api_key=api_key, base_url=base_url)
+    #     llm_interface = LLMInterface(config=llm_config)
+    #     rag_system = MedicalKnowledgeRAG()
+    #     dialogue_manager = MultiAgentDialogueManager(rag_system, llm_interface)
+    #     # # 打印结果
+    #     final_result = dialogue_manager.conduct_mdt_discussion_medqa(
+    #         question_state, question_options, dataset_name
+    #     )
+    #     df = final_result["final_consensus"]["df"]
+    #
+    #     logging.info(f"第{i}个问题的共识矩阵: {df}")
+    #     best_treatment = df["mean"].idxmax()
+    #     logging.info(f"第{i}个问题的最佳治疗方案: {best_treatment}")
+    #     logging.info(f"第{i}个问题的平均投票: {df['mean']}")
+    #     if (
+    #         medqa_types.QuestionOption(best_treatment).value
+    #         == question_state.answer_idx
+    #     ):
+    #         logging.info(f"第{i}个问题的智能体给的答案: {best_treatment}，正确")
+    #         right_cnt += 1
+    #     else:
+    #         logging.info(f"第{i}个问题的最佳治疗方案: {best_treatment}，错误")
+    #     logging.info(f"第{i}个问题的正确答案: {question_state.answer_idx}")
+    # logging.info(f"总体准确率: {right_cnt / total:.2f}")
