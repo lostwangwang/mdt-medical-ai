@@ -349,6 +349,12 @@ C = maybe （不确定/视情况而定）
    - 所有选项均须出现在 `treatment_preferences` 中；
    - 若对某个选项的调整幅度较大（≥0.2），请在 reasoning 中说明原因；
    - 上一轮偏好：{json.dumps(previous_opinion.treatment_preferences, ensure_ascii=False, indent=2)}
+   - 上一轮置信度：{previous_opinion.confidence}
+   - - 若团队意见高度一致且你同意共识，置信度 +0.05~0.15
+   - 若团队意见分歧，置信度 -0.05~0.15
+   - 若本轮立场大幅调整 (≥0.2)，置信度 -0.05~0.1
+   - 若有新证据/逻辑支撑立场，置信度 +0.05~0.2
+   - 最终置信度限制在 0.6~0.98
    - 当前团队讨论趋势：{feedback}
 8. 输出 JSON 格式，字段包括 
    - role
@@ -366,6 +372,7 @@ C = maybe （不确定/视情况而定）
 【历史信息】
 - 上轮推理: {previous_opinion.reasoning}
 - 上轮评分: {json.dumps(previous_opinion.treatment_preferences, ensure_ascii=False, indent=2)}
+- 上轮置信度: {previous_opinion.confidence}
 - 当前讨论: {dialogue_text or "（暂无讨论内容）"}
 
 ==============================
@@ -750,7 +757,7 @@ C = maybe （不确定/视情况而定）
                         },
                         {"role": "user", "content": prompt},
                     ],
-                    temperature=self.config.temperature,
+                    temperature=0.2,
                     max_tokens=self.config.max_tokens,
                 )
                 logger.debug(f"LLM response debug: {response}")
@@ -1052,24 +1059,24 @@ C = maybe （不确定/视情况而定）
     ) -> str:
         """构建MedQA场景下的治疗推理提示词"""
         # 这里可以根据MedQA的具体需求，调整提示词的内容和结构
-        # role_descriptions = {
-        #     RoleType.ONCOLOGIST: "肿瘤科医生，关注治疗效果和生存率",
-        #     RoleType.NURSE: "护士，关注护理可行性和患者舒适度",
-        #     RoleType.PSYCHOLOGIST: "心理医生，关注患者心理健康",
-        #     RoleType.RADIOLOGIST: "放射科医生，关注影像学表现和放射治疗",
-        #     RoleType.PATIENT_ADVOCATE: "患者代表，关注患者权益、自主选择和生活质量",
-        #     RoleType.NUTRITIONIST: "营养师，关注患者营养状况和营养支持治疗",
-        #     RoleType.REHABILITATION_THERAPIST: "康复治疗师，关注患者功能恢复和生活质量改善",
-        # }
         role_descriptions = {
-            RoleType.ONCOLOGIST: "肿瘤科医生，具备扎实的病理与内科学基础，在知识问答任务中，会从疾病发生机制角度分析病变部位和性质。",
-            RoleType.NURSE: "护士，熟悉基础病理与生理学知识，在知识问答任务中，从护理生理和健康基础理论角度分析问题。",
-            RoleType.PSYCHOLOGIST: "心理医生，熟悉神经生理与行为机制，在知识问答任务中，从神经系统和认知机制角度分析问题。",
-            RoleType.RADIOLOGIST: "放射科医生，熟悉影像与解剖学基础，在知识问答任务中，从结构与表现角度进行判断。",
-            RoleType.PATIENT_ADVOCATE: "患者代表，具备基础健康知识，在知识问答任务中，从常识与基础健康理解角度进行推理。",
-            RoleType.NUTRITIONIST: "营养师，掌握生理代谢与营养病理知识，在知识问答任务中，从代谢与病理机制角度判断。",
-            RoleType.REHABILITATION_THERAPIST: "康复治疗师，具备运动生理与病理学知识，在知识问答任务中，从理论病理与功能解剖角度分析疾病机制。",
+            RoleType.ONCOLOGIST: "肿瘤科医生，关注治疗效果和生存率",
+            RoleType.NURSE: "护士，关注护理可行性和患者舒适度",
+            RoleType.PSYCHOLOGIST: "心理医生，关注患者心理健康",
+            RoleType.RADIOLOGIST: "放射科医生，关注影像学表现和放射治疗",
+            RoleType.PATIENT_ADVOCATE: "患者代表，关注患者权益、自主选择和生活质量",
+            RoleType.NUTRITIONIST: "营养师，关注患者营养状况和营养支持治疗",
+            RoleType.REHABILITATION_THERAPIST: "康复治疗师，关注患者功能恢复和生活质量改善",
         }
+        # role_descriptions = {
+        #     RoleType.ONCOLOGIST: "肿瘤科医生，具备扎实的病理与内科学基础，在知识问答任务中，会从疾病发生机制角度分析病变部位和性质。",
+        #     RoleType.NURSE: "护士，熟悉基础病理与生理学知识，在知识问答任务中，从护理生理和健康基础理论角度分析问题。",
+        #     RoleType.PSYCHOLOGIST: "心理医生，熟悉神经生理与行为机制，在知识问答任务中，从神经系统和认知机制角度分析问题。",
+        #     RoleType.RADIOLOGIST: "放射科医生，熟悉影像与解剖学基础，在知识问答任务中，从结构与表现角度进行判断。",
+        #     RoleType.PATIENT_ADVOCATE: "患者代表，具备基础健康知识，在知识问答任务中，从常识与基础健康理解角度进行推理。",
+        #     RoleType.NUTRITIONIST: "营养师，掌握生理代谢与营养病理知识，在知识问答任务中，从代谢与病理机制角度判断。",
+        #     RoleType.REHABILITATION_THERAPIST: "康复治疗师，具备运动生理与病理学知识，在知识问答任务中，从理论病理与功能解剖角度分析疾病机制。",
+        # }
         if dataset_name == "pubmedqa":
             prompt = f"""
                         你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，当前身份为 **{role_descriptions.get(role, role.value)}**。
@@ -1181,79 +1188,74 @@ C = maybe （不确定/视情况而定）
                         - 输出结果需可直接适配 RoleOpinion 类。
                         """
         elif dataset_name == "medqa":
-            # prompt = f"""
-            #             你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，当前身份为 **{role_descriptions.get(role, role.value)}**。
-            #             当前任务是【医学知识问答】，尽管你是{role.value},你的思考应基于医学理论（如病理、生理、药理、解剖等），
-            #             而非患者功能、康复、心理状态或临床管理经验。
-            #             如果题干中出现“最常发生”“主要”等字样，请严格以教材/权威资料为准，
-            #             推理可以解释原因，但最终倾向分必须与标准答案一致。
-            #             请你从基础医学知识（病理、生理、药理、解剖等）角度进行判断，
-            #             不要基于临床治疗经验或患者管理经验进行推理。
-            #             强制规则(必须遵守)：
-            #             1. 请先判断当前{role.value}是否与{question_state.question}相关,若是相关的问题，请继续回答；
-            #             2. 若该问题与你的专业无直接关联，请立刻切换为 **全科医生（General Internist）** 的视角继续回答；
-            #             全科内科医生（General Internist）：
-            #             - 具备全面的医学知识，能够对内科、外科、影像学、病理学、药理学、免疫学等常见问题进行综合分析。
-            #             - 主要任务是你的思考应基于医学理论（如病理、生理、药理、解剖等），判断每个选项的合理性。
-            #             - 当遇到非自己专长的问题时，基于常识与通用医学原理作出合理推理。
-            #             - 不会拒答或推给其他科室。
-            #             3. 不允许输出“与我无关”、“我无法回答”这类内容；
-            #             4. 请务必以JSON格式输出结果。
-            #             ==============================
-            #             【医疗问题信息】
-            #             - 问题描述: {question_state.question}
-            #             请仔细理解题目的意思, 理解清楚了再进行推理.
-            #             - 问题背景: {question_state.meta_info or '无特殊背景'}
-            #
-            #             ==============================
-            #             【角色信息】
-            #             - 角色身份: {role_descriptions.get(role, role.value)}
-            #
-            #             ==============================
-            #             【问题选项】
-            #             {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
-            #             （如示例："A: 苯溴马隆", "B: 别嘌呤醇"...）
-            #             ==============================
-            #             【任务要求】
-            #             请从当前的角色专业角度从符合题目要求的逻辑对选项的适合度进行评分：
-            #             1. 为每个选项进行独立的适合度评分，范围在-1到1之间（不包含-1和1）：
-            #             - 首先需要明确题目是要求是否定意思还是肯定意思,然后再进行评分
-            #             - 若题目要求“选择不正确的选项”或者"不包括"或者"错误的"：
-            #                 某个选项越符合“不正确”的特征（即该选项本身是错误的），评分越高（接近1）；
-            #                 某个选项越不符合“不正确”的特征（即该选项本身是正确的），评分越低（接近-1）。
-            #             - 若题目要求“选择正确的选项”：
-            #                 某个选项越正确（符合医学事实），评分越高（接近1）；
-            #                 某个选项越错误，评分越低（接近-1）。
-            #             2. 为每个选项进行独立的适合度评分，评分高低是指符合题目的选择要求，而不是选项本身的正确性，范围在-1到1之间，不能等于1或者-1。
-            #             3. 指出可能的风险与注意事项；
-            #             4. 分析该选项与正确答案的适合度。
-            #             请对每个选项给出适合度评分，并总结理由与主要担忧。
-            #
-            #             ==============================
-            #             【输出要求】
-            #             请以严格的 **JSON** 结构返回结果（不要包含任何解释性文字），字段定义如下：
-            #             1. `treatment_preferences`: 字典，键为问题选项标识符（如"A"、"B"），值为-1~1的正确选项适合度评分；
-            #             2. `reasoning`: 字符串（100字左右），说明这样评分的理由和依据；
-            #             3. `confidence`: 0~1 的浮点数，表示你对当前判断的可信度；
-            #             4. `concerns`: 列表（含2~3个字符串，每项≤20字），用于说明判断依据或注意点。
-            #
-            #             ==============================
-            #             【输出示例】
-            #             {{
-            #                 "treatment_preferences": {{"A": 0.7, "B": -0.2, "C": 0.1}},
-            #                 "reasoning": "证据显示线状植物叶片中线粒体在PCD过程中活跃",
-            #                 "confidence": 0.85,
-            #                 "concerns": ["MitoTracker染色显示线粒体活跃","CsA处理降低穿孔"]
-            #             }}
-            #
-            #             ==============================
-            #             【格式与一致性要求】
-            #             - 仅返回 JSON，要干净的JSON格式，不得包含任何解释或额外文字, 不要多加字符；
-            #             - treatment_preferences 的键必须是选项索引（如 \"A\"、\"B\"），不要使用选项全文。
-            #             - 所有问题选项（如 "A"、"B"、"C"...）必须完整出现在 `treatment_preferences` 中；
-            #             - 键名、字段名、数据类型必须完全符合要求；
-            #             - 输出结果需可直接适配 RoleOpinion 类。
-            #             """
+            prompt = f"""
+                        你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，当前身份为 **{role_descriptions.get(role, role.value)}**。
+                        强制规则(必须遵守)：
+                        1. 请先判断当前{role.value}是否与{question_state.question}相关,若是相关的问题，请继续回答；
+                        2. 若该问题与你的专业无直接关联，如果问题涉及非本专业，请基于标准药理机制回答，不要用肿瘤相关经验替代，请立刻切换为 **全科医生（General Internist）** 的视角继续回答；
+                        全科内科医生（General Internist）：
+                        - 具备全面的医学知识，能够对内科、外科、影像学、病理学、药理学、免疫学等常见问题进行综合分析。
+                        - 主要任务是你的思考应基于医学理论（如病理、生理、药理、解剖等），判断每个选项的合理性。
+                        - 当遇到非自己专长的问题时，基于常识与通用医学原理作出合理推理。
+                        - 不会拒答或推给其他科室。
+                        3. 不允许输出“与我无关”、“我无法回答”这类内容；
+                        4. 请务必以JSON格式输出结果。
+                        ==============================
+                        【医疗问题信息】
+                        - 问题描述: {question_state.question}
+                        请仔细理解题目的意思, 理解清楚了再进行推理.
+                        - 问题背景: {question_state.meta_info or '无特殊背景'}
+
+                        ==============================
+                        【角色信息】
+                        - 角色身份: {role_descriptions.get(role, role.value)}
+
+                        ==============================
+                        【问题选项】
+                        {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
+                        （如示例："A: 苯溴马隆", "B: 别嘌呤醇"...）
+                        ==============================
+                        【任务要求】
+                        请从当前的角色专业角度从符合题目要求的逻辑对选项的适合度进行评分：
+                        1. 为每个选项进行独立的适合度评分，范围在-1到1之间（不包含-1和1）：
+                        - 首先需要明确题目是要求是否定意思还是肯定意思,然后再进行评分
+                        - 若题目要求“选择不正确的选项”或者"不包括"或者"错误的"：
+                            某个选项越符合“不正确”的特征（即该选项本身是错误的），评分越高（接近1）；
+                            某个选项越不符合“不正确”的特征（即该选项本身是正确的），评分越低（接近-1）。
+                        - 若题目要求“选择正确的选项”：
+                            某个选项越正确（符合医学事实），评分越高（接近1）；
+                            某个选项越错误，评分越低（接近-1）。
+                        2. 为每个选项进行独立的适合度评分，评分高低是指符合题目的选择要求，而不是选项本身的正确性，范围在-1到1之间，不能等于1或者-1。
+                        3. 指出可能的风险与注意事项；
+                        4. 分析该选项与正确答案的适合度。
+                        请对每个选项给出适合度评分，并总结理由与主要担忧。
+
+                        ==============================
+                        【输出要求】
+                        请以严格的 **JSON** 结构返回结果（不要包含任何解释性文字），字段定义如下：
+                        1. `treatment_preferences`: 字典，键为问题选项标识符（如"A"、"B"），值为-1~1的正确选项适合度评分；
+                        2. `reasoning`: 字符串（100字左右），说明这样评分的理由和依据；
+                        3. `confidence`: 0~1 的浮点数，表示你对当前判断的可信度；
+                        4. `concerns`: 列表（含2~3个字符串，每项≤20字），用于说明判断依据或注意点。
+
+                        ==============================
+                        【输出示例】
+                        {{
+                            "treatment_preferences": {{"A": 0.7, "B": -0.2, "C": 0.1}},
+                            "reasoning": "证据显示线状植物叶片中线粒体在PCD过程中活跃",
+                            "confidence": 0.85,
+                            "concerns": ["MitoTracker染色显示线粒体活跃","CsA处理降低穿孔"]
+                        }}
+
+                        ==============================
+                        【格式与一致性要求】
+                        - 仅返回 JSON，要干净的JSON格式，不得包含任何解释或额外文字, 不要多加字符；
+                        - treatment_preferences 的键必须是选项索引（如 \"A\"、\"B\"），不要使用选项全文。
+                        - 所有问题选项（如 "A"、"B"、"C"...）必须完整出现在 `treatment_preferences` 中；
+                        - 键名、字段名、数据类型必须完全符合要求；
+                        - 输出结果需可直接适配 RoleOpinion 类。
+                        """
+
             # prompt = f"""
             # 你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，
             # 当前身份为 **{role_descriptions.get(role, role.value)}**。
@@ -1296,83 +1298,83 @@ C = maybe （不确定/视情况而定）
             # - 若题干要求选择“正确选项”，则越正确分越高；
             # - 若题干要求选择“错误选项”，则越错误分越高。
             # """
-            prompt = f"""
-            你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，
-当前身份为 **{role_descriptions.get(role, role.value)}**。
-
-### 🧠 任务目标
-请基于你的专业知识（病理、生理、药理、解剖）回答【医学知识问答】问题。
-- 判断选项正确与否时，请优先从机制、通路、受体、生理反应等基础医学角度推理；
-- 不要依赖临床经验、心理或护理角度；
-- 若题目与你的专业无直接关系，请自动切换为 **全科内科医生（General Internist）** 视角，以通用医学知识推理；
-- 不得拒绝回答。
-
-### 📌 示例参考（含直接机制vs间接效应区分）
-#### 示例1（药理类-直接机制优先）
-题目：A 59-year-old man with long-standing hypertension is brought to the emergency department because of vomiting and headache for 2 hours. He reports that he has been unable to refill the prescription for his antihypertensive medications. His blood pressure is 210/120 mm Hg. Fundoscopy shows bilateral optic disc swelling. An ECG shows left ventricular hypertrophy. Treatment with intravenous fenoldopam is begun. Which of the following intracellular changes is most likely to occur in renal vascular smooth muscle as a result of this drug?
-背景：step1
-选项：
-A: Increased activity of myosin light-chain kinase
-B: Increased activity of protein kinase C
-C: Increased activity of guanylate cyclase
-D: Increased production of cyclic adenosine monophosphate
-E: Increased intracellular concentration of calcium
-
-输出：
-{{
-            "treatment_preferences": {{"A": -0.85, "B": -0.70, "C": -0.80, "D": 0.95, "E": -0.90}},
-    "reasoning": "Fenoldopam is a selective dopamine D1 receptor agonist. D1 receptors couple with Gs protein, directly activating adenylate cyclase (AC) to increase cyclic adenosine monophosphate (cAMP) production (direct intracellular change). Options A/E are related to vasoconstriction, B is mediated by Gq pathway, C is an indirect downstream effect (cAMP→NO→GC), so D is correct.",
-    "confidence": 0.96,
-    "concerns": ["Receptor-G protein-second messenger direct coupling", "Distinction between direct and indirect signaling effects", "Vascular smooth muscle molecular mechanism"]
-}}
-
-#### 示例2（药理类-受体通路匹配）
-题目：Which of the following is the direct intracellular effect of β2 receptor agonists?
-背景：无特殊背景
-选项：
-A: Increased IP3/DAG concentration
-B: Increased cyclic guanosine monophosphate (cGMP) production
-C: Increased cyclic adenosine monophosphate (cAMP) production
-D: Decreased intracellular calcium concentration
-E: Activated protein kinase C (PKC)
-
-输出：
-{{
-            "treatment_preferences": {{"A": -0.80, "B": -0.75, "C": 0.94, "D": -0.60, "E": -0.85}},
-    "reasoning": "β2 receptors are Gs protein-coupled receptors. Activation directly stimulates adenylate cyclase (AC), leading to increased cAMP production (direct intracellular change). A/E are mediated by Gq pathway, B is NO-related, D is an indirect physiological effect, so C is correct.",
-    "confidence": 0.97,
-    "concerns": ["Gs/Gq pathway distinction", "Direct second messenger vs indirect physiological effect", "Receptor subtype-specific signaling"]
-}}
-
-### 🧩 医学问题
-题目：{question_state.question}
-背景：{question_state.meta_info or '无特殊背景'}
-选项：
-{[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
-
-### 🧬 推理引导
-请先按以下思维顺序进行内部推理：
-1. 确定题目考查的核心主题（如病理机制、药理作用、信号传导等）；
-2. 若为药理类题，明确药物作用的 **受体类型 → G蛋白通路 → 第二信使 → 生理效应**，优先选择药物与受体结合后**直接触发**的细胞内分子变化（如第二信使生成、酶活性改变），排除多步传导后的间接下游效应；
-3. 对每个选项，判断其与标准医学理论是否一致，重点区分“直接机制”与“间接效应”；
-4. 根据题意（正确/错误型问题）确定倾向分方向。
-
-### 📊 输出格式
-请仅输出如下结构的 **JSON**（不要额外文字）：
-{{
-        "treatment_preferences": {{"A": -0.2, "B": -0.1, "C": -0.5, "D": 0.9, "E": -0.3}},
-        "reasoning": "患者为急性发作期，非甾体抗炎药（D）可快速止痛，符合护理缓解目标",
-        "confidence": 0.85,
-        "concerns": ["可能加重胃黏膜刺激", "需观察患者用药后反应"]
-}}
-
-
-评分说明：
-- 评分范围 -1 ~ 1（不含边界值）；
-- 若题干要求选择“正确选项”，则越正确分越高，其中“受体-通路-直接分子变化”的匹配优先级最高；
-- 若题干要求选择“错误选项”，则越错误分越高；
-- 药理类题目中，“直接细胞内分子变化”优先级高于间接下游效应。
-            """
+        #             prompt = f"""
+        #             你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，
+        # 当前身份为 **{role_descriptions.get(role, role.value)}**。
+        #
+        # ### 🧠 任务目标
+        # 请基于你的专业知识（病理、生理、药理、解剖）回答【医学知识问答】问题。
+        # - 判断选项正确与否时，请优先从机制、通路、受体、生理反应等基础医学角度推理；
+        # - 不要依赖临床经验、心理或护理角度；
+        # - 若题目与你的专业无直接关系，请自动切换为 **全科内科医生（General Internist）** 视角，以通用医学知识推理；
+        # - 不得拒绝回答。
+        #
+        # ### 📌 示例参考（含直接机制vs间接效应区分）
+        # #### 示例1（药理类-直接机制优先）
+        # 题目：A 59-year-old man with long-standing hypertension is brought to the emergency department because of vomiting and headache for 2 hours. He reports that he has been unable to refill the prescription for his antihypertensive medications. His blood pressure is 210/120 mm Hg. Fundoscopy shows bilateral optic disc swelling. An ECG shows left ventricular hypertrophy. Treatment with intravenous fenoldopam is begun. Which of the following intracellular changes is most likely to occur in renal vascular smooth muscle as a result of this drug?
+        # 背景：step1
+        # 选项：
+        # A: Increased activity of myosin light-chain kinase
+        # B: Increased activity of protein kinase C
+        # C: Increased activity of guanylate cyclase
+        # D: Increased production of cyclic adenosine monophosphate
+        # E: Increased intracellular concentration of calcium
+        #
+        # 输出：
+        # {{
+        #             "treatment_preferences": {{"A": -0.85, "B": -0.70, "C": -0.80, "D": 0.95, "E": -0.90}},
+        #     "reasoning": "Fenoldopam is a selective dopamine D1 receptor agonist. D1 receptors couple with Gs protein, directly activating adenylate cyclase (AC) to increase cyclic adenosine monophosphate (cAMP) production (direct intracellular change). Options A/E are related to vasoconstriction, B is mediated by Gq pathway, C is an indirect downstream effect (cAMP→NO→GC), so D is correct.",
+        #     "confidence": 0.96,
+        #     "concerns": ["Receptor-G protein-second messenger direct coupling", "Distinction between direct and indirect signaling effects", "Vascular smooth muscle molecular mechanism"]
+        # }}
+        #
+        # #### 示例2（药理类-受体通路匹配）
+        # 题目：Which of the following is the direct intracellular effect of β2 receptor agonists?
+        # 背景：无特殊背景
+        # 选项：
+        # A: Increased IP3/DAG concentration
+        # B: Increased cyclic guanosine monophosphate (cGMP) production
+        # C: Increased cyclic adenosine monophosphate (cAMP) production
+        # D: Decreased intracellular calcium concentration
+        # E: Activated protein kinase C (PKC)
+        #
+        # 输出：
+        # {{
+        #             "treatment_preferences": {{"A": -0.80, "B": -0.75, "C": 0.94, "D": -0.60, "E": -0.85}},
+        #     "reasoning": "β2 receptors are Gs protein-coupled receptors. Activation directly stimulates adenylate cyclase (AC), leading to increased cAMP production (direct intracellular change). A/E are mediated by Gq pathway, B is NO-related, D is an indirect physiological effect, so C is correct.",
+        #     "confidence": 0.97,
+        #     "concerns": ["Gs/Gq pathway distinction", "Direct second messenger vs indirect physiological effect", "Receptor subtype-specific signaling"]
+        # }}
+        #
+        # ### 🧩 医学问题
+        # 题目：{question_state.question}
+        # 背景：{question_state.meta_info or '无特殊背景'}
+        # 选项：
+        # {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
+        #
+        # ### 🧬 推理引导
+        # 请先按以下思维顺序进行内部推理：
+        # 1. 确定题目考查的核心主题（如病理机制、药理作用、信号传导等）；
+        # 2. 若为药理类题，明确药物作用的 **受体类型 → G蛋白通路 → 第二信使 → 生理效应**，优先选择药物与受体结合后**直接触发**的细胞内分子变化（如第二信使生成、酶活性改变），排除多步传导后的间接下游效应；
+        # 3. 对每个选项，判断其与标准医学理论是否一致，重点区分“直接机制”与“间接效应”；
+        # 4. 根据题意（正确/错误型问题）确定倾向分方向。
+        #
+        # ### 📊 输出格式
+        # 请仅输出如下结构的 **JSON**（不要额外文字）：
+        # {{
+        #         "treatment_preferences": {{"A": -0.2, "B": -0.1, "C": -0.5, "D": 0.9, "E": -0.3}},
+        #         "reasoning": "患者为急性发作期，非甾体抗炎药（D）可快速止痛，符合护理缓解目标",
+        #         "confidence": 0.85,
+        #         "concerns": ["可能加重胃黏膜刺激", "需观察患者用药后反应"]
+        # }}
+        #
+        #
+        # 评分说明：
+        # - 评分范围 -1 ~ 1（不含边界值）；
+        # - 若题干要求选择“正确选项”，则越正确分越高，其中“受体-通路-直接分子变化”的匹配优先级最高；
+        # - 若题干要求选择“错误选项”，则越错误分越高；
+        # - 药理类题目中，“直接细胞内分子变化”优先级高于间接下游效应。
+        #             """
         elif dataset_name == "ddxplus":
             prompt = f"""
             你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，当前身份为 **{role_descriptions.get(role, role.value)}**。  

@@ -3,6 +3,8 @@ import re
 import re
 import json
 import csv
+import random
+
 from openai import OpenAI
 from time import sleep
 from typing import List, Dict
@@ -23,9 +25,14 @@ client = OpenAI(
 import json
 
 
-def read_jsonl(file_path: str, n: int = None) -> List[Dict]:
+def read_jsonl(file_path: str, n: int = None, seed: int = None) -> List[Dict]:
     with open(file_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
+
+    # 设置随机种子（保证可复现性）
+    if seed is not None:
+        random.seed(seed)
+
     if n is not None:
         lines = lines[:n]
     return [json.loads(line.strip()) for line in lines]
@@ -124,19 +131,19 @@ def save_to_csv(results, filename=f"results_{int(time.time())}.csv"):
 
 
 if __name__ == "__main__":
-    path = "../../../data/examples/medqa/data_clean/questions/Mainland/dev.jsonl"
+    path = "../../../data/examples/medqa/data_clean/questions/US/dev.jsonl"
     total_count = 50
-    # cases = read_jsonl(path, total_count)
-    cases = [{
-        "question": "A 59-year-old man with long-standing hypertension is brought to the emergency department because of vomiting and headache for 2 hours. He reports that he has been unable to refill the prescription for his antihypertensive medications. His blood pressure is 210/120 mm Hg. Fundoscopy shows bilateral optic disc swelling. An ECG shows left ventricular hypertrophy. Treatment with intravenous fenoldopam is begun. Which of the following intracellular changes is most likely to occur in renal vascular smooth muscle as a result of this drug?",
-        "answer": "Increased production of cyclic adenosine monophosphate",
-        "options": {"A": "Increased activity of myosin light-chain kinase",
-                    "B": "Increased activity of protein kinase C",
-                    "C": "Increased activity of guanylate cyclase",
-                    "D": "Increased production of cyclic adenosine monophosphate",
-                    "E": "Increased intracellular concentration of calcium"}, "meta_info": "step1",
-        "answer_idx": "D"}
-    ]
+    cases = read_jsonl(path, total_count)
+    # cases = [{
+    #     "question": "A 59-year-old man with long-standing hypertension is brought to the emergency department because of vomiting and headache for 2 hours. He reports that he has been unable to refill the prescription for his antihypertensive medications. His blood pressure is 210/120 mm Hg. Fundoscopy shows bilateral optic disc swelling. An ECG shows left ventricular hypertrophy. Treatment with intravenous fenoldopam is begun. Which of the following intracellular changes is most likely to occur in renal vascular smooth muscle as a result of this drug?",
+    #     "answer": "Increased production of cyclic adenosine monophosphate",
+    #     "options": {"A": "Increased activity of myosin light-chain kinase",
+    #                 "B": "Increased activity of protein kinase C",
+    #                 "C": "Increased activity of guanylate cyclase",
+    #                 "D": "Increased production of cyclic adenosine monophosphate",
+    #                 "E": "Increased intracellular concentration of calcium"}, "meta_info": "step1",
+    #     "answer_idx": "D"}
+    # ]
     print(f"=== 读取了 {len(cases)} 条病例数据 ===")
     results, acc = evaluate_dataset(cases)
     save_to_csv(results)

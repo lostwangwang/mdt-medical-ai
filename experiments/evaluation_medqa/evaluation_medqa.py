@@ -45,7 +45,7 @@ if __name__ == "__main__":
     # path = "../../" + "data/examples/medqa/data_clean/questions/Mainland/dev.jsonl"
     path = "../../data/examples/medqa/data_clean/questions/US/dev.jsonl"
     print(path)
-    # data = read_jsonl(path, 10, seed=42)
+    # data = read_jsonl(path, 50, seed=42)
     data = [
         {
             "question": "A 59-year-old man with long-standing hypertension is brought to the emergency department because of vomiting and headache for 2 hours. He reports that he has been unable to refill the prescription for his antihypertensive medications. His blood pressure is 210/120 mm Hg. Fundoscopy shows bilateral optic disc swelling. An ECG shows left ventricular hypertrophy. Treatment with intravenous fenoldopam is begun. Which of the following intracellular changes is most likely to occur in renal vascular smooth muscle as a result of this drug?",
@@ -57,7 +57,6 @@ if __name__ == "__main__":
                         "E": "Increased intracellular concentration of calcium"}, "meta_info": "step1",
             "answer_idx": "D"
         }
-
     ]
 
     right_cnt = 0

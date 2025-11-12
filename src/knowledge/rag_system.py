@@ -26,11 +26,9 @@ class MedicalKnowledgeRAG:
         self.faiss_manager = faiss_manager
 
     def _initialize_knowledge_base(
-        self, knowledge_base_path: Optional[str]
+            self, knowledge_base_path: Optional[str]
     ) -> Dict[str, Any]:
         """初始化医学知识库"""
-        # 在实际项目中，这里会加载真实的医学知识库，这个我现在还没弄好。
-        # 现在使用模拟的知识结构
 
         knowledge_base = {
             "disease_profiles": {
@@ -185,10 +183,10 @@ class MedicalKnowledgeRAG:
         return knowledge_base
 
     def retrieve_relevant_knowledge(
-        self,
-        patient_state: PatientState,
-        query_type: str,
-        treatment_focus: TreatmentOption = None,
+            self,
+            patient_state: PatientState,
+            query_type: str,
+            treatment_focus: TreatmentOption = None,
     ) -> Dict[str, Any]:
         """检索相关医学知识"""
 
@@ -226,7 +224,7 @@ class MedicalKnowledgeRAG:
         return relevant_knowledge
 
     def _get_treatment_guidelines(
-        self, patient_state: PatientState, treatment: TreatmentOption = None
+            self, patient_state: PatientState, treatment: TreatmentOption = None
     ) -> List[str]:
         """获取治疗指南"""
         guidelines = []
@@ -299,8 +297,8 @@ class MedicalKnowledgeRAG:
             ) / max(1, len(patient_comorbidities | case_comorbidities))
 
             overall_similarity = (
-                age_similarity + stage_similarity + comorbidity_similarity
-            ) / 3.0
+                                         age_similarity + stage_similarity + comorbidity_similarity
+                                 ) / 3.0
 
             if overall_similarity > 0.6:  # 相似度阈值
                 case_info = case.copy()
@@ -313,7 +311,7 @@ class MedicalKnowledgeRAG:
         return similar_cases[:3]  # 返回最相似的3个案例
 
     def _get_contraindications(
-        self, patient_state: PatientState, treatment: TreatmentOption = None
+            self, patient_state: PatientState, treatment: TreatmentOption = None
     ) -> List[str]:
         """获取禁忌症"""
         contraindications = []
@@ -349,20 +347,20 @@ class MedicalKnowledgeRAG:
             contraindications.append("advanced_age_surgical_risk")
 
         if (
-            treatment == TreatmentOption.CHEMOTHERAPY
-            and "cardiac_dysfunction" in patient_state.comorbidities
+                treatment == TreatmentOption.CHEMOTHERAPY
+                and "cardiac_dysfunction" in patient_state.comorbidities
         ):
             contraindications.append("cardiac_dysfunction_chemotherapy_risk")
 
         return contraindications
 
     def _check_contraindication(
-        self, patient_state: PatientState, contraindication: str
+            self, patient_state: PatientState, contraindication: str
     ) -> bool:
         """检查患者是否有特定禁忌症"""
         contraindication_checks = {
             "severe_cardiac_dysfunction": "cardiac_dysfunction"
-            in patient_state.comorbidities,
+                                          in patient_state.comorbidities,
             "multiple_organ_dysfunction": len(patient_state.comorbidities) > 3,
             "poor_performance_status": patient_state.quality_of_life_score < 0.3,
             "metastatic_disease": patient_state.stage == "IV",
@@ -386,7 +384,7 @@ class MedicalKnowledgeRAG:
         return treatment_info.get("evidence_level", "Category 2B")
 
     def _get_success_rates(
-        self, patient_state: PatientState, treatment: TreatmentOption = None
+            self, patient_state: PatientState, treatment: TreatmentOption = None
     ) -> Dict[str, float]:
         """获取成功率数据"""
         if not treatment:
@@ -408,7 +406,7 @@ class MedicalKnowledgeRAG:
         return adjusted_rates
 
     def _get_base_success_rates(
-        self, patient_state: PatientState, treatment: TreatmentOption
+            self, patient_state: PatientState, treatment: TreatmentOption
     ) -> Dict[str, float]:
         """获取基础成功率"""
         # 从疾病profile获取基础生存率
@@ -437,7 +435,7 @@ class MedicalKnowledgeRAG:
         return adjusted_rates
 
     def _adjust_success_rates_by_patient(
-        self, base_rates: Dict[str, float], patient_state: PatientState
+            self, base_rates: Dict[str, float], patient_state: PatientState
     ) -> Dict[str, float]:
         """根据患者特征调整成功率"""
         adjusted_rates = base_rates.copy()
@@ -529,7 +527,7 @@ class MedicalKnowledgeRAG:
         return side_effects_db.get(treatment, {})
 
     def _get_comorbidity_considerations(
-        self, patient_state: PatientState
+            self, patient_state: PatientState
     ) -> Dict[str, Any]:
         """获取并发症考虑"""
         considerations = {}
@@ -544,7 +542,7 @@ class MedicalKnowledgeRAG:
         return considerations
 
     def _get_drug_interactions(
-        self, patient_state: PatientState, treatment: TreatmentOption = None
+            self, patient_state: PatientState, treatment: TreatmentOption = None
     ) -> List[Dict[str, Any]]:
         """获取药物相互作用"""
         interactions = []
@@ -565,7 +563,7 @@ class MedicalKnowledgeRAG:
         return interactions
 
     def search_knowledge(
-        self, query: str, max_results: int = 5
+            self, query: str, max_results: int = 5
     ) -> List[Dict[str, Any]]:
         """搜索知识库"""
         # 简化的文本搜索实现
@@ -576,7 +574,7 @@ class MedicalKnowledgeRAG:
 
         # 搜索治疗指南
         for guideline_source, guidelines in self.knowledge_base.get(
-            "treatment_guidelines", {}
+                "treatment_guidelines", {}
         ).items():
             for disease, treatments in guidelines.items():
                 for treatment, info in treatments.items():
@@ -594,7 +592,7 @@ class MedicalKnowledgeRAG:
 
         # 搜索疾病资料
         for disease, profiles in self.knowledge_base.get(
-            "disease_profiles", {}
+                "disease_profiles", {}
         ).items():
             for stage, info in profiles.items():
                 description = info.get("description", "")
@@ -620,9 +618,9 @@ class MedicalKnowledgeRAG:
         """深度合并字典"""
         for key, value in update_dict.items():
             if (
-                key in base_dict
-                and isinstance(base_dict[key], dict)
-                and isinstance(value, dict)
+                    key in base_dict
+                    and isinstance(base_dict[key], dict)
+                    and isinstance(value, dict)
             ):
                 self._deep_merge(base_dict[key], value)
             else:
