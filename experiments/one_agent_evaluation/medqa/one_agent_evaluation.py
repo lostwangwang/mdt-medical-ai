@@ -3,55 +3,39 @@ import re
 import re
 import json
 import csv
+import random
+
 from openai import OpenAI
 from time import sleep
-from openai import OpenAI
 from typing import List, Dict
+from dotenv import load_dotenv
+
+load_dotenv()
+
+model_name = os.getenv("MODEL_NAME")
+api_key = os.getenv("QWEN_API_KEY")
+base_url = os.getenv("BASE_URL")
 
 # ✅ 初始化阿里云 DashScope 客户端
 client = OpenAI(
-    api_key=os.environ["DASHSCOPE_API_KEY"],  # 你的 Agent Token
-    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+    api_key=api_key,  # 你的 Agent Token
+    base_url=base_url,
 )
 
 import json
 
 
-def read_jsonl(file_path: str, n: int = None) -> List[Dict]:
+def read_jsonl(file_path: str, n: int = None, seed: int = None) -> List[Dict]:
     with open(file_path, "r", encoding="utf-8") as f:
         lines = f.readlines()
+
+    # 设置随机种子（保证可复现性）
+    if seed is not None:
+        random.seed(seed)
+
     if n is not None:
         lines = lines[:n]
     return [json.loads(line.strip()) for line in lines]
-
-
-# ✅ 示例病例（可以替换成你自己的）
-case_data = {
-    "question": "男，50岁。吃海鲜后夜间突发左足第一跖趾关节剧烈疼痛1天。查体：关节局部红肿，",
-    "options": {
-        "A": "苯溴马隆",
-        "B": "别嘌呤醇",
-        "C": "抗生素",
-        "D": "非甾体抗炎药",
-        "E": "甲氟蝶呤",
-    },
-    "answer_idx": "D",
-}
-
-
-# ✅ 构造 prompt
-def build_prompt(case: Dict) -> str:
-    question = case["question"]
-    options = case["options"]
-    options_str = "\n".join([f"{key}. {value}" for key, value in options.items()])
-
-    prompt = (
-        "请根据以下医疗问题描述，选择最合适的选项答案。\n\n"
-        f"题目：{question}\n\n"
-        f"选项：\n{options_str}\n\n"
-        "请直接回答选项的字母（A/B/C/D/E）。"
-    )
-    return prompt
 
 
 def extract_answer(text: str) -> str:
@@ -69,14 +53,12 @@ def ask_model(case: dict) -> dict:
 选项：
 {', '.join([f'{k}: {v}' for k, v in case['options'].items()])}
 
-请输出：
-1. 你的推理思路（简要说明）
-2. 最终选择答案（仅输出选项字母，例如 D）
+"请直接回答选项的字母（A/B/C/D/E）。"
 """
 
     try:
         response = client.chat.completions.create(
-            model="qwen3-max-preview",
+            model=model_name,
             messages=[
                 {
                     "role": "system",
@@ -149,13 +131,22 @@ def save_to_csv(results, filename=f"results_{int(time.time())}.csv"):
 
 
 if __name__ == "__main__":
-    path = "dev.jsonl"
-    total_count = 100
+    path = "../../../data/examples/medqa/data_clean/questions/US/dev.jsonl"
+    total_count = 50
     cases = read_jsonl(path, total_count)
+    # cases = [{
+    #     "question": "A 59-year-old man with long-standing hypertension is brought to the emergency department because of vomiting and headache for 2 hours. He reports that he has been unable to refill the prescription for his antihypertensive medications. His blood pressure is 210/120 mm Hg. Fundoscopy shows bilateral optic disc swelling. An ECG shows left ventricular hypertrophy. Treatment with intravenous fenoldopam is begun. Which of the following intracellular changes is most likely to occur in renal vascular smooth muscle as a result of this drug?",
+    #     "answer": "Increased production of cyclic adenosine monophosphate",
+    #     "options": {"A": "Increased activity of myosin light-chain kinase",
+    #                 "B": "Increased activity of protein kinase C",
+    #                 "C": "Increased activity of guanylate cyclase",
+    #                 "D": "Increased production of cyclic adenosine monophosphate",
+    #                 "E": "Increased intracellular concentration of calcium"}, "meta_info": "step1",
+    #     "answer_idx": "D"}
+    # ]
     print(f"=== 读取了 {len(cases)} 条病例数据 ===")
     results, acc = evaluate_dataset(cases)
     save_to_csv(results)
-
 
 # if __name__ == "__main__":
 

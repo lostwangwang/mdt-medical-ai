@@ -7,10 +7,11 @@
 
 from os import name
 import numpy as np
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 import logging
-
+import pandas as pd
+from pandas import DataFrame
 
 from ..core.data_models import (
     RoleType,
@@ -34,9 +35,9 @@ class MultiAgentDialogueManager:
     """多智能体对话管理器"""
 
     def __init__(
-        self,
-        rag_system: MedicalKnowledgeRAG,
-        llm_interface: Optional[LLMInterface] = None,
+            self,
+            rag_system: MedicalKnowledgeRAG,
+            llm_interface: Optional[LLMInterface] = None,
     ):
         self.agents = {
             role: RoleAgent(role, llm_interface=llm_interface) for role in RoleType
@@ -45,7 +46,7 @@ class MultiAgentDialogueManager:
         self.rag_system = rag_system
         self.dialogue_rounds = []
         self.current_round = 0
-        self.max_rounds = 5
+        self.max_rounds = 3
         self.convergence_threshold = 0.7
         self.df = None
         self.W = None
@@ -53,10 +54,10 @@ class MultiAgentDialogueManager:
         self.consensus = None
 
     def conduct_mdt_discussion_medqa(
-        self,
-        question_state: MedicalQuestionState,
-        question_options: List[QuestionOption],
-        dataset_name: str = None
+            self,
+            question_state: MedicalQuestionState,
+            question_options: List[QuestionOption],
+            dataset_name: str = None,
     ) -> ConsensusResult:
         """
         进行MDT讨论
@@ -79,31 +80,45 @@ class MultiAgentDialogueManager:
         # 将意见列表转换为字典，方便按角色快速访问
         opinions_dict = {opinion.role: opinion for opinion in opinions_list}
         logger.info(f"Initial opinions dict: {opinions_dict}")
-        # 进行多轮对话协商
-        while (
-            self.current_round < self.max_rounds
-            and not self._check_discussion_convergence_medqa(opinions_dict, question_options)
-        ):
-            self.current_round += 1
-            print(f"当前是第{self.current_round}轮对话")
-            logger.info(f"Starting dialogue round {self.current_round}")
+        self.df, self.W, self.p_value, self.consensus = (
+            self._check_discussion_convergence_medqa(opinions_dict, question_options)
+        )
+        if self.consensus == True:
+            print("有共识结果,不用再继续跑了")
+            logger.info(f"第{self.current_round}轮有共识结果")
+        else:
+            # 进行多轮对话协商
+            while self.current_round < self.max_rounds and not self.consensus:
+                self.current_round += 1
+                print(f"当前是第{self.current_round}轮对话")
+                logger.info(f"Starting dialogue round {self.current_round}")
 
-            # 进行一轮结构化对话
-            current_round = self._conduct_dialogue_round_medqa(
-                question_state, question_options, opinions_dict, dataset_name
-            )
-            logger.info(f"dialogue round {self.current_round}: {current_round}")
-            self.dialogue_rounds.append(current_round)
-            logger.info(f"previous opinions dict: {opinions_dict}")
-            # 基于对话内容更新各角色立场
-            new_opinions_dict = self._update_agent_opinions_medqa(
-                question_state, current_round, opinions_dict, question_options, dataset_name
-            )
-            logger.info(f"Updated opinions dict: {new_opinions_dict}")
-            opinions_dict = new_opinions_dict
-        
+                # 进行一轮结构化对话
+                current_round, focus_option = self._conduct_dialogue_round_medqa(
+                    question_state, question_options, opinions_dict, dataset_name
+                )
+                logger.info(f"dialogue round {self.current_round}: {current_round}")
+                self.dialogue_rounds.append(current_round)
+                logger.info(f"previous opinions dict: {opinions_dict}")
+                # 基于对话内容更新各角色立场
+                new_opinions_dict = self._update_agent_opinions_medqa(
+                    question_state,
+                    current_round,
+                    opinions_dict,
+                    question_options,
+                    dataset_name,
+                    focus_option,
+                    self.df,
+                    self.W,
+                )
+                logger.info(f"Updated opinions dict: {new_opinions_dict}")
+                opinions_dict = new_opinions_dict
+                self.df, self.W, self.p_value, self.consensus = self._check_discussion_convergence_medqa(
+                    opinions_dict, question_options
+                )
+
         logger.info(f"the last round: {self.current_round}")
-        logger.info(f"final opinions dict: {new_opinions_dict}")
+        logger.info(f"final opinions dict: {opinions_dict}")
 
         print(f"第{self.current_round}轮达成共识")
         logger.info(f"第{self.current_round}轮达成共识!!!")
@@ -111,7 +126,7 @@ class MultiAgentDialogueManager:
         final_result = {
             "question_state": question_state,
             "question_options": question_options,
-            "final_opinions_dict": new_opinions_dict,
+            "final_opinions_dict": opinions_dict,
             "final_consensus": {
                 "df": self.df,
                 "W": self.W,
@@ -121,31 +136,58 @@ class MultiAgentDialogueManager:
         }
         return final_result
 
+    def get_df_and_w(
+            self,
+            question_options: List[QuestionOption],
+            opinions_dict: Dict[RoleType, RoleOpinion],
+    ):
+        self.consensus_calculator.set_treatments(question_options)
+        print("get_df_and_w行数:", self.consensus_calculator.m)
+        print("get_df_and_w列数:", self.consensus_calculator.n)
+
+        self.consensus_calculator.build_weighted_matrix(opinions_dict)
+        self.consensus_calculator.compute_kendalls_w()
+        self.df, self.W, _, _ = self.consensus_calculator.summarize(
+            consensus_threshold=self.convergence_threshold
+        )
+        logger.info(f"get_df_and_w第{self.current_round}轮df: {self.df}")
+        logger.info(f"get_df_and_w第{self.current_round}轮W: {self.W}")
+        return self.df, self.W
+
     def _conduct_dialogue_round_medqa(
-        self, question_state: MedicalQuestionState,
-        question_options: List[QuestionOption],
-        opinions_dict: Dict[RoleType, RoleOpinion],
-        dataset_name: str = None
-    ) -> DialogueRound:
+            self,
+            question_state: MedicalQuestionState,
+            question_options: List[QuestionOption],
+            opinions_dict: Dict[RoleType, RoleOpinion],
+            dataset_name: str = None,
+    ) -> Tuple[DialogueRound, QuestionOption]:
         """进行一轮结构化对话"""
+        focus_treatment = self._select_focus_treatment_medqa(
+            question_options, opinions_dict
+        )
         current_round = DialogueRound(
             round_number=self.current_round,
             messages=[],
-            focus_treatment=self._select_focus_treatment_medqa(question_options, opinions_dict),
+            focus_treatment=focus_treatment,
             consensus_status="discussing",
         )
 
         current_round = self._conduct_sequential_presentation_medqa(
-            current_round, question_state, question_options, opinions_dict, dataset_name=dataset_name
+            current_round,
+            question_state,
+            question_options,
+            opinions_dict,
+            dataset_name=dataset_name,
         )
         logger.info(
             f"Generated messages for round {self.current_round}: {current_round}"
         )
-        return current_round
-    
+        return current_round, focus_treatment
+
     def _select_focus_treatment_medqa(
-        self, question_options: List[QuestionOption],
-        opinions_dict: Dict[RoleType, RoleOpinion],
+            self,
+            question_options: List[QuestionOption],
+            opinions_dict: Dict[RoleType, RoleOpinion],
     ) -> TreatmentOption:
         """根据当前意见选择聚焦治疗方案"""
         # 简单实现：选择当前意见中最高分的治疗方案
@@ -157,7 +199,7 @@ class MultiAgentDialogueManager:
                 treatment_mentions[treatment] = 0
             treatment_mentions[treatment] += 1
         max_mentions = max(treatment_mentions.values())
-        
+
         logger.info(f"treatment mentions: {treatment_mentions}")
         logger.info(f"max mentions: {max_mentions}")
 
@@ -170,8 +212,10 @@ class MultiAgentDialogueManager:
         return focus_treatment
 
     def _initialize_discussion_medqa(
-        self, question_state: MedicalQuestionState,
-        question_options: List[QuestionOption], dataset_name: str = None
+            self,
+            question_state: MedicalQuestionState,
+            question_options: List[QuestionOption],
+            dataset_name: str = None,
     ) -> None:
         # 生成各角色的初始意见
         initial_round = DialogueRound(
@@ -209,7 +253,12 @@ class MultiAgentDialogueManager:
         return opinions_list
 
     def _create_initial_message_medqa(
-        self, agent: RoleAgent, opinion: RoleOpinion, question_state: MedicalQuestionState, question_options: List[QuestionOption], dataset_name: str = None
+            self,
+            agent: RoleAgent,
+            opinion: RoleOpinion,
+            question_state: MedicalQuestionState,
+            question_options: List[QuestionOption],
+            dataset_name: str = None,
     ) -> DialogueMessage:
         """创建初始消息"""
         # 智能选择治疗方案（仅仅是最高分）
@@ -219,7 +268,12 @@ class MultiAgentDialogueManager:
 
         # 尝试使用LLM生成个性化初始消息
         content = self._generate_llm_initial_message_meqa(
-            agent, opinion, question_state, focus_question, question_options, dataset_name
+            agent,
+            opinion,
+            question_state,
+            focus_question,
+            question_options,
+            dataset_name,
         )
         logger.info(f"测试Generated initial message for {agent.role}: {content}")
 
@@ -232,7 +286,13 @@ class MultiAgentDialogueManager:
         )
 
     def _generate_llm_initial_message_meqa(
-        self, agent: RoleAgent, opinion: RoleOpinion, question_state: MedicalQuestionState, focus_treatment: QuestionOption, question_options: List[QuestionOption], dataset_name: str = None
+            self,
+            agent: RoleAgent,
+            opinion: RoleOpinion,
+            question_state: MedicalQuestionState,
+            focus_treatment: QuestionOption,
+            question_options: List[QuestionOption],
+            dataset_name: str = None,
     ):
         """使用LLM生成个性化初始消息"""
         if not hasattr(agent, "llm_interface") or not agent.llm_interface:
@@ -247,7 +307,7 @@ class MultiAgentDialogueManager:
                     opinion=opinion,
                     treatment_option=focus_treatment,
                     question_options=question_options,
-                    dataset_name=dataset_name
+                    dataset_name=dataset_name,
                 )
                 logger.info(
                     f"生成初始化发言, 治疗选项: {focus_treatment}, 推理: {reasoning}"
@@ -270,42 +330,50 @@ class MultiAgentDialogueManager:
         return ""
 
     def _select_focus_question_for_role_medqa(
-        self, agent: RoleAgent, opinion: RoleOpinion, question_state: MedicalQuestionState, question_options: List[QuestionOption]
+            self,
+            agent: RoleAgent,
+            opinion: RoleOpinion,
+            question_state: MedicalQuestionState,
+            question_options: List[QuestionOption],
     ) -> QuestionOption:
         """选择当前角色关注的偏好最高的问题选项"""
         prefs = opinion.treatment_preferences  # 格式：{"A": 0.9, "B": -0.2, ...}
-        
+
         # 1. 过滤出有效选项（确保选项在偏好字典中存在）
         # valid_options = [
-        #     option for option in question_options 
+        #     option for option in question_options
         #     # option.name 是选项标识（如"A"/"B"），需与prefs的键匹配
-        #     if option.name in prefs  
+        #     if option.name in prefs
         #     # 同时确保该选项在问题的原始选项中（双重校验，可选）
-        #     and option.name in question_state.options  
+        #     and option.name in question_state.options
         # ]
-        
+
         # if not valid_options:
         #     raise ValueError("没有找到有效的选项偏好映射")
-        
+
         # 2. 找到最高得分
-        max_score = max(prefs[option.name] for option in question_options if option.name in prefs)
-        
+        max_score = max(
+            prefs[option.name] for option in question_options if option.name in prefs
+        )
+
         # 3. 筛选出所有得分等于最高分的选项（处理并列情况）
         top_options = [
-            option for option in question_options 
+            option
+            for option in question_options
             if option.name in prefs and prefs[option.name] == max_score
         ]
-        
+
         # 4. 如果有多个并列最高分，返回第一个；否则返回唯一的最高分选项
         focus_question = top_options[0]
-        
+
         logger.info(f"最高得分: {max_score}")
-        logger.info(f"选中的选项: {focus_question.name} ({question_state.options[focus_question.name]})")  # 打印选项标识和内容
+        logger.info(
+            f"选中的选项: {focus_question.name} ({question_state.options[focus_question.name]})"
+        )  # 打印选项标识和内容
         return focus_question
 
-
     def conduct_mdt_discussion(
-        self, patient_state: PatientState, treatment_options: List[TreatmentOption]
+            self, patient_state: PatientState, treatment_options: List[TreatmentOption]
     ) -> ConsensusResult:
         """
         进行MDT讨论
@@ -327,8 +395,8 @@ class MultiAgentDialogueManager:
         logger.info(f"Initial opinions dict: {opinions_dict}")
         # 进行多轮对话协商
         while (
-            self.current_round < self.max_rounds
-            and not self._check_discussion_convergence(opinions_dict, treatment_options)
+                self.current_round < self.max_rounds
+                and not self._check_discussion_convergence(opinions_dict, treatment_options)
         ):
             self.current_round += 1
             logger.info(f"Starting dialogue round {self.current_round}")
@@ -353,29 +421,39 @@ class MultiAgentDialogueManager:
         logger.info(f"MDT discussion completed after {self.current_round} rounds")
         logger.info(f"Final consensus result: {final_result}")
         return final_result
-    
-    def _check_discussion_convergence_medqa(self, opinions_dict: Dict[RoleType, RoleOpinion], question_options: List[QuestionOption]) -> bool:
+
+    def _check_discussion_convergence_medqa(
+            self,
+            opinions_dict: Dict[RoleType, RoleOpinion],
+            question_options: List[QuestionOption],
+    ) -> bool:
         """
         检查讨论是否收敛
         """
         print("判断是否收敛之前输出None吗?")
-        if self.current_round < 2:
-            return False
+        # if self.current_round < 2:
+        #     return False
         self.consensus_calculator.set_treatments(question_options)
         print("行数:", self.consensus_calculator.m)
         print("列数:", self.consensus_calculator.n)
 
         self.consensus_calculator.build_weighted_matrix(opinions_dict)
         self.consensus_calculator.compute_kendalls_w()
-        self.df, self.W, self.p_value, self.consensus = self.consensus_calculator.summarize(consensus_threshold=self.convergence_threshold)
+        self.df, self.W, self.p_value, self.consensus = (
+            self.consensus_calculator.summarize(
+                consensus_threshold=self.convergence_threshold
+            )
+        )
         logger.info(f"第{self.current_round}轮df: {self.df}")
-        logger.info(f"第{self.current_round}轮W: {self.W}")
+        logger.info(f"第{self.current_round}轮W: {self.W}, {type(self.W)}")
         logger.info(f"第{self.current_round}轮p_value: {self.p_value}")
         logger.info(f"第{self.current_round}轮共识结果：consensus: {self.consensus}")
-        return self.consensus
-    
+        return self.df, self.W, self.p_value, self.consensus
+
     def _check_discussion_convergence(
-        self, opinions_dict: Dict[RoleType, RoleOpinion], treatment_options: List[TreatmentOption]
+            self,
+            opinions_dict: Dict[RoleType, RoleOpinion],
+            treatment_options: List[TreatmentOption],
     ) -> bool:
         """
         检查讨论是否收敛
@@ -388,7 +466,17 @@ class MultiAgentDialogueManager:
         df, W, p_value, consensus = self.consensus_calculator.summarize()
         return consensus
 
-    def _update_agent_opinions_medqa(self, question_state: MedicalQuestionState, current_round: DialogueRound, opinions_dict: Dict[RoleType, RoleOpinion], question_options: List[QuestionOption], dataset_name: str = None):
+    def _update_agent_opinions_medqa(
+            self,
+            question_state: MedicalQuestionState,
+            current_round: DialogueRound,
+            opinions_dict: Dict[RoleType, RoleOpinion],
+            question_options: List[QuestionOption],
+            dataset_name: str = None,
+            focus_question: QuestionOption = None,
+            df: DataFrame = None,
+            W: float = 0.0,
+    ):
         """
         更新各角色立场
         - 基于当前轮对话内容，更新每个角色的治疗意见
@@ -404,7 +492,14 @@ class MultiAgentDialogueManager:
             previous_opinion = opinions_dict[role.value]
             logger.info(f"Previous opinion for {role.value}: {previous_opinion}")
             new_opintion = agent._update_agent_opinions_and_preferences_medqa(
-                question_state, current_round, previous_opinion, question_options, dataset_name
+                question_state,
+                current_round,
+                previous_opinion,
+                question_options,
+                focus_question,
+                dataset_name,
+                df,
+                W,
             )
             new_opinions_dict[role.value] = new_opintion
 
@@ -412,11 +507,11 @@ class MultiAgentDialogueManager:
         return new_opinions_dict
 
     def _update_agent_opinions(
-        self,
-        patient_state: PatientState,
-        current_round: DialogueRound,
-        opinions_dict: Dict[RoleType, RoleOpinion],
-        treatment_options: List[TreatmentOption],
+            self,
+            patient_state: PatientState,
+            current_round: DialogueRound,
+            opinions_dict: Dict[RoleType, RoleOpinion],
+            treatment_options: List[TreatmentOption],
     ) -> Dict[RoleType, RoleOpinion]:
         """
         更新各角色立场
@@ -441,7 +536,7 @@ class MultiAgentDialogueManager:
         return new_opinions_dict
 
     def _initialize_discussion(
-        self, patient_state: PatientState, treatment_options: List[TreatmentOption]
+            self, patient_state: PatientState, treatment_options: List[TreatmentOption]
     ) -> None:
         """
         初始化讨论
@@ -493,11 +588,11 @@ class MultiAgentDialogueManager:
         return opinions_list
 
     def _create_initial_message(
-        self,
-        agent: RoleAgent,
-        opinion: RoleOpinion,
-        patient_state: PatientState,
-        treatment_options: List[TreatmentOption],
+            self,
+            agent: RoleAgent,
+            opinion: RoleOpinion,
+            patient_state: PatientState,
+            treatment_options: List[TreatmentOption],
     ) -> DialogueMessage:
         """创建初始消息"""
         # 智能选择治疗方案（仅仅是最高分）
@@ -527,11 +622,11 @@ class MultiAgentDialogueManager:
         )
 
     def _select_focus_treatment_for_role(
-        self,
-        agent: RoleAgent,
-        opinion,
-        patient_state: PatientState,
-        treatment_options: List[TreatmentOption],
+            self,
+            agent: RoleAgent,
+            opinion,
+            patient_state: PatientState,
+            treatment_options: List[TreatmentOption],
     ) -> TreatmentOption:
         """为特定角色智能选择焦点治疗方案"""
         prefs = opinion.treatment_preferences
@@ -598,11 +693,11 @@ class MultiAgentDialogueManager:
         return role_preferences.get(role, list(TreatmentOption))
 
     def _apply_intelligent_selection_strategy(
-        self,
-        viable_treatments: Dict[TreatmentOption, float],
-        role_preferred_treatments: List[TreatmentOption],
-        patient_state: PatientState,
-        role: RoleType,
+            self,
+            viable_treatments: Dict[TreatmentOption, float],
+            role_preferred_treatments: List[TreatmentOption],
+            patient_state: PatientState,
+            role: RoleType,
     ) -> TreatmentOption:
         """应用智能选择策略"""
 
@@ -660,12 +755,12 @@ class MultiAgentDialogueManager:
         return max(viable_treatments.items(), key=lambda x: x[1])[0]
 
     def _generate_llm_initial_message(
-        self,
-        agent: RoleAgent,
-        opinion: RoleOpinion,
-        patient_state: PatientState,
-        focus_treatment: TreatmentOption,
-        treatment_options: List[TreatmentOption],
+            self,
+            agent: RoleAgent,
+            opinion: RoleOpinion,
+            patient_state: PatientState,
+            focus_treatment: TreatmentOption,
+            treatment_options: List[TreatmentOption],
     ) -> str:
         """使用LLM生成个性化初始消息"""
         if not hasattr(agent, "llm_interface") or not agent.llm_interface:
@@ -703,11 +798,11 @@ class MultiAgentDialogueManager:
         return ""
 
     def _format_reasoning_as_mdt_message(
-        self,
-        agent: RoleAgent,
-        reasoning: str,
-        focus_treatment: TreatmentOption,
-        opinion,
+            self,
+            agent: RoleAgent,
+            reasoning: str,
+            focus_treatment: TreatmentOption,
+            opinion,
     ) -> str:
         """将LLM推理格式化为MDT发言消息"""
 
@@ -727,7 +822,7 @@ class MultiAgentDialogueManager:
         return content
 
     def _generate_template_initial_message(
-        self, agent: RoleAgent, opinion, focus_treatment: TreatmentOption
+            self, agent: RoleAgent, opinion, focus_treatment: TreatmentOption
     ) -> str:
         """生成模板化初始消息（降级方案）"""
         content = f"As the {agent.role.value}, I {self._get_recommendation_phrase(opinion.treatment_preferences[focus_treatment.value])} {focus_treatment.value}. "
@@ -754,7 +849,7 @@ class MultiAgentDialogueManager:
             return "强烈不建议 "
 
     def _conduct_dialogue_round(
-        self, patient_state: PatientState, opinions_dict: Dict[RoleType, RoleOpinion]
+            self, patient_state: PatientState, opinions_dict: Dict[RoleType, RoleOpinion]
     ) -> DialogueRound:
         """进行一轮对话 - 增强版本，支持更自然的对话流程"""
         current_round = DialogueRound(
@@ -792,7 +887,7 @@ class MultiAgentDialogueManager:
         return current_round
 
     def _determine_intelligent_speaking_order(
-        self, focus_treatment: TreatmentOption, patient_state: PatientState
+            self, focus_treatment: TreatmentOption, patient_state: PatientState
     ) -> tuple[List[RoleType], str]:
         """发言顺序和对话策略"""
 
@@ -844,7 +939,7 @@ class MultiAgentDialogueManager:
         return min(1.0, complexity_score)
 
     def _get_polarized_speaking_order(
-        self, treatment: TreatmentOption
+            self, treatment: TreatmentOption
     ) -> List[RoleType]:
         """获取极化发言顺序（用于争议性讨论）"""
         stance_roles = []
@@ -860,7 +955,7 @@ class MultiAgentDialogueManager:
         return [role for role, _ in stance_roles]
 
     def _get_expertise_based_order(
-        self, treatment: TreatmentOption, patient_state: PatientState
+            self, treatment: TreatmentOption, patient_state: PatientState
     ) -> List[RoleType]:
         """基于专业相关性的发言顺序"""
         # 根据治疗类型和患者情况确定专业相关性
@@ -935,30 +1030,30 @@ class MultiAgentDialogueManager:
         psych_flags_en = {"anxious", "depressed", "severe_anxiety", "depression"}
         psych_flags_zh = {"焦虑", "抑郁", "重度焦虑", "抑郁症"}
         if any(flag in psych_status_lower for flag in psych_flags_en) or any(
-            flag in psych_status_text for flag in psych_flags_zh
+                flag in psych_status_text for flag in psych_flags_zh
         ):
             weights[RoleType.PSYCHOLOGIST] = (
-                weights.get(RoleType.PSYCHOLOGIST, 0.5) + 0.2
+                    weights.get(RoleType.PSYCHOLOGIST, 0.5) + 0.2
             )
 
         # 营养相关风险（体重下降/恶病质/营养不良，支持中英文）
         nutrition_flags_en = {"weight_loss", "cachexia", "malnutrition"}
         nutrition_flags_zh = {"体重下降", "恶病质", "营养不良"}
         if symptoms_lower.intersection(nutrition_flags_en) or any(
-            flag in (patient_state.symptoms or []) for flag in nutrition_flags_zh
+                flag in (patient_state.symptoms or []) for flag in nutrition_flags_zh
         ):
             weights[RoleType.NUTRITIONIST] = (
-                weights.get(RoleType.NUTRITIONIST, 0.5) + 0.2
+                    weights.get(RoleType.NUTRITIONIST, 0.5) + 0.2
             )
 
         # 功能受限/术后康复需求（支持中英文）
         rehab_flags_en = {"mobility_issue", "weakness", "postoperative"}
         rehab_flags_zh = {"运动障碍", "虚弱", "术后"}
         if symptoms_lower.intersection(rehab_flags_en) or any(
-            flag in (patient_state.symptoms or []) for flag in rehab_flags_zh
+                flag in (patient_state.symptoms or []) for flag in rehab_flags_zh
         ):
             weights[RoleType.REHABILITATION_THERAPIST] = (
-                weights.get(RoleType.REHABILITATION_THERAPIST, 0.4) + 0.2
+                    weights.get(RoleType.REHABILITATION_THERAPIST, 0.4) + 0.2
             )
 
         # 按权重排序；若为空，回退到传统顺序
@@ -969,7 +1064,7 @@ class MultiAgentDialogueManager:
         return ordered
 
     def _get_traditional_speaking_order(
-        self, treatment: TreatmentOption
+            self, treatment: TreatmentOption
     ) -> List[RoleType]:
         """传统的发言顺序"""
         traditional_order = [
@@ -984,11 +1079,11 @@ class MultiAgentDialogueManager:
         return [role for role in traditional_order if role in self.agents]
 
     def _conduct_focused_debate(
-        self,
-        round_data: DialogueRound,
-        patient_state: PatientState,
-        knowledge: Dict,
-        speaking_order: List[RoleType],
+            self,
+            round_data: DialogueRound,
+            patient_state: PatientState,
+            knowledge: Dict,
+            speaking_order: List[RoleType],
     ) -> DialogueRound:
         """进行聚焦辩论式对话"""
         logger.info("Conducting focused debate format")
@@ -1027,11 +1122,11 @@ class MultiAgentDialogueManager:
         return round_data
 
     def _conduct_collaborative_discussion(
-        self,
-        round_data: DialogueRound,
-        patient_state: PatientState,
-        knowledge: Dict,
-        speaking_order: List[RoleType],
+            self,
+            round_data: DialogueRound,
+            patient_state: PatientState,
+            knowledge: Dict,
+            speaking_order: List[RoleType],
     ) -> DialogueRound:
         """进行协作式讨论"""
         logger.info("Conducting collaborative discussion format")
@@ -1068,14 +1163,14 @@ class MultiAgentDialogueManager:
                     round_data.messages.append(brief_response)
 
         return round_data
-    
+
     def _conduct_sequential_presentation_medqa(
-        self,
-        round_data: DialogueRound,
-        question_state: MedicalQuestionState,
-        question_options: List[QuestionOption],
-        opinions_dict: Dict[RoleType, RoleOpinion],
-        dataset_name: str = None
+            self,
+            round_data: DialogueRound,
+            question_state: MedicalQuestionState,
+            question_options: List[QuestionOption],
+            opinions_dict: Dict[RoleType, RoleOpinion],
+            dataset_name: str = None,
     ) -> DialogueRound:
         """进行顺序陈述式对话"""
         # 传统的顺序发言
@@ -1087,7 +1182,7 @@ class MultiAgentDialogueManager:
                 round_data.focus_treatment,
                 opinions_dict,
                 last_round_messages,
-                dataset_name
+                dataset_name,
             )
             logger.info(f"{role.value} responded: {response.content}...")
             round_data.messages.append(response)
@@ -1097,12 +1192,12 @@ class MultiAgentDialogueManager:
         return round_data
 
     def _conduct_sequential_presentation(
-        self,
-        round_data: DialogueRound,
-        patient_state: PatientState,
-        knowledge: Dict,
-        speaking_order: List[RoleType],
-        opinions_dict: Dict[RoleType, RoleOpinion],
+            self,
+            round_data: DialogueRound,
+            patient_state: PatientState,
+            knowledge: Dict,
+            speaking_order: List[RoleType],
+            opinions_dict: Dict[RoleType, RoleOpinion],
     ) -> DialogueRound:
         """进行顺序陈述式对话"""
         logger.info("Conducting sequential presentation format")
@@ -1145,7 +1240,7 @@ class MultiAgentDialogueManager:
         return []
 
     def _identify_opposing_pairs(
-        self, speaking_order: List[RoleType], treatment: TreatmentOption
+            self, speaking_order: List[RoleType], treatment: TreatmentOption
     ) -> List[tuple]:
         """识别对立的角色对"""
         opposing_pairs = []
@@ -1153,12 +1248,12 @@ class MultiAgentDialogueManager:
         for i, role1 in enumerate(speaking_order):
             stance1 = self.agents[role1].current_stance.get(treatment, 0)
 
-            for role2 in speaking_order[i + 1 :]:
+            for role2 in speaking_order[i + 1:]:
                 stance2 = self.agents[role2].current_stance.get(treatment, 0)
 
                 # 如果立场相反（一个支持一个反对）
                 if (stance1 > 0.3 and stance2 < -0.3) or (
-                    stance1 < -0.3 and stance2 > 0.3
+                        stance1 < -0.3 and stance2 > 0.3
                 ):
                     opposing_pairs.append((role1, role2))
 
@@ -1189,7 +1284,7 @@ class MultiAgentDialogueManager:
         return treatments[self.current_round % len(treatments)]
 
     def _determine_speaking_order(
-        self, focus_treatment: TreatmentOption
+            self, focus_treatment: TreatmentOption
     ) -> List[RoleType]:
         """确定发言顺序"""
         # 基于角色对治疗方案的相关性确定顺序
@@ -1244,8 +1339,8 @@ class MultiAgentDialogueManager:
                 abs(score) > stance_threshold for score in current_stances.values()
             ]
             if (
-                len(strong_stances) > 0
-                and sum(strong_stances) / len(strong_stances) > 0.7
+                    len(strong_stances) > 0
+                    and sum(strong_stances) / len(strong_stances) > 0.7
             ):
                 stable_agents += 1
 
@@ -1383,7 +1478,7 @@ class MultiAgentDialogueManager:
         return summary
 
     def _identify_final_conflicts(
-        self, final_opinions: Dict[RoleType, Any]
+            self, final_opinions: Dict[RoleType, Any]
     ) -> List[Dict[str, Any]]:
         """识别最终冲突"""
         conflicts = []
@@ -1412,7 +1507,7 @@ class MultiAgentDialogueManager:
         return conflicts
 
     def _identify_final_agreements(
-        self, final_opinions: Dict[RoleType, Any]
+            self, final_opinions: Dict[RoleType, Any]
     ) -> List[Dict[str, Any]]:
         """识别最终一致意见"""
         agreements = []
@@ -1434,14 +1529,14 @@ class MultiAgentDialogueManager:
                             "consensus_score": mean_score,
                             "agreement_strength": 1.0 - variance,
                             "unanimous": all(s > 0.5 for s in scores)
-                            or all(s < -0.5 for s in scores),
+                                         or all(s < -0.5 for s in scores),
                         }
                     )
 
         return agreements
 
     def _find_conflicting_roles(
-        self, treatment: TreatmentOption, final_opinions: Dict[RoleType, Any]
+            self, treatment: TreatmentOption, final_opinions: Dict[RoleType, Any]
     ) -> List[str]:
         """找出在特定治疗上有冲突的角色"""
         scores_by_role = {

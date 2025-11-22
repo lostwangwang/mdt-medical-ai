@@ -1,29 +1,30 @@
 import re
 import json
 
+
 def fix_and_parse_single_json(raw_text):
     """
-    处理“或”关系的单个JSON：修复末尾多}、concerns多]的错误，再解析
+    处理“或”关系的单个JSON：修复末尾多}、concerns多]、concerns少]的错误，再解析
     :param raw_text: 大模型返回的单个JSON字符串（含可能错误）
     :return: 解析后的JSON字典
     """
-    # 新增：移除首尾的```json和```标记
-    # 正则匹配：去掉开头的```json（可选换行）和结尾的```（可选换行）
-    # raw_text = re.sub(r'^```json\s*', '', raw_text.strip())  # 移除开头的```json
-    # raw_text = re.sub(r'\s*```$', '', raw_text)  # 移除结尾的```
-    # 1. 第一步：修复“末尾多}”的错误（匹配最后一个}后多余的}，并删除）
-    # 正则逻辑：匹配字符串末尾的“任意空格+}”，只保留1个}
-    fixed_text = re.sub(r'(\})\s*\}', r'\1', raw_text.strip(), count=1)
-    
-    # 2. 第二步：修复“concerns多]”的错误（匹配列表末尾的“]]”，替换为“]”）
-    # 正则逻辑：匹配 "concerns": [...] 结构中末尾的多余]
+    # 1. 修复“concerns列表缺少闭合]”（核心新增逻辑）
+    # 正则逻辑：匹配 "concerns": [xxx} 结构，在}前补全]
+    fixed_text = re.sub(r'("concerns": \[.*?)(\s*})', r'\1]\2', raw_text.strip(), flags=re.DOTALL)
+
+    # 2. 原有逻辑：修复末尾多}
+    fixed_text = re.sub(r'(\})\s*\}', r'\1', fixed_text, count=1)
+
+    # 3. 原有逻辑：修复concerns多]
     fixed_text = re.sub(r'("concerns": \[.*?)\]\]', r'\1]', fixed_text, flags=re.DOTALL)
-    
-    # 3. 第三步：标准JSON解析（若仍有小错误，可加容错处理）
+
+    # 4. 容错解析：若仍有错误，尝试移除多余逗号（可选补充）
+    fixed_text = re.sub(r',\s*}', '}', fixed_text)  # 移除对象末尾多余逗号
+    fixed_text = re.sub(r',\s*]', ']', fixed_text)  # 移除列表末尾多余逗号
+
     try:
         return json.loads(fixed_text)
     except json.JSONDecodeError as e:
-        # 打印错误信息和修复后的文本，方便调试
         print(f"解析失败：{e}")
         print(f"修复后的JSON文本：{fixed_text}")
         raise e
