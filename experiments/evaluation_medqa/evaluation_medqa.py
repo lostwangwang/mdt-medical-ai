@@ -45,24 +45,16 @@ if __name__ == "__main__":
     # path = "../../" + "data/examples/medqa/data_clean/questions/Mainland/dev.jsonl"
     path = "../../data/examples/medqa/data_clean/questions/US/dev.jsonl"
     print(path)
-    # data = read_jsonl(path, 50, seed=42)
     data = [
-        # {
-        #     "question": "A 59-year-old man with long-standing hypertension is brought to the emergency department because of vomiting and headache for 2 hours. He reports that he has been unable to refill the prescription for his antihypertensive medications. His blood pressure is 210/120 mm Hg. Fundoscopy shows bilateral optic disc swelling. An ECG shows left ventricular hypertrophy. Treatment with intravenous fenoldopam is begun. Which of the following intracellular changes is most likely to occur in renal vascular smooth muscle as a result of this drug?",
-        #     "answer": "Increased production of cyclic adenosine monophosphate",
-        #     "options": {"A": "Increased activity of myosin light-chain kinase",
-        #                 "B": "Increased activity of protein kinase C",
-        #                 "C": "Increased activity of guanylate cyclase",
-        #                 "D": "Increased production of cyclic adenosine monophosphate",
-        #                 "E": "Increased intracellular concentration of calcium"}, "meta_info": "step1",
-        #     "answer_idx": "D"
-        # }
         {
-            "question": "A 35-year-old female presents to your office for a routine physical. She informs you that she is pregnant, and that the father of her child has Waardenburg’s syndrome. She asks you about common findings in Waardenburg’s syndrome. Which of the following features are not associated of Waardenburg’s syndrome?",
-            "answer": "Conductive hearing loss",
-            "options": {"A": "Heterochromia", "B": "Hair hypopigmentation", "C": "Conductive hearing loss",
-                        "D": "Lateral displacement of inner canthi", "E": "Broad nasal root"}, "meta_info": "step2&3",
-            "answer_idx": "C"}
+            "question": "A 68-year-old African American male presents to his primary care provider complaining of progressively worsening back pain. The pain is localized to the lower back and sometimes wakes him up from sleep. He has a history of hypertension and admits to a 50 pack-year smoking history. Further questioning reveals that he has also experienced fatigue and an unintentional weight loss of 18 pounds over the past year. Laboratory analysis is notable for an elevated alkaline phosphatase. A radiograph of the patient’s spine demonstrates multiple sclerotic lesions in the lumbar vertebral bodies. Which of the following tests would most likely confirm the diagnosis in this patient?",
+            "answer": "Transrectal ultrasound-guided prostate biopsy",
+            "options": {"A": "Renal biopsy", "B": "Serum protein electrophoresis",
+                        "C": "Fine needle aspiration of the thyroid",
+                        "D": "Transrectal ultrasound-guided prostate biopsy", "E": "Chest radiograph"},
+            "meta_info": "step1", "answer_idx": "D"
+        }
+
     ]
 
     right_cnt = 0

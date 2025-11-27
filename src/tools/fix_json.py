@@ -8,9 +8,21 @@ def fix_and_parse_single_json(raw_text):
     :param raw_text: 大模型返回的单个JSON字符串（含可能错误）
     :return: 解析后的JSON字典
     """
+    # 新增步骤：移除首尾的```json和```标记
+    # 1. 先去除字符串前后的所有空白字符（包括换行符）
+    content = raw_text.strip()
+    # 2. 检查并移除开头的```json标记
+    if content.startswith("```json"):
+        content = content[7:]  # 从第7个字符开始截取（跳过"```json"）
+    # 3. 检查并移除结尾的```标记
+    if content.endswith("```"):
+        content = content[:-3]  # 截取到倒数第3个字符之前（去掉"```"）
+    # 4. 再次去除可能因移除标记而产生的首尾空白
+    content = content.strip()
+
     # 1. 修复“concerns列表缺少闭合]”（核心新增逻辑）
     # 正则逻辑：匹配 "concerns": [xxx} 结构，在}前补全]
-    fixed_text = re.sub(r'("concerns": \[.*?)(\s*})', r'\1]\2', raw_text.strip(), flags=re.DOTALL)
+    fixed_text = re.sub(r'("concerns": \[.*?)(\s*})', r'\1]\2', content.strip(), flags=re.DOTALL)
 
     # 2. 原有逻辑：修复末尾多}
     fixed_text = re.sub(r'(\})\s*\}', r'\1', fixed_text, count=1)
@@ -28,6 +40,8 @@ def fix_and_parse_single_json(raw_text):
         print(f"解析失败：{e}")
         print(f"修复后的JSON文本：{fixed_text}")
         raise e
+
+
 if __name__ == "__main__":
     # ------------------- 调用示例 -------------------
     # 情况1：返回第一个JSON（末尾多}）
@@ -40,12 +54,23 @@ if __name__ == "__main__":
     parsed1 = fix_and_parse_single_json(raw_json1)
     print("解析结果1：", parsed1)
 
-    # 情况2：返回第二个JSON（concerns多]）
-    raw_json2 = """{
-        "treatment_preferences": {"A": -0.3, "B": -0.2, "C": -0.6, "D": 0.8, "E": -0.5},
-        "reasoning": "急性期首要控制炎症与疼痛，非甾体抗炎药（D）可快速缓解症状，利于早期功能维持",
-        "confidence": 0.9,
-        "concerns": ["注意胃肠道副作用", "避免长期使用", "监测肾功能"]]
-    }"""
-    parsed2 = fix_and_parse_single_json(raw_json2)
-    print("解析结果2：", parsed2)
+    raw_json3 = """```json
+    {
+        "scores": {
+            "A": -0.8,
+            "B": -0.3,
+            "C": -1.0,
+            "D": 1.0,
+            "E": -0.2
+        },
+        "reasoning": "The patient presents with back pain, weight loss, fatigue, and elevated alkaline phosphatase, with multiple sclerotic vertebral lesions on imaging. These findings are classic for prostate cancer with bone metastases, particularly in an older male with a 50 pack-year smoking history. A transrectal ultrasound-guided prostate biopsy is the most direct diagnostic test for prostate cancer. Other tests are either irrelevant or less specific to the likely diagnosis.",
+        "evidence_strength": 0.9,
+        "evidences": [
+            "Sclerotic bone lesions in lumbar spine suggest metastatic prostate cancer.",
+            "Elevated alkaline phosphatase is consistent with bone metastases.",
+            "Prostate biopsy is the gold standard for diagnosing prostate cancer."
+        ]
+    }
+    ```"""
+    parsed3 = fix_and_parse_single_json(raw_json3)
+    print("解析结果3：", parsed3)

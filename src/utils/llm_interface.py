@@ -18,7 +18,7 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Union
 
 import openai
 from dotenv import load_dotenv
@@ -31,7 +31,7 @@ from ..core.data_models import (
     TreatmentOption,
     RoleType,
     RoleOpinion,
-    DialogueRound,
+    DialogueRound, QuestionOpinion,
 )
 import experiments.medqa_types as medqa_types
 
@@ -147,6 +147,74 @@ class LLMInterface:
         except Exception as e:
             logger.error(f"LLM generation failed: {e}")
         pass
+
+    def _build_mdt_leader_content_prompt(
+            self,
+            question_state: medqa_types.MedicalQuestionState,
+            question_options: List[medqa_types.QuestionOption],
+            dialogue_round: DialogueRound,
+            consensus_dict: Dict[str, float]
+    ):
+        df, W, p_value = consensus_dict["df"], consensus_dict["W"], consensus_dict["p_value"]
+        means = df["mean"]
+        mean_scores = [f"{option.name}: {means[option.value]}" for option in question_options]
+        variances = [f"{option.name}: {df['std'][option.value]}" for option in question_options]
+        kendalls_w = W
+        dialogus_messages = dialogue_round.messages
+        agents_messages = "\n\n".join([
+            f"{msg.role.value}: {msg.content}"
+            for msg in dialogus_messages
+        ])
+        prompt = f"""
+        你是多学科医疗团队（MDT）的负责人（Leader）。你的任务是根据各智能体的首次发言，对题目进行总结，并提供下一轮讨论的指导方向。  
+
+        输入信息包括：
+        - 题目（QUESTION）：{question_state.question}  
+        - 选项（OPTIONS）：{[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}  
+        - 各选项平均分（mean_scores）：{mean_scores}  
+        - 各选项方差（variances）：{variances}  
+        - Kendall's W: {kendalls_w}  
+        - 智能体发言内容：{agents_messages}  
+
+        请完成以下任务：
+        1. **总结当前轮情况**：
+           - 指出每个选项的支持趋势（高分/低分）和存在分歧的地方（方差较大）。
+           - 强调整体共识和主要分歧，突出关键证据或理由。
+        2. **下一轮讨论指导方向**：
+           - 提出哪些选项或问题需要重点讨论。
+           - 指出哪些方面的证据或推理需要补充或澄清。
+           - 可建议参考其他专业视角或知识点。
+       
+        要求：
+        - 用中文输出，清晰、简明。
+        - 总结内容控制在 200–250 字。
+        - 下一轮指导以清单或条目形式呈现，便于各智能体参考。
+        - 不重复原始发言内容，只提炼关键信息和讨论方向。
+        """
+        return prompt
+
+    def llm_generate_mdt_leader_content(
+            self,
+            question_state: medqa_types.MedicalQuestionState,
+            question_options: List[medqa_types.QuestionOption],
+            dialogue_round: DialogueRound,
+            consensus_dict: Dict[str, Any],
+    ):
+        prompt = self._build_mdt_leader_content_prompt(question_state, question_options, dialogue_round, consensus_dict)
+        response = self.client.chat.completions.create(
+            model=self.config.model_name,
+            messages=[
+                {
+                    "role": "system",
+                    "content": f"你是多学科会诊（MDT, Multidisciplinary Team）的一名成员,当前身份为一位专业的MDT_LEADER",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=self.config.temperature,
+            max_tokens=self.config.max_tokens,
+        )
+        print(f"[MDT_LEADER_CONTENT_RESPONSE]response: {response}")
+        return response.choices[0].message.content.strip()
 
     def generate_update_agent_opinions_reasoning(
             self,
@@ -750,14 +818,13 @@ C = maybe （不确定/视情况而定）
                     messages=[
                         {
                             "role": "system",
-                            "content": f"你是多学科会诊（MDT, Multidisciplinary Team）的一名成员，当前身份是一位专业的{role.value}，"
-                                       f"首先判断该问题{question_state.question}是否属于你的专业领域.若该问题不属于你的专科，"
-                                       f"请以全科医生（General Internist）的视角判断:你应根据医学常识、循证研究与风险收益做出合理分析。"
-                                       f"请基于问题描述和角色专业性提供医疗问题进行推理,并对每个问题选项的适合度和置信度进行打分",
+                            "content": "你是一个医学多学科团队（MDT, Multidisciplinary Team）的一名智能体成员，"
+                                       "当前身份是 **{role.value}**。你正在参与 MDT 系统的题目评估任务，"
+                                       "请根据你的专业知识分析题目选项，为每个选项提供评分、证据强度和理由。"
                         },
                         {"role": "user", "content": prompt},
                     ],
-                    temperature=0.2,
+                    temperature=0.7,
                     max_tokens=self.config.max_tokens,
                 )
                 logger.debug(f"LLM response debug: {response}")
@@ -773,22 +840,20 @@ C = maybe （不确定/视情况而定）
                 question_state, role, question_options
             )
 
-    def generate_focus_treatment_reasoning_meqa(
+    def generate_all_treatment_reasoning_meqa(
             self,
             question_state: medqa_types.MedicalQuestionState,
             role: RoleType,
-            opinion: RoleOpinion,
-            treatment_option: medqa_types.QuestionOption,
+            opinion: QuestionOpinion,
             question_options: List[medqa_types.QuestionOption] = None,
             dataset_name: str = None
     ) -> str:
-        """生成聚焦治疗选项的推理"""
+        """我觉得不应该是生成聚焦方案的推理了。"""
 
-        prompt = self._build_focus_treatment_reasoning_prompt_meqa(
+        prompt = self._build_all_treatment_reasoning_prompt_meqa(
             question_state,
             role,
             opinion,
-            treatment_option,
             question_options,
             dataset_name
         )
@@ -800,49 +865,35 @@ C = maybe （不确定/视情况而定）
                     messages=[
                         {
                             "role": "system",
-                            "content": f"你是多学科会诊（MDT, Multidisciplinary Team）的一名成员，当前身份是一位专业的{role.value}，"
-                                       f"请先判断问题是否与{role.value}相关,若问题不相关，请以 **全科医生（General Internist）** 的角度进行分析,你需要结合常识、临床经验与循证医学，给出合理推理。"
-                                       f"接下来请基于问题描述和角色专业性提供医疗问题的推理,并对每个问题选项的进行详细的推理分析",
+                            "content": f"You are a member of a multidisciplinary medical team (MDT). Your current role is **{role.value}**."
                         },
                         {"role": "user", "content": prompt},
                     ],
                     temperature=self.config.temperature,
                     max_tokens=self.config.max_tokens,
                 )
-                logger.debug(f"LLM response debug: {response}")
+                logger.debug(f"[DEBUGING第一轮发言]LLM response debug 当前关注solving: {role.value}: {response}")
                 return response.choices[0].message.content.strip()
             else:
                 # 降级到模板化回复
                 return self._generate_template_reasoning(
-                    question_state, role, treatment_option
+                    question_state, role
                 )
         except Exception as e:
             logger.error(f"LLM generation failed: {e}")
             return self._generate_template_reasoning(
-                question_state, role, treatment_option
+                question_state, role
             )
 
-    def _build_focus_treatment_reasoning_prompt_meqa(
+    def _build_all_treatment_reasoning_prompt_meqa(
             self,
             question_state: medqa_types.MedicalQuestionState,
             role: RoleType,
-            opinion: RoleOpinion,
-            treatment_option: medqa_types.QuestionOption,
+            opinion: QuestionOpinion,
             question_options: List[medqa_types.QuestionOption] = None,
             dataset_name: str = None
     ) -> str:
         """构建聚焦治疗选项的推理提示词"""
-
-        # role_descriptions = {
-        #     RoleType.ONCOLOGIST: "肿瘤科医生，关注治疗效果和生存率",
-        #     RoleType.NURSE: "护士，关注护理可行性和患者舒适度",
-        #     RoleType.PSYCHOLOGIST: "心理医生，关注患者心理健康",
-        #     RoleType.RADIOLOGIST: "放射科医生，关注影像学表现和放射治疗",
-        #     RoleType.PATIENT_ADVOCATE: "患者代表，关注患者权益、自主选择和生活质量",
-        #     RoleType.NUTRITIONIST: "营养师，关注患者营养状况和营养支持治疗",
-        #     RoleType.REHABILITATION_THERAPIST: "康复治疗师，关注患者功能恢复和生活质量改善",
-        #
-        # }
         role_descriptions = {
             RoleType.ONCOLOGIST: "肿瘤科医生，具备扎实的病理与内科学基础，能够从疾病发生机制角度判断病变部位和性质。",
             RoleType.NURSE: "护士，熟悉常见疾病的临床表现和基础生理知识，能从临床护理经验判断疾病常见部位。",
@@ -903,61 +954,43 @@ C = maybe （不确定/视情况而定）
                 - 回答需可直接用于 MDT 多智能体讨论系统。
                 """
         elif dataset_name == "medqa":
-            print(f"当前关注选项的偏好分数:{opinion.treatment_preferences[treatment_option.name]}")
             prompt = f"""
-                你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，当前身份为 **{role.value}**。
-                当前任务是【医学知识问答】，尽管你是{role.value},你的思考应基于医学理论（如病理、生理、药理、解剖等），
-                而非患者功能、康复、心理状态或临床管理经验。
-                你根据问题描述和角色专业性，请基于问题描述和角色专业性提供医疗问题的推理,并对每个问题选项的进行详细的推理分析。
-                - 首先判断问题{question_state.question}与你的专业{role.value}关系：如果相关,请继续讨论；
-                - 如果问题与你的专业关系无关，请立即以 **全科医生（General Internist）** 视角参与讨论；
-                全科内科医生（General Internist）：
-                - 具备全面的医学知识，能够对内科、外科、影像学、病理学、药理学等常见问题进行综合分析。
-                - 主要任务是从整体临床角度出发，判断每个选项的合理性。
-                - 当遇到非自己专长的问题时，基于常识与通用医学原理作出合理推理。
-                - 不会拒答或推给其他科室。
-                - 在保持专业特色的同时，优先考虑通用医学逻辑。
-                请根据以下医疗问题信息，对指定选项 **{treatment_option.value}** 进行专业分析。
+            You are a member of a Multidisciplinary Team (MDT), currently acting as **{role_descriptions.get(role, role.value)}**.
 
-                ==============================
-                【医疗问题信息】
-                - 问题描述: {question_state.question}
-                - 相关背景: {question_state.meta_info or '无特殊背景'}
+            Your task is to generate your **initial statement** for each question option based on your previously generated initial opinion. Use natural language to explain your analysis and reasoning for all options. Please note:
+            
+            ==============================
+            Input Information
+            
+            * Question: {question_state.question}
+            * Options: {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
+            * Initial Opinion:
+            
+              * scores: {opinion.scores}
+              * reasoning: {opinion.reasoning}
+              * evidence_strength: {opinion.evidence_strength}
+              * evidences: {opinion.evidences}
+            
+            ==============================
+            Task Requirements
+            
+            1. Analyze **each option**, explaining why it may be correct or incorrect.
+            2. Reference your initial opinion’s scores, reasoning, evidences, and evidence_strength in your analysis.
+            3. Output should be fluent and clear for MDT discussion purposes.
+            4. **Do not re-score**; no JSON output is required, only text.
+            5. Keep the statement around 150–200 words, emphasizing key options and main reasoning.
+            6. You may reference medical knowledge and logical reasoning, but avoid assuming patient-specific details or preferences.
+            
+            ==============================
+            Output Example
+            
+            * “Option A … analysis; Option B … analysis; Option C … analysis; …”
+            * Highlight the reasons supporting high-score options and reasons against low-score options.
+            
+            ==============================
+            Please generate your **initial statement** now:
 
-                ==============================
-                【角色信息】
-                - 角色定义: {role_descriptions.get(role, role.value)}
-                - 角色当前对关注的问题选项: {json.dumps([option.value for option in question_options], ensure_ascii=False, indent=2)}
-                - 角色当前关注重点: {json.dumps(opinion.concerns, ensure_ascii=False, indent=2)}
-
-                ==============================
-                【问题选项列表】
-                {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}  
-                （如示例："A: 苯溴马隆", "B: 别嘌呤醇"...）
-                ==============================
-                【任务要求】
-                请从当前角色专业角度对选项 **{treatment_option.value}** 适合度评分{opinion.treatment_preferences[treatment_option.name]}进行分析：
-                - 若题目要求“选择不正确的选项”：
-                    某个选项越符合“不正确”的特征（即该选项本身是错误的），评分越高（接近1）；
-                    某个选项越不符合“不正确”的特征（即该选项本身是正确的），评分越低（接近-1）。
-                - 若题目要求“选择正确的选项”：
-                    某个选项越正确（符合医学事实），评分越高（接近1）；
-                    某个选项越错误，评分越低（接近-1）。
-                2. 根据选项适合度评分输出分析：
-                    - 评分 ≥ 0.6：说明支持该选项的原因（结合指南、机制或临床证据）。
-                    - 评分 ≤ -0.6：说明反对该选项的原因（指出其错误或与实际不符）。
-                    - -0.6 < 评分 < 0.6：说明其部分正确或存在争议，分析其合理与不足之处。
-                    分析时需体现当前角色的专业视角。
-                3. 指出可能的风险与注意事项；  
-                4. 分析该选项与正确答案的匹配度。  
-                
-                ==============================
-                【输出要求】
-                - 使用专业但易懂的语言；  
-                - 控制在 200 字以内；  
-                - 仅返回文本内容，不使用 JSON 或额外标记；  
-                - 回答需可直接用于 MDT 多智能体讨论系统。
-                """
+            """
         elif dataset_name == "symcat":
             prompt = f"""
                 你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，当前身份为 **{role.value}**。  
@@ -1060,23 +1093,14 @@ C = maybe （不确定/视情况而定）
         """构建MedQA场景下的治疗推理提示词"""
         # 这里可以根据MedQA的具体需求，调整提示词的内容和结构
         role_descriptions = {
-            RoleType.ONCOLOGIST: "肿瘤科医生，关注治疗效果和生存率",
-            RoleType.NURSE: "护士，关注护理可行性和患者舒适度",
-            RoleType.PSYCHOLOGIST: "心理医生，关注患者心理健康",
-            RoleType.RADIOLOGIST: "放射科医生，关注影像学表现和放射治疗",
-            RoleType.PATIENT_ADVOCATE: "患者代表，关注患者权益、自主选择和生活质量",
-            RoleType.NUTRITIONIST: "营养师，关注患者营养状况和营养支持治疗",
-            RoleType.REHABILITATION_THERAPIST: "康复治疗师，关注患者功能恢复和生活质量改善",
+            RoleType.ONCOLOGIST: "肿瘤科医生，关注疾病诊断、病理机制、肿瘤分型和治疗相关决策",
+            RoleType.NURSE: "护士，关注症状识别、患者病情观察及基础医学知识",
+            RoleType.PSYCHOLOGIST: "心理医生，关注心理症状对疾病表现的影响以及患者心理状态评估",
+            RoleType.RADIOLOGIST: "放射科医生，关注影像学特征、病灶诊断及影像异常判断",
+            RoleType.PATIENT_ADVOCATE: "患者代表，关注患者症状描述、病史信息以及诊断中患者主诉相关线索",
+            RoleType.NUTRITIONIST: "营养师，关注营养相关指标对疾病表现的辅助诊断作用",
+            RoleType.REHABILITATION_THERAPIST: "康复治疗师，关注功能评估和康复相关症状对疾病判断的辅助作用",
         }
-        # role_descriptions = {
-        #     RoleType.ONCOLOGIST: "肿瘤科医生，具备扎实的病理与内科学基础，在知识问答任务中，会从疾病发生机制角度分析病变部位和性质。",
-        #     RoleType.NURSE: "护士，熟悉基础病理与生理学知识，在知识问答任务中，从护理生理和健康基础理论角度分析问题。",
-        #     RoleType.PSYCHOLOGIST: "心理医生，熟悉神经生理与行为机制，在知识问答任务中，从神经系统和认知机制角度分析问题。",
-        #     RoleType.RADIOLOGIST: "放射科医生，熟悉影像与解剖学基础，在知识问答任务中，从结构与表现角度进行判断。",
-        #     RoleType.PATIENT_ADVOCATE: "患者代表，具备基础健康知识，在知识问答任务中，从常识与基础健康理解角度进行推理。",
-        #     RoleType.NUTRITIONIST: "营养师，掌握生理代谢与营养病理知识，在知识问答任务中，从代谢与病理机制角度判断。",
-        #     RoleType.REHABILITATION_THERAPIST: "康复治疗师，具备运动生理与病理学知识，在知识问答任务中，从理论病理与功能解剖角度分析疾病机制。",
-        # }
         if dataset_name == "pubmedqa":
             prompt = f"""
                         你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，当前身份为 **{role_descriptions.get(role, role.value)}**。
@@ -1188,259 +1212,55 @@ C = maybe （不确定/视情况而定）
                         - 输出结果需可直接适配 RoleOpinion 类。
                         """
         elif dataset_name == "medqa":
-            # prompt = f"""
-            #             你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，当前身份为 **{role_descriptions.get(role, role.value)}**。
-            #             强制规则(必须遵守)：
-            #             1. 请先判断当前{role.value}是否与{question_state.question}相关,若是相关的问题，请继续回答；
-            #             2. 若该问题与你的专业无直接关联，如果问题涉及非本专业，请基于标准药理机制回答，不要用肿瘤相关经验替代，请立刻切换为 **全科医生（General Internist）** 的视角继续回答；
-            #             全科内科医生（General Internist）：
-            #             - 具备全面的医学知识，能够对内科、外科、影像学、病理学、药理学、免疫学等常见问题进行综合分析。
-            #             - 主要任务是你的思考应基于医学理论（如病理、生理、药理、解剖等），判断每个选项的合理性。
-            #             - 当遇到非自己专长的问题时，基于常识与通用医学原理作出合理推理。
-            #             - 不会拒答或推给其他科室。
-            #             3. 不允许输出“与我无关”、“我无法回答”这类内容；
-            #             4. 请务必以JSON格式输出结果。
-            #             ==============================
-            #             【医疗问题信息】
-            #             - 问题描述: {question_state.question}
-            #             请仔细理解题目的意思, 理解清楚了再进行推理.
-            #             - 问题背景: {question_state.meta_info or '无特殊背景'}
-            #
-            #             ==============================
-            #             【角色信息】
-            #             - 角色身份: {role_descriptions.get(role, role.value)}
-            #
-            #             ==============================
-            #             【问题选项】
-            #             {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
-            #             （如示例："A: 苯溴马隆", "B: 别嘌呤醇"...）
-            #             ==============================
-            #             【任务要求】
-            #             请从当前的角色专业角度从符合题目要求的逻辑对选项的适合度进行评分：
-            #             1. 为每个选项进行独立的适合度评分，范围在-1到1之间（不包含-1和1）：
-            #             - 首先需要明确题目是要求是否定意思还是肯定意思,然后再进行评分
-            #             - 若题目要求“选择不正确的选项”或者"不包括"或者"错误的"：
-            #                 某个选项越符合“不正确”的特征（即该选项本身是错误的），评分越高（接近1）；
-            #                 某个选项越不符合“不正确”的特征（即该选项本身是正确的），评分越低（接近-1）。
-            #             - 若题目要求“选择正确的选项”：
-            #                 某个选项越正确（符合医学事实），评分越高（接近1）；
-            #                 某个选项越错误，评分越低（接近-1）。
-            #             2. 为每个选项进行独立的适合度评分，评分高低是指符合题目的选择要求，而不是选项本身的正确性，范围在-1到1之间，不能等于1或者-1。
-            #             3. 指出可能的风险与注意事项；
-            #             4. 分析该选项与正确答案的适合度。
-            #             请对每个选项给出适合度评分，并总结理由与主要担忧。
-            #
-            #             ==============================
-            #             【输出要求】
-            #             请以严格的 **JSON** 结构返回结果（不要包含任何解释性文字），字段定义如下：
-            #             1. `treatment_preferences`: 字典，键为问题选项标识符（如"A"、"B"），值为-1~1的正确选项适合度评分；
-            #             2. `reasoning`: 字符串（100字左右），说明这样评分的理由和依据；
-            #             3. `confidence`: 0~1 的浮点数，表示你对当前判断的可信度；
-            #             4. `concerns`: 列表（含2~3个字符串，每项≤20字），用于说明判断依据或注意点。
-            #
-            #             ==============================
-            #             【输出示例】
-            #             {{
-            #                 "treatment_preferences": {{"A": 0.7, "B": -0.2, "C": 0.1}},
-            #                 "reasoning": "证据显示线状植物叶片中线粒体在PCD过程中活跃",
-            #                 "confidence": 0.85,
-            #                 "concerns": ["MitoTracker染色显示线粒体活跃","CsA处理降低穿孔"]
-            #             }}
-            #
-            #             ==============================
-            #             【格式与一致性要求】
-            #             - 仅返回 JSON，要干净的JSON格式，不得包含任何解释或额外文字, 不要多加字符；
-            #             - treatment_preferences 的键必须是选项索引（如 \"A\"、\"B\"），不要使用选项全文。
-            #             - 所有问题选项（如 "A"、"B"、"C"...）必须完整出现在 `treatment_preferences` 中；
-            #             - 键名、字段名、数据类型必须完全符合要求；
-            #             - 输出结果需可直接适配 RoleOpinion 类。
-            #             """
             prompt = f"""
-            # Step 1
-             你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，当前身份为 **{role_descriptions.get(role, role.value)}**。  
-                        请从你的专业角度，基于以下医疗问题，对每个选项进行专业分析。
-            		**回答和打分的大前提为：**
-                1. 根据你的专业领域回答问题
-              2. 当题目涉及非你专业时，仍需基于循证医学判断
-                        ==============================
-                        【医疗问题信息】
-                        - 问题描述: {question_state.question}
-                        - 相关背景: {question_state.meta_info or '无特殊背景'}
+你是一名多学科医疗团队（MDT）成员，目前身份为 **{role_descriptions.get(role, role.value)}**。  
+你的任务是评估 MedQA 类型的题目选项，并为每个选项分配评分，表示其支持题目最可能正确答案的程度。
 
-                        ==============================
-                        【角色信息】
-                        - 角色身份: {role_descriptions.get(role, role.value)}
+==============================
+题目（QUESTION）：
+{question_state.question}
 
-                        ==============================
-                        【问题选项】
-                        {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}  
+选项（OPTIONS）：
+{[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
 
-                        ==============================
-                        【任务要求】
-                        请从 **{role.value}** 专业角度从符合题目要求的逻辑对选项的医学置信度*R*进行评分：
-                        1. 某个选项符合医学事实，评分*R*越高（接近1）；
-                            某个选项越不符合医学事实，评分*R*越低（接近-1）。
-                        2. 为每个选项严格按照1.的要求进行独立的置信度*R*评分
-            	    3. 评分*R*范围在-1到1之间，不能等于1或者-1， 即-1<*R*<1。   
-                        4. 指出可能的风险与注意事项；  
-                        请对每个选项给出置信度评分*R*，并总结理由与主要担忧。
+==============================
+指导原则（GUIDELINES）
 
-                # Step 2
-            	【任务要求】
-            	根据：
-            	1. 医疗问题的问法，如：选择正确选项/选择不相关的选项/选择错误选项
-            	2. Step 1获得的医疗诊断置信度*R*
-            	来对每个选项的适合度*T*进行评分，评分规则如下：
-            	-情况一 if 若题目要求“选择医学事实的选项/正确选项”：
-                            则适合度等于置信度： *T* = *R*
-            	-情况二 else 若题目要求“选择不符合医学事实的选项/选择不相关的选项/选择错误选项”：
-            		则适合度为置信度的相反数： *T* = -*R*
+1. 按以下逻辑链逐步推理，并在每一步都参考上方 QUESTION 和 OPTIONS：
+   a. 阅读题目，识别关键信息：患者人口学信息、症状、实验室及影像提示、题目条件等。  
+   b. 列出可能的答案解释或相关医学知识，结合题干信息。  
+   c. 确定题目中最可能正确的选项。  
+   d. 评估每个选项，并根据其支持最可能正确答案的程度分配评分。
 
-                        ==============================
-                        【输出要求】
-            	输出问题标识符及其适合度*T*
-                        请以严格的 **JSON** 结构返回结果（不要包含任何解释性文字），字段定义如下：
-                        1. `treatment_preferences`: 字典，键为问题选项标识符（如"A"、"B"），值为-1~1的正确选项适合度评分；
-                        2. `reasoning`: 字符串（≤80字），说明对各选项适合度评分*T*的主要理由；
-                        3. `confidence`: 0~1 的浮点数，即适合度*T*；
-                        4. `concerns`: 列表（含2~3个字符串，每项≤20字），指出你对首选或次选方案的关键担忧。
+2. 评分范围：-1.0 至 1.0  
+   - 分数越高 = 该选项越能直接支持最可能正确答案。
 
-                        ==============================
-                        【输出示例】
-                        {{
-                            "treatment_preferences": {{"A": -0.2, "B": -0.1, "C": -0.5, "D": 0.9, "E": -0.3}},
-                            "reasoning": "患者为急性发作期，非甾体抗炎药（D）可快速止痛，符合护理缓解目标",
-                            "confidence": 0.85,
-                            "concerns": ["可能加重胃黏膜刺激", "需观察患者用药后反应"]
-                        }}
+3. **只输出 JSON**，严格遵守以下格式：
+{{
+    "scores": {{"A": 0.0, "B": 0.0, "C": 0.0, "D": 0.0, "E": 0.0}},
+    "reasoning": "",
+    "evidence_strength": 0.0,
+    "evidences": []
+}}
 
-                        ==============================
-                        【格式与一致性要求】
-                        - 仅返回 JSON，要干净的JSON格式，不得包含任何解释或额外文字, 不要多加字符；
-                        - treatment_preferences 的键必须是选项索引（如 \"A\"、\"B\"），不要使用选项全文。
-                        - 所有问题选项（如 "A"、"B"、"C"...）必须完整出现在 `treatment_preferences` 中；
-                        - 键名、字段名、数据类型必须完全符合要求；
-                        - 输出结果需可直接适配 RoleOpinion 类。
-                        """
-            # prompt = f"""
-            # 你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，
-            # 当前身份为 **{role_descriptions.get(role, role.value)}**。
-            #
-            # ### 🧠 任务目标
-            # 请基于你的专业知识回答问题。
-            # - 若题目与你的专业无直接关系，请自动切换为 **全科内科医生（General Internist）** 视角；
-            # - 不得拒绝回答。
-            #
-            # ---
-            #
-            # ### 🧩 医学问题
-            # 题目：{question_state.question}
-            # 背景：{question_state.meta_info or '无特殊背景'}
-            # 选项：
-            # {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
-            #
-            # ---
-            #
-            # ### 🧬 推理引导
-            # 请先按以下思维顺序进行内部推理：
-            # 1. 确定题目考查的核心主题（如病理机制、药理作用、信号传导等）；
-            # 2. 若为药理类题，明确药物作用的 **受体类型 → G蛋白通路 → 第二信使 → 生理效应**；
-            # 3. 对每个选项，判断其与标准医学理论是否一致；
-            # 4. 根据题意（正确/错误型问题）确定倾向分方向。
-            #
-            # ---
-            #
-            # ### 📊 输出格式
-            # 请仅输出如下结构的 **JSON**（不要额外文字）：
-            # {{
-            #     "treatment_preferences": {{"A": 0.xx, "B": -0.xx, "C": 0.xx, "D": -0.xx}},
-            #     "reasoning": "简要说明核心机制、判断依据和推理逻辑（约100字）",
-            #     "confidence": 0.xx,
-            #     "concerns": ["关键依据1", "关键依据2", "风险或注意点"]
-            # }}
-            #
-            # 评分说明：
-            # - 评分范围 -1 ~ 1（不含边界值）；
-            # - 若题干要求选择“正确选项”，则越正确分越高；
-            # - 若题干要求选择“错误选项”，则越错误分越高。
-            # """
-        #             prompt = f"""
-        #             你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，
-        # 当前身份为 **{role_descriptions.get(role, role.value)}**。
-        #
-        # ### 🧠 任务目标
-        # 请基于你的专业知识（病理、生理、药理、解剖）回答【医学知识问答】问题。
-        # - 判断选项正确与否时，请优先从机制、通路、受体、生理反应等基础医学角度推理；
-        # - 不要依赖临床经验、心理或护理角度；
-        # - 若题目与你的专业无直接关系，请自动切换为 **全科内科医生（General Internist）** 视角，以通用医学知识推理；
-        # - 不得拒绝回答。
-        #
-        # ### 📌 示例参考（含直接机制vs间接效应区分）
-        # #### 示例1（药理类-直接机制优先）
-        # 题目：A 59-year-old man with long-standing hypertension is brought to the emergency department because of vomiting and headache for 2 hours. He reports that he has been unable to refill the prescription for his antihypertensive medications. His blood pressure is 210/120 mm Hg. Fundoscopy shows bilateral optic disc swelling. An ECG shows left ventricular hypertrophy. Treatment with intravenous fenoldopam is begun. Which of the following intracellular changes is most likely to occur in renal vascular smooth muscle as a result of this drug?
-        # 背景：step1
-        # 选项：
-        # A: Increased activity of myosin light-chain kinase
-        # B: Increased activity of protein kinase C
-        # C: Increased activity of guanylate cyclase
-        # D: Increased production of cyclic adenosine monophosphate
-        # E: Increased intracellular concentration of calcium
-        #
-        # 输出：
-        # {{
-        #             "treatment_preferences": {{"A": -0.85, "B": -0.70, "C": -0.80, "D": 0.95, "E": -0.90}},
-        #     "reasoning": "Fenoldopam is a selective dopamine D1 receptor agonist. D1 receptors couple with Gs protein, directly activating adenylate cyclase (AC) to increase cyclic adenosine monophosphate (cAMP) production (direct intracellular change). Options A/E are related to vasoconstriction, B is mediated by Gq pathway, C is an indirect downstream effect (cAMP→NO→GC), so D is correct.",
-        #     "confidence": 0.96,
-        #     "concerns": ["Receptor-G protein-second messenger direct coupling", "Distinction between direct and indirect signaling effects", "Vascular smooth muscle molecular mechanism"]
-        # }}
-        #
-        # #### 示例2（药理类-受体通路匹配）
-        # 题目：Which of the following is the direct intracellular effect of β2 receptor agonists?
-        # 背景：无特殊背景
-        # 选项：
-        # A: Increased IP3/DAG concentration
-        # B: Increased cyclic guanosine monophosphate (cGMP) production
-        # C: Increased cyclic adenosine monophosphate (cAMP) production
-        # D: Decreased intracellular calcium concentration
-        # E: Activated protein kinase C (PKC)
-        #
-        # 输出：
-        # {{
-        #             "treatment_preferences": {{"A": -0.80, "B": -0.75, "C": 0.94, "D": -0.60, "E": -0.85}},
-        #     "reasoning": "β2 receptors are Gs protein-coupled receptors. Activation directly stimulates adenylate cyclase (AC), leading to increased cAMP production (direct intracellular change). A/E are mediated by Gq pathway, B is NO-related, D is an indirect physiological effect, so C is correct.",
-        #     "confidence": 0.97,
-        #     "concerns": ["Gs/Gq pathway distinction", "Direct second messenger vs indirect physiological effect", "Receptor subtype-specific signaling"]
-        # }}
-        #
-        # ### 🧩 医学问题
-        # 题目：{question_state.question}
-        # 背景：{question_state.meta_info or '无特殊背景'}
-        # 选项：
-        # {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
-        #
-        # ### 🧬 推理引导
-        # 请先按以下思维顺序进行内部推理：
-        # 1. 确定题目考查的核心主题（如病理机制、药理作用、信号传导等）；
-        # 2. 若为药理类题，明确药物作用的 **受体类型 → G蛋白通路 → 第二信使 → 生理效应**，优先选择药物与受体结合后**直接触发**的细胞内分子变化（如第二信使生成、酶活性改变），排除多步传导后的间接下游效应；
-        # 3. 对每个选项，判断其与标准医学理论是否一致，重点区分“直接机制”与“间接效应”；
-        # 4. 根据题意（正确/错误型问题）确定倾向分方向。
-        #
-        # ### 📊 输出格式
-        # 请仅输出如下结构的 **JSON**（不要额外文字）：
-        # {{
-        #         "treatment_preferences": {{"A": -0.2, "B": -0.1, "C": -0.5, "D": 0.9, "E": -0.3}},
-        #         "reasoning": "患者为急性发作期，非甾体抗炎药（D）可快速止痛，符合护理缓解目标",
-        #         "confidence": 0.85,
-        #         "concerns": ["可能加重胃黏膜刺激", "需观察患者用药后反应"]
-        # }}
-        #
-        #
-        # 评分说明：
-        # - 评分范围 -1 ~ 1（不含边界值）；
-        # - 若题干要求选择“正确选项”，则越正确分越高，其中“受体-通路-直接分子变化”的匹配优先级最高；
-        # - 若题干要求选择“错误选项”，则越错误分越高；
-        # - 药理类题目中，“直接细胞内分子变化”优先级高于间接下游效应。
-        #             """
+4. **reasoning（推理说明）**：80–120 个单词，解释评分逻辑，说明为什么某些选项更可能正确。
+
+5. **evidences（证据）**：2–3 条关键点，每条 ≤ 20 个字，突出哪些信息支持或反驳选项。
+
+6. **evidence_strength（证据强度）**：
+   - 数值范围 0.0–1.0  
+   - 表示你的证据和推理对选项正确性的支持强度  
+   - 不代表你对自己判断的自信，而是证据直接支持选项的强弱
+
+==============================
+重要说明（IMPORTANT NOTES）：
+- 所有推理请内部用英语完成，最终输出必须是有效 JSON。  
+- 聚焦于题目中最可能正确的选项。  
+- 可以引用客观医学知识，如指南推荐、药物适应症、标准检查方法。  
+- 不要引用题干之外的个人偏好或假设患者情况。  
+- 分数必须反映每个选项支持正确答案的程度。  
+- 确保 JSON 输出严格有效。
+"""
         elif dataset_name == "ddxplus":
             prompt = f"""
             你是一名医疗多学科团队（MDT, Multidisciplinary Team）的成员，当前身份为 **{role_descriptions.get(role, role.value)}**。  
@@ -1717,9 +1537,9 @@ C = maybe （不确定/视情况而定）
             self,
             question_state: medqa_types.MedicalQuestionState,
             role: RoleType,
-            treatment_option: medqa_types.QuestionOption,
-            current_stance: RoleOpinion = None,
+            current_opinion: Union[RoleOpinion, QuestionOpinion] = None,
             dialogue_history: List[Dict] = None,
+            mdt_leader_summary: str = None,
             dataset_name: str = None
     ) -> str:
         """生成自然的多轮对话回应 - 减少模板化"""
@@ -1727,12 +1547,11 @@ C = maybe （不确定/视情况而定）
         prompt = self._build_dialogue_response_prompt_medqa(
             question_state,
             role,
-            treatment_option,
-            current_stance,
+            current_opinion,
             dialogue_history,
+            mdt_leader_summary,
             dataset_name
         )
-
         try:
             print(f"DEBUG: self.client = {self.client}")
             if self.client:
@@ -1744,24 +1563,19 @@ C = maybe （不确定/视情况而定）
                         {
                             "role": "system",
                             "content": (
-                                f"你是多学科会诊系统（MDT, Multidisciplinary Team）的一员。"
-                                f"当前身份是 {role.value}。"
-                                f"首先判断问题{question_state.question}"
-                                f"若问题超出你的专业，请以全科医生（General Internist）的视角进行分析，"
-                                f"基于循证医学、常识与风险收益做出判断。"
-                                f"你的输出必须简洁、专业、自然，可直接用作多智能体对话内容。"
+                                f"你是多学科医疗团队（MDT）的成员，当前身份是 {role.value}。"
+                                "你的任务是基于上一轮你的观点, 以及 MDT_LEADER 的讨论总结和指导方向"
+                                "你需要遵循你所代表的医学专业视角，不要给最终答案，而是围绕该选项提供论据、风险、优势和建议。"
                             )
 
                         },
                         {"role": "user", "content": prompt},
                     ],
-                    temperature=0.5,
+                    temperature=self.config.temperature,
                     max_tokens=self.config.max_tokens,
-                    presence_penalty=0.3,  # 减少重复
-                    frequency_penalty=0.3,  # 增加词汇多样性
                 )
                 print("DEBUG查看错误: LLM响应原始内容:", response)
-                logger.info(f"生成response:{response}")
+                logger.info(f"新方案_MDT_LEADER生成response:{response}")
                 response_text = response.choices[0].message.content.strip()
                 logger.info(f"DEBUG: LLM响应 response_text: {response_text}")
                 return response_text
@@ -2177,13 +1991,46 @@ C = maybe （不确定/视情况而定）
             patient_state, role, treatment_option, discussion_context
         )
 
+    def format_opinion_for_prompt(self, current_opinion: Union[RoleOpinion, QuestionOpinion], role_name: str):
+        """
+        将单个智能体的 opinion 转换为适合 MDT Prompt 输入的完整自然语言结构。
+
+        current_opinion: dict, 包含 keys: scores, reasoning, evidences, evidence_strength
+        role_name: str, 当前角色名
+        返回: str，可直接放入 prompt
+        """
+        # 选项评分压缩成一行
+        scores_str = ", ".join([f"{opt}={score}" for opt, score in current_opinion.scores.items()])
+
+        # 核心观点取全部 reasoning
+        core_reasoning = current_opinion.reasoning.strip()
+
+        # 关键证据列出全部
+        evidences = current_opinion.evidences
+        evidences_str = "\n- ".join(evidences)
+        if evidences_str:
+            evidences_str = "- " + evidences_str  # 加上列表标记
+
+        # 证据强度
+        evidence_strength = current_opinion.evidence_strength
+
+        # 最终字符串
+        formatted = (
+            f"{role_name}观点:\n"
+            f"选项评分: {scores_str}\n"
+            f"核心观点: {core_reasoning}\n"
+            f"关键证据:\n{evidences_str}\n"
+            f"证据强度: {evidence_strength}"
+        )
+        return formatted
+
     def _build_dialogue_response_prompt_medqa(
             self,
             question_state: medqa_types.MedicalQuestionState,
             role: RoleType,
-            treatment_option: medqa_types.QuestionOption,
-            current_stance: RoleOpinion,
+            current_opinion: Union[RoleOpinion, QuestionOpinion],
             dialogue_history: List[Dict[str, str]],
+            mdt_leader_summary: str = None,
             dataset_name: str = None
     ):
         """构建对话回应提示词 - 强调自然性和个性化"""
@@ -2198,30 +2045,17 @@ C = maybe （不确定/视情况而定）
         }
         # 构建对话历史上下文
         history_context = ""
-        if dialogue_history:
-            recent_exchanges = dialogue_history
-            history_context = "\n上一轮对话:\n"
-            for i, exchange in enumerate(recent_exchanges):
-                history_context += f"上一轮对话中{i + 1}: {exchange.get('role', 'Unknown')} 的观点:- {exchange.get('content', '')}...\n"
+        # if dialogue_history:
+        #     recent_exchanges = dialogue_history
+        #     history_context = "\n上一轮对话:\n"
+        #     for i, exchange in enumerate(recent_exchanges):
+        #         history_context += f"上一轮对话中{i + 1}: {exchange.get('role', 'Unknown')} 的观点:- {exchange.get('content', '')}...\n"
+        #
+        # logger.info(f"上一轮非自己的对话: {history_context}")
 
-        logger.info(f"上一轮非自己的对话: {history_context}")
+        # # 构建立场信息
+        stance_info = self.format_opinion_for_prompt(current_opinion, role.value)
 
-        # 构建立场信息
-        stance_info = ""
-
-        if current_stance:
-            stance_value = current_stance.treatment_preferences.get(
-                treatment_option.name, 0
-            )
-            if stance_value > 0.7:
-                stance_info = "你对该治疗方案持积极态度"
-            elif stance_value > 0.2:
-                stance_info = "你对该治疗方案持谨慎支持态度"
-            elif stance_value < -0.5:
-                stance_info = "你对该治疗方案有较大担忧"
-            else:
-                stance_info = "你对该治疗方案持中性态度"
-        logger.info(f"{role.value}当前立场Stance info: {stance_info}")
         if dataset_name == "pubmedqa":
             prompt = f"""
             你是多学科会诊（MDT, Multidisciplinary Team）的一名成员，当前身份为 **{role.value}**。
@@ -2249,10 +2083,6 @@ C = maybe （不确定/视情况而定）
             - 相关背景: {question_state.meta_info or '无特殊背景'}
 
             ==============================
-            【当前讨论选项】
-            - 本轮讨论的目标选项: {treatment_option.value}
-
-            ==============================
             【历史观点（已结构化）】
             请务必从下面的历史观点里抽取要点并在回应前短句说明你同意或不同意（示例格式：同意 — 放射科医生: “…”；不同意 — 护士: “…”）。
             {history_context}
@@ -2277,57 +2107,35 @@ C = maybe （不确定/视情况而定）
             """
         elif dataset_name == "medqa":
             prompt = f"""
-            你是多学科会诊（MDT, Multidisciplinary Team）的一名成员，当前身份为 **{role.value}**。
-            当前任务是【医学知识问答】，尽管你是{role.value},你的思考应基于医学理论（如病理、生理、药理、解剖等），
-            而非患者功能、康复、心理状态或临床管理经验。
-            你的任务：基于医疗问题、讨论选项、历史讨论与当前立场，先快速综合历史观点（简要列出要点并说明你同意/不同意的角色），
-            然后以你本人的专业视角生成 2–3 句的自然、专业且有角色特色的回应。
-            ==============================
-            【身份与角色策略】
-            - 当前角色描述：{role_descriptions.get(role, role.value)}
-            - 首先判断该问题与 **{role.value}** 的专业领域关联性：
-            - 若该问题与 **{role.value}** 的专业领域关联无关，请自动以**{role.value}** 视角发言；
-            - 若该问题与 **{role.value}** 的专业领域关联较弱，请自动以**全科医生（General Internist）** 视角发言；
-            全科内科医生（General Internist）：
-            - 具备全面的医学知识，能够对内科、外科、影像学、病理学、药理学等常见问题进行综合分析。
-            - 主要任务是从整体临床角度出发，判断每个选项的合理性。
-            - 当遇到非自己专长的问题时，基于常识与通用医学原理作出合理推理。
-            - 不会拒答或推给其他科室。
-            - 仍需保持医学逻辑严谨；
-            - 结合通用医学知识、患者整体风险与临床可行性进行分析；
-            - 在语言中自然体现这种“跨专业分析”的风格（例如：可以使用“从全科角度看…”、“尽管这超出我专科范围，但…” 等表述）。
+            你是多学科会诊（MDT）的一名成员，当前身份为 **{role.value}**。
+            你的任务是在医学知识问答场景中，以简洁、自然、有个人特色的方式参与推理型讨论。
+            
+            请依据以下信息生成你的本轮观点：
+            1. 医疗问题：{question_state.question}
+            3. 本轮 MDT_LEADER 的总结与讨论方向：{mdt_leader_summary}
+            4. 你上一轮的观点（若有）：{stance_info or "无"}
             
             ==============================
-            【医疗问题信息】
-            - 问题描述: {question_state.question}
-            - 相关背景: {question_state.meta_info or '无特殊背景'}
-
+            【发言要求】
+            请严格控制在 **2–3 句** 内，包含以下要素：
+            
+            ① **承接上一轮**  
+            - 若你上一轮有观点，请先用半句话说明你“保持/调整/反思”了哪些看法  
+              （示例：“相比上一轮，我仍认为… / 我会稍作调整，因为…”）
+            
+            ② **回应 MDT_LEADER 的方向**  
+            - 明确呼应 Leader 的总结或所强调的风险点、证据点或争议点  
+              （示例：“结合 Leader 指出的 X，我认为…”）
+            
+            ③ **给出你的专业风格观点**  
+            - 不需要真正的专科知识，只需表达一种“风格差异化的推理方式”  
+            - 医学推理必须清晰、严谨，但不模板化  
+            - 整体目标是帮助群体逐步形成共识
+            
             ==============================
-            【当前讨论选项】
-            - 本轮讨论的目标选项: {treatment_option.value}
-
-            ==============================
-            【历史观点（已结构化）】
-            请务必从下面的历史观点里抽取要点并在回应前短句说明你同意或不同意（示例格式：同意 — 放射科医生: “…”；不同意 — 护士: “…”）。
-            {history_context}
-            （history_context 应为多行结构化文本，每行格式建议：角色名: 简短观点）
-
-            ==============================
-            【当前立场信息】
-            {stance_info}
-
-            ==============================
-            【任务要求】
-            请遵循以下步骤并严格控制长度：
-            1. **（最多一小句）** 用 1–2 句话**概括并对比**历史观点中最重要的 2–3 点，并明确说出你**同意/不同意的角色与简短理由**（例如：“我部分同意放射科医生，因为……；不同意外科医生，因为……”）。  
-            2. **（接着 1–2 句）** 给出你作为 **{role.value}** 的结论性回应或建议，体现专业视角、风险-收益考量和对患者整体的关注。  
-            3. 总字数应为 **2–3 句话**，语言自然、不模板化、有个人色彩；若与他人意见不同，表达要礼貌但坚定。
-
-            ==============================
-            【格式与输出要求】
-            - 仅返回纯文本（不要 JSON、不要代码块、不要额外注释）。  
-            - 回应要能直接作为 MDT 系统中该角色的发言。  
-            - 必须在第一小句中显式提及 1–2 个历史观点并说明“同意/不同意”。
+            【输出格式】
+            - 仅输出自然语言文本，不要 JSON、不要列点和编号。  
+            - 句子要顺畅、非模板化，能被视为 MDT 讨论中的真实对话。
             """
         elif dataset_name == "ddxplus":
             prompt = f"""

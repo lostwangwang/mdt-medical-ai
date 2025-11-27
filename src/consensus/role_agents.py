@@ -6,7 +6,7 @@
 """
 
 import numpy as np
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
 import logging
 import re
@@ -24,7 +24,7 @@ from ..core.data_models import (
     RoleOpinion,
     DialogueMessage,
     MedicalEvent,
-    ChatRole,
+    ChatRole, QuestionOpinion, RoleRegistry,
 )
 
 from ..tools.fix_json import fix_and_parse_single_json
@@ -38,7 +38,7 @@ class RoleAgent:
 
     def __init__(
             self,
-            role: RoleType,
+            role: Union[RoleType, RoleRegistry],
             llm_interface: Optional[LLMInterface] = None,
             llm_config: Optional[LLMConfig] = None,
     ):
@@ -209,6 +209,19 @@ class RoleAgent:
         }
         return specializations.get(self.role, {})
 
+    def generate_mdt_leader_summary_dataset(
+            self,
+            question_state: MedicalQuestionState,
+            question_options: List[QuestionOption],
+            dialogue_rounds: DialogueRound,
+            consensus_dict: Dict[str, Any],
+    ):
+        mdt_leader_summary = self.llm_interface.llm_generate_mdt_leader_content(question_state, question_options,
+                                                                                dialogue_rounds,
+                                                                                consensus_dict)
+        logger.info(f"[DEBUG_MDT_LEADER_SUMMARY]_mdt_leader_summary: {mdt_leader_summary}")
+        return mdt_leader_summary
+
     def _update_agent_opinions_and_preferences_medqa(
             self,
             question_state: MedicalQuestionState,
@@ -349,9 +362,8 @@ class RoleAgent:
             question_state: MedicalQuestionState,
             question_options: List[QuestionOption],
             dataset_name: str = None
-    ) -> RoleOpinion:
+    ) -> QuestionOpinion:
         """生成初始意见 - 专为MedQA场景设计"""
-
         reasoning = self._generate_reasoning_medqa(
             question_state,
             question_options,
@@ -371,19 +383,17 @@ class RoleAgent:
             logger.error(f"未知的推理类型:{type(reasoning)}, 原始字符串:{reasoning}")
             return None
         logging.debug(f"[生成初始立场推理]Generated LLM reasoning for {self.role.value}: {reasoning}")
-        # reasoning = json.loads(reasoning)
         logger.info(f"DEBUG: 看看转换对了吗:{type(reasoning)}, {reasoning}")
-        role_option = RoleOpinion(
+        role_opinion = QuestionOpinion(
             role=self.role.value,
-            treatment_preferences=reasoning["treatment_preferences"],
+            scores=reasoning["scores"],
             reasoning=reasoning["reasoning"],
-            confidence=reasoning["confidence"],
-            concerns=reasoning["concerns"],
+            evidence_strength=reasoning["evidence_strength"],
+            evidences=reasoning["evidences"],
         )
+        self.current_stance = role_opinion.scores
 
-        self.current_stance = role_option.treatment_preferences
-
-        return role_option
+        return role_opinion
 
     def _generate_reasoning_medqa(
             self,
@@ -684,17 +694,17 @@ class RoleAgent:
     def generate_dialogue_response_medqa(
             self,
             question_state: MedicalQuestionState,
-            target_treatment: TreatmentOption,
             opinions_dict: Dict[RoleType, RoleOpinion] = None,
             last_round_messages: List[DialogueMessage] = None,
+            mdt_leader_summary: str = None,
             dataset_name: str = None
     ):
         # 生成回应内容
         response_content = self._construct_response_medqa(
             question_state,
-            target_treatment,
             opinions_dict=opinions_dict,
             last_round_messages=last_round_messages,
+            mdt_leader_summary=mdt_leader_summary,
             dataset_name=dataset_name
         )
 
@@ -703,7 +713,6 @@ class RoleAgent:
             content=response_content,
             timestamp=datetime.now(),
             message_type="response",
-            treatment_focus=target_treatment,
         )
 
     def generate_dialogue_response(
@@ -738,9 +747,9 @@ class RoleAgent:
     def _construct_response_medqa(
             self,
             question_state: MedicalQuestionState,
-            treatment: QuestionOption,
             opinions_dict: Dict[RoleType, RoleOpinion] = None,
             last_round_messages: List[DialogueMessage] = None,
+            mdt_leader_summary: str = None,
             dataset_name: str = None
     ) -> str:
         """构建回应内容 - 基于患者状态、知识、治疗选项、对话上下文、立场和上一轮对话, 要用"""
@@ -748,8 +757,7 @@ class RoleAgent:
         # 优先使用LLM生成自然对话
         if self.llm_interface:
             try:
-                current_stance = opinions_dict[self.role.value]
-                logger.info(f"当前{self.role.value}立场: {current_stance}")
+                current_opinion = opinions_dict[self.role.value]
                 dialogue_history = self._get_last_round_history(
                     last_round_messages
                 )
@@ -757,9 +765,9 @@ class RoleAgent:
                 response = self.llm_interface.generate_dialogue_response_medqa(
                     question_state=question_state,
                     role=self.role,
-                    treatment_option=treatment,
-                    current_stance=current_stance,
+                    current_opinion=current_opinion,
                     dialogue_history=dialogue_history,
+                    mdt_leader_summary=mdt_leader_summary,
                     dataset_name=dataset_name
                 )
 

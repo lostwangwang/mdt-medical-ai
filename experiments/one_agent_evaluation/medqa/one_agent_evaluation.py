@@ -133,17 +133,12 @@ def save_to_csv(results, filename=f"results_{int(time.time())}.csv"):
 if __name__ == "__main__":
     path = "../../../data/examples/medqa/data_clean/questions/US/dev.jsonl"
     total_count = 50
-    cases = read_jsonl(path, total_count)
-    # cases = [{
-    #     "question": "A 59-year-old man with long-standing hypertension is brought to the emergency department because of vomiting and headache for 2 hours. He reports that he has been unable to refill the prescription for his antihypertensive medications. His blood pressure is 210/120 mm Hg. Fundoscopy shows bilateral optic disc swelling. An ECG shows left ventricular hypertrophy. Treatment with intravenous fenoldopam is begun. Which of the following intracellular changes is most likely to occur in renal vascular smooth muscle as a result of this drug?",
-    #     "answer": "Increased production of cyclic adenosine monophosphate",
-    #     "options": {"A": "Increased activity of myosin light-chain kinase",
-    #                 "B": "Increased activity of protein kinase C",
-    #                 "C": "Increased activity of guanylate cyclase",
-    #                 "D": "Increased production of cyclic adenosine monophosphate",
-    #                 "E": "Increased intracellular concentration of calcium"}, "meta_info": "step1",
-    #     "answer_idx": "D"}
-    # ]
+    # cases = read_jsonl(path, total_count)
+    cases = [{
+        "question": "A 27-year-old woman presents to the emergency department with altered mental status. Her parents found her in her room surrounded by pill bottles, alcohol, and illicit drugs 10 minutes ago and promptly brought her in. She was unconscious with lacerations on her wrists. The patient has a past medical history of depression, fibromyalgia, and multiple suicide attempts. Physical exam is notable for a somnolent young woman who responds to questions but is non-compliant in describing the history. She is currently vomiting and her gait seems ataxic. Initial laboratory values are unremarkable. An arterial blood gas analysis reveals the following findings.\n\nArterial blood gas\npH: 7.50\npO2: 105 mmHg\npCO2: 20 mmHg\nBicarbonate: 24 mEq/L\n\nWhich of the following is the most likely intoxication in this patient?",
+        "answer": "Aspirin", "options": {"A": "Acetaminophen", "B": "Alcohol", "C": "Amitriptyline", "D": "Aspirin",
+                                         "E": "Ethylene glycol"}, "meta_info": "step1", "answer_idx": "D"}
+    ]
     print(f"=== 读取了 {len(cases)} 条病例数据 ===")
     results, acc = evaluate_dataset(cases)
     save_to_csv(results)
