@@ -16,6 +16,12 @@ def read_yaml_file(file_path):
     return data
 
 
+def read_all_jsonl(file_path: str):
+    with open(file_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    return [json.loads(line.strip()) for line in lines]
+
+
 def read_jsonl(file_path: str, random_sample: int = None) -> List[Dict]:
     with open(file_path, "r", encoding="utf-8") as f:
         lines = f.readlines()

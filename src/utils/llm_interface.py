@@ -111,15 +111,13 @@ class LLMInterface:
             current_round: DialogueRound,
             previous_opinion: RoleOpinion,
             question_options: List[medqa_types.QuestionOption],
-            focus_question: medqa_types.QuestionOption,
+            mdt_leader_summary: str = None,
             dataset_name: str = None,
-            df: DataFrame = None,
-            W: float = 0.0
     ):
         """生成更新角色有关医学问题的推理"""
 
         prompt = self._build_update_agent_opinions_reasoning_prompt_medqa(
-            question_state, role, current_round, previous_opinion, question_options, focus_question, dataset_name, df, W
+            question_state, role, current_round, previous_opinion, question_options, mdt_leader_summary, dataset_name
         )
         try:
             if self.client:
@@ -128,15 +126,16 @@ class LLMInterface:
                     messages=[
                         {
                             "role": "system",
-                            "content": f"你是多学科会诊（MDT, Multidisciplinary Team）的一名成员,当前身份为一位专业的{role.value}，"
-                                       f"若该问题不属于你的专科，请以全科医生（General Internist）的视角判断:你应根据医学常识、循证研究与风险收益做出合理分析。"
-                                       f"请基于问题信息、角色专业性、对话上下文、上一轮对话和当前对话，在自己观点基础上更新角色有关医学问题的意见、选项偏好、置信度",
+                            "content": f"你是一个医学多学科团队（MDT, Multidisciplinary Team）智能体成员，"
+                                       f"当前身份是 **{role.value}**。你的任务是在本轮对医疗问题进行‘立场再评估’（soft update）。"
+                                       f"你将根据以下信息更新自己的观点：上一轮观点、领导者总结以及本轮新增证据。",
                         },
                         {"role": "user", "content": prompt},
                     ],
-                    temperature=0.3,
+                    temperature=self.config.temperature,
                     max_tokens=self.config.max_tokens,
                 )
+
                 logger.debug(f"LLM response debug: {response}")
                 return response.choices[0].message.content.strip()
             else:
@@ -166,7 +165,7 @@ class LLMInterface:
             for msg in dialogus_messages
         ])
         prompt = f"""
-        你是多学科医疗团队（MDT）的负责人（Leader）。你的任务是根据各智能体的首次发言，对题目进行总结，并提供下一轮讨论的指导方向。  
+        你是多学科医疗团队（MDT）的负责人（Leader）。你的任务是根据各智能体的发言内容，对题目进行总结，并提供下一轮讨论的指导方向。  
 
         输入信息包括：
         - 题目（QUESTION）：{question_state.question}  
@@ -178,12 +177,13 @@ class LLMInterface:
 
         请完成以下任务：
         1. **总结当前轮情况**：
-           - 指出每个选项的支持趋势（高分/低分）和存在分歧的地方（方差较大）。
-           - 强调整体共识和主要分歧，突出关键证据或理由。
+           - 分析各个选项的支持趋势（高分/低分），并指出在哪些选项上存在较大的分歧（高方差）。
+           - 强调整体共识和主要分歧，突出关键证据或理由，帮助团队理解哪些观点得到广泛支持，哪些存在较大争议。
+           - 协调不同智能体之间的意见差异，指出哪些证据和观点更具说服力，哪些需要进一步补充或澄清。
         2. **下一轮讨论指导方向**：
-           - 提出哪些选项或问题需要重点讨论。
-           - 指出哪些方面的证据或推理需要补充或澄清。
-           - 可建议参考其他专业视角或知识点。
+           - 提出哪些选项或问题需要重点讨论，尤其是对存在较大分歧的选项。
+           - 指出哪些方面的证据或推理需要补充或澄清，帮助团队形成更加统一的看法。
+           - 可建议参考其他专业视角或知识点，协助智能体之间达成更高的共识。
        
         要求：
         - 用中文输出，清晰、简明。
@@ -192,6 +192,156 @@ class LLMInterface:
         - 不重复原始发言内容，只提炼关键信息和讨论方向。
         """
         return prompt
+
+    def _build_final_mdt_leader_summary_prompt(
+            self,
+            question_state: medqa_types.MedicalQuestionState,
+            question_options: List[medqa_types.QuestionOption],
+            dialogue_round: DialogueRound,
+            consensus_dict: Dict[str, Any],
+            opinions_dict: Dict[str, Union[RoleOpinion, QuestionOpinion]] = None,
+    ):
+        df, W, p_value = consensus_dict["df"], consensus_dict["W"], consensus_dict["p_value"]
+        means = df["mean"]
+        mean_scores = [f"{option.name}: {means[option.value]}" for option in question_options]
+        variances = [f"{option.name}: {df['std'][option.value]}" for option in question_options]
+        kendalls_w = W
+        agents_messages = "\n\n".join([
+            f"{msg.role.value}: {msg.content}"
+            for msg in dialogue_round.messages
+        ])
+        agents_opinions_str = "\n\n"
+
+        # 格式化各角色的聚合意见
+        for role, current_opinion in opinions_dict.items():
+            agents_opinions_str += self.format_opinion_for_prompt(current_opinion, role)
+            agents_opinions_str += "\n\n"
+
+        prompt = f"""
+            你是多学科医疗团队（MDT）的负责人（Leader）。你的任务是根据智能体的聚合意见，对题目进行总结，并给出最终方案。
+
+            输入信息包括：
+            - 题目（QUESTION）：{question_state.question}
+            - 选项（OPTIONS）：{[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
+            - 各选项平均分（mean_scores）：{mean_scores}
+            - 各选项方差（variances）：{variances}
+            - Kendall's W: {kendalls_w}
+            - 智能体发言内容：{agents_messages}
+            - 各智能体的聚合意见：{agents_opinions_str}
+
+            请完成以下任务：
+            1. **总结当前轮情况**：
+                - 针对每个选项，总结其支持程度（通过平均分）、分歧情况（通过方差）以及是否存在较大分歧。
+                - 明确指出哪些选项得到了共识，哪些选项存在分歧，并简要说明分歧的原因。
+            2. **给出最终方案**：
+                - 在综合各智能体意见、证据和分析后，给出你认为最可能的正确选项或最终结论。
+                - 提供此结论的依据（支持的证据和理由），并指出为什么选择该选项而排除其他选项。
+                - 强调支持该结论的关键证据或推理，简洁明了。
+
+            要求：
+            - 用中文输出，简明扼要。
+            - 总结内容控制在 200–250 字。
+            - 不重复原始发言内容，只提炼关键信息，提供最终的决策依据和推理过程。
+            """
+        return prompt
+
+    def _build_llm_recruit_agents_medqa_prompt(
+            self,
+            question_state: medqa_types.MedicalQuestionState,
+            question_options: List[medqa_types.QuestionOption],
+    ):
+        prompt = f"""
+        你是多学科医疗团队（MDT）的负责人（Leader）。你的任务是根据问题的难度招募专家，并完成多学科会诊（MDT, Multidisciplinary Team）的会诊。
+        输入信息包括：
+        - 问题: {question_state.question}
+        - 选项: {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
+
+        根据这个问题和选项，请完成以下任务：
+
+        1. 评估问题的难度，决定该问题需要哪些专家参与。
+        2. 根据问题的性质招募专家，并为每个专家分配权重，反映其对问题解决的贡献度。
+        3. 提供专家招募理由并简要描述每个专家在会诊中的任务或目标。
+
+        请返回以下格式的 **JSON** 数据，包含被招募专家的信息。每个字段的含义如下：
+
+        - **name**: 专家的英文标识符，如 "Surgeon"、"Radiologist"。该字段用于系统内部识别专家的类型。
+        - **value**: 专家的中文名称，例如 "外科医生"、"放射科医生"。这个字段提供了专家角色的中文描述。
+        - **description**: 专家的简要描述，阐明其在多学科会诊中的职责。例如，外科医生负责处理外科疾病，放射科医生负责影像学评估等。
+        - **weight**: 专家的权重，表示该专家对解决当前问题的贡献程度。权重通常是一个在 0 到 1 之间的数值，越高代表专家对问题的贡献越大。
+
+        输出格式应如下所示：
+
+        ```json
+        {{
+                "recruited_experts": [
+                {{
+                    "name": "Surgeon",
+                    "value": "外科医生",
+                    "description": "负责处理外科疾病，特别是需要手术干预的疾病。",
+                    "weight": 0.8
+                }},
+                {{
+                    "name": "Radiologist",
+                    "value": "放射科医生",
+                    "description": "负责分析医学影像，帮助诊断和评估病变。",
+                    "weight": 0.7
+                }}
+            ]
+        }}
+        """
+        return prompt
+
+    def llm_recurt_agents_medqa(
+            self,
+            question_state: medqa_types.MedicalQuestionState,
+            question_options: List[medqa_types.QuestionOption]
+    ):
+        prompt = self._build_llm_recruit_agents_medqa_prompt(question_state, question_options)
+        response = self.client.chat.completions.create(
+            model=self.config.model_name,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "你是多学科会诊（MDT, Multidisciplinary Team）的一名成员，当前身份为一位专业的 MDT_LEADER。"
+                        "你负责根据医学问题的具体症状、历史背景和复杂性，招募最合适的专家角色进行多学科会诊。"
+                        "你的任务是评估问题的难度，决定哪些专家角色应该参与，并提供针对性的会诊意见。"
+                        "专家角色包括：外科医生、放射科医生、肿瘤科医生、内科医生、护士等，"
+                        "你需要根据每个角色的专业能力来选择适当的人选。"
+                ),
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ]
+        )
+        return response.choices[0].message.content.strip()
+
+    def llm_generate_final_mdt_leader_summary(
+            self,
+            question_state: medqa_types.MedicalQuestionState,
+            question_options: List[medqa_types.QuestionOption],
+            dialogue_round: DialogueRound,
+            consensus_dict: Dict[str, Any],
+            opinions_dict: Dict[str, Union[RoleOpinion, QuestionOpinion]] = None,
+    ):
+        prompt = self._build_final_mdt_leader_summary_prompt(question_state, question_options, dialogue_round,
+                                                             consensus_dict, opinions_dict)
+        response = self.client.chat.completions.create(
+            model=self.config.model_name,
+            messages=[
+                {
+                    "role": "system",
+                    "content": f"你是多学科会诊（MDT, Multidisciplinary Team）的一名成员, 当前身份为一位专业的MDT_LEADER，"
+                               f"你的任务是总结各智能体的讨论内容，并给出最终方案。",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=self.config.temperature,
+            max_tokens=self.config.max_tokens,
+        )
+        return response.choices[0].message.content.strip()
 
     def llm_generate_mdt_leader_content(
             self,
@@ -206,14 +356,18 @@ class LLMInterface:
             messages=[
                 {
                     "role": "system",
-                    "content": f"你是多学科会诊（MDT, Multidisciplinary Team）的一名成员,当前身份为一位专业的MDT_LEADER",
+                    "content": (
+                        "你是多学科医疗团队（MDT）的负责人（Leader）。你的任务是协调各智能体的发言与证据，"
+                        "整合不同专业的意见，帮助团队达成最终结论。你需要分析各个智能体的观点，评估其证据的质量和强度，"
+                        "并帮助团队理解其中的分歧与共识。你还需要总结讨论的结果，并为下一步的讨论提供指导，"
+                        "同时协调不同智能体之间的意见差异，明确哪些证据更为关键，哪些观点更具说服力。"
+                    ),
                 },
                 {"role": "user", "content": prompt},
             ],
             temperature=self.config.temperature,
             max_tokens=self.config.max_tokens,
         )
-        print(f"[MDT_LEADER_CONTENT_RESPONSE]response: {response}")
         return response.choices[0].message.content.strip()
 
     def generate_update_agent_opinions_reasoning(
@@ -278,22 +432,10 @@ class LLMInterface:
             current_round: DialogueRound,
             previous_opinion: RoleOpinion,
             question_options: List[medqa_types.QuestionOption],
-            focus_question: medqa_types.QuestionOption,
+            mdt_leader_summary: str,
             dataset_name: str = None,
-            df: DataFrame = None,
-            W: float = 0.0
     ) -> str:
         """构建更新角色意见的推理提示"""
-
-        # role_descriptions = {
-        #     RoleType.ONCOLOGIST: "肿瘤科医生，关注治疗效果和生存率",
-        #     RoleType.NURSE: "护士，关注护理可行性和患者舒适度",
-        #     RoleType.PSYCHOLOGIST: "心理医生，关注患者心理健康",
-        #     RoleType.RADIOLOGIST: "放射科医生，关注影像学表现和放射治疗",
-        #     RoleType.PATIENT_ADVOCATE: "患者代表，关注患者权益、自主选择和生活质量",
-        #     RoleType.NUTRITIONIST: "营养师，关注患者营养状况和营养支持治疗",
-        #     RoleType.REHABILITATION_THERAPIST: "康复治疗师，关注患者功能恢复和生活质量改善",
-        # }
         role_descriptions = {
             RoleType.ONCOLOGIST: "肿瘤科医生，具备扎实的病理与内科学基础，能够从疾病发生机制角度判断病变部位和性质。",
             RoleType.NURSE: "护士，熟悉常见疾病的临床表现和基础生理知识，能从临床护理经验判断疾病常见部位。",
@@ -303,15 +445,10 @@ class LLMInterface:
             RoleType.NUTRITIONIST: "营养师，具备生理与代谢知识，能从代谢和血管健康角度理解疾病机制。",
             RoleType.REHABILITATION_THERAPIST: "康复治疗师，了解病理和生理基础，能从功能受损角度分析疾病影响部位。",
         }
-        dialogue_text = "\n".join(
-            [
-                f"- {msg.role.value}当前的观点是: {msg.content}"
-                for msg in current_round.messages
-            ]
-        )
         cur_round = current_round.round_number
-        feedback = self.build_consensus_feedback(df, W, cur_round, focus_question)
-        logger.info("dialogue_text: %s", dialogue_text)
+        previous_opinion_str = self.format_opinion_for_prompt(previous_opinion, role.value)
+        new_evidence = [msg.content for msg in current_round.messages if msg.role == role]
+        print(f"[DEBUG]current_round:{current_round}")
         if dataset_name == "pubmedqa":
             prompt = f"""
 你是一名医疗多学科团队（MDT, Multidisciplinary Team）成员，当前身份为 **{role_descriptions.get(role, role.value)}**。
@@ -331,11 +468,11 @@ class LLMInterface:
 5. 输出清晰 reasoning，说明是否调整偏好及原因；
 6. **基于上一轮评分微调**：
    - 上一轮偏好：{json.dumps(previous_opinion.treatment_preferences, ensure_ascii=False, indent=2)}
-   - 当前团队讨论趋势：{feedback}
+   - 当前团队讨论趋势：
    - 请在此基础上适度调整各选项评分（-1~1）；
 7. 输出 JSON 格式，字段包括 role, treatment_preferences, reasoning, confidence, concerns。
 """
-            prompt += f"\n\n=== 团队共识反馈 ===\n{feedback}\n"
+            prompt += f"\n\n=== 团队共识反馈 ===\n\n"
             prompt2 = f"""
 ==============================
 【医疗问题信息】
@@ -351,7 +488,6 @@ C = maybe （不确定/视情况而定）
 【历史信息】
 - 上轮推理: {previous_opinion.reasoning}
 - 上轮评分: {json.dumps(previous_opinion.treatment_preferences, ensure_ascii=False, indent=2)}
-- 当前讨论: {dialogue_text or "（暂无讨论内容）"}
 
 ==============================
 【输出要求】
@@ -387,92 +523,65 @@ C = maybe （不确定/视情况而定）
             logger.info(f"DEBUG: pubmedqa的prompt:{prompt}")
         elif dataset_name == "medqa":
             prompt = f"""
-你是一名医疗多学科团队（MDT, Multidisciplinary Team）成员，当前身份为 **{role_descriptions.get(role, role.value)}**。
-当前任务是【医学知识问答】，尽管你是{role.value},你的思考应基于医学理论（如病理、生理、药理、解剖等），
-而非患者功能、康复、心理状态或临床管理经验。
-请综合医疗问题与团队讨论，进行立场再评估。  
-遵循以下原则：
-首先你需要判断问题是否属于你的专科,如果属于,请继续以你的专业领域的专业背景进行判断。
-1. 若该问题属于你的专科，请以专业背景判断；否则以 **全科医生（General Internist）** 视角分析；
-2. 为每个选项进行独立的适合度评分，范围在-1到1之间（不包含-1和1）：
-首先判断题目是否是肯定意思还是否定意思,然后再进行评分
-- 若题目要求“选择不正确的选项”或者是否定意思：
-某个选项越符合“不正确”的特征（即该选项本身是错误的），评分越高（接近1）；
-某个选项越不符合“不正确”的特征（即该选项本身是正确的），评分越低（接近-1）。
-- 若题目要求“选择正确的选项”或者是肯定意思：
-某个选项越正确（符合医学事实），评分越高（接近1）；
-某个选项越错误，评分越低（接近-1）。 
-3. 阅读团队讨论内容，判断是否已形成共识：
-   - 若大多数成员意见一致且无强烈反对理由，请沿用共识；
-   - 若你不同意共识，请在 reasoning 中说明具体理由；
-4. **仅当有显著新证据或更强逻辑依据时**，才调整上一轮偏好评分；
-5. 若讨论内容与上一轮评分无冲突，请维持原评分；
-6. 输出清晰 reasoning，说明是否调整偏好及原因；
-7. **评分调整规则（非常重要）**：
-   - 你的任务不是重新评分，而是在上一轮评分基础上对所有选项进行微调；
-   - 每个选项都应在本轮讨论后重新评估（即使未被讨论）；
-   - 每个选项的调整幅度不得超过 ±0.3；
-   - 若团队形成共识，请在 ±0.3 范围内向共识靠拢；
-   - 若无新证据或逻辑依据，请轻微微调（例如 ±0.05）以体现立场更新；
-   - 所有选项均须出现在 `treatment_preferences` 中；
-   - 若对某个选项的调整幅度较大（≥0.2），请在 reasoning 中说明原因；
-   - 上一轮偏好：{json.dumps(previous_opinion.treatment_preferences, ensure_ascii=False, indent=2)}
-   - 上一轮置信度：{previous_opinion.confidence}
-   - - 若团队意见高度一致且你同意共识，置信度 +0.05~0.15
-   - 若团队意见分歧，置信度 -0.05~0.15
-   - 若本轮立场大幅调整 (≥0.2)，置信度 -0.05~0.1
-   - 若有新证据/逻辑支撑立场，置信度 +0.05~0.2
-   - 最终置信度限制在 0.6~0.98
-   - 当前团队讨论趋势：{feedback}
-8. 输出 JSON 格式，字段包括 
-   - role
-   - treatment_preferences: 更新后的完整分数字典（基于上一轮分数 ±0.3 范围内微调）
-   - reasoning
-   - confidence
-   - concerns。
-==============================
-【医疗问题信息】
-- 问题描述: {question_state.question}
-- 背景信息: {question_state.meta_info or '无特殊背景'}
-- 问题选项列表：
-{[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
-==============================
-【历史信息】
-- 上轮推理: {previous_opinion.reasoning}
-- 上轮评分: {json.dumps(previous_opinion.treatment_preferences, ensure_ascii=False, indent=2)}
-- 上轮置信度: {previous_opinion.confidence}
-- 当前讨论: {dialogue_text or "（暂无讨论内容）"}
+            你是一名医疗多学科团队（MDT）的成员。
+            你的当前角色是：**{role.value}**。
+            
+            你的任务是在本轮根据提供的信息，对医疗题目进行“立场再评估”（soft update）。
+            
+            你将会收到：
+            1. 当前轮次 (current_round)
+            2. 医学问题（question）
+            3. 问题选项（options）
+            4. 你上一轮的观点（previous_opinion）
+            5. MDT 领导者的上一轮总结（leader_summary）
+            6. 本轮新增证据或讨论内容（new_evidence）
+            -----------------------------------
+            【你的核心任务】
+            请基于以上信息进行“软更新”，你必须遵守以下原则：
+            
+            - 参考 previous_opinion 作为“偏好趋势”，但 **不直接累加或微调分数**
+            - leader_summary 的方向性 > previous_opinion
+            - 本轮 new_evidence 的重要性最高
+            - 你本轮输出的分数是一个“重新评估后的新分数”，但会受前一轮讨论影响（即 soft update，而非累加）
+            
+            -----------------------------------
+            【评分规则】
+            - 每个选项独立评分
+            - 分数范围：-1.0 到 1.0
+              - 越高 = 越支持该选项是正确答案  
+              - 越低 = 越反对该选项  
+              - 0 = 中性／证据不足  
+            
+            -----------------------------------
+            【输出格式要求】
+            你必须只输出以下 JSON（不要包含任何额外文字）：
+            
+            {{
+                "scores": {{"A": 0.0, "B": 0.0, "C": 0.0, "D": 0.0, "E": 0.0}},
+                "reasoning": "",
+                "evidence_strength": 0.0,
+                "evidences": []
+            }}
+            
+            字段解释：
+            - scores：你对每个选项的重新评估分数  
+            - reasoning：80–120 字的中文解释，说明你的判断逻辑  
+            - evidence_strength：0.0–1.0，表示证据对你判断的支撑强度  
+            - evidences：2–3 条关键证据点，每条 ≤20 字  
+            
+            -----------------------------------
+            【可使用的信息】
+            1. 当前轮次：{cur_round}
+            医学问题：{question_state.question}
+            问题选项：{[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
+            上一轮观点（previous_opinion）：
+            {previous_opinion_str}
+            领导者总结：{mdt_leader_summary}
+            本轮智能体新增证据：{new_evidence}
+            
+            请根据以上内容完成你的本轮 soft update，并输出 JSON。
 
-==============================
-【输出要求】
-请严格输出符合以下格式的 JSON（不要输出任何额外文字）：
-1. `role`: 当前角色名；
-2. `treatment_preferences`: 字典类型，键为选项索引（如 "A"、"B"），值为**在上一轮分数基础上微调后的评分（调整幅度不超过±0.3）**；
-3. `reasoning`: 字符串（≤80字），概括主要打分逻辑；
-4. `confidence`: 0~1 之间的浮点数，表示判断的可信度；
-5. `concerns`: 列表，包含2~3条（每条≤20字）关键担忧。
-仅输出以下 JSON（不要多余文本）：
-
-{{
-  "role": "{role.value}",
-  "treatment_preferences": {{
-    "A": 0.8,
-    "B": -0.3,
-    "C": -0.6
-  }},
-  "reasoning": "团队大多倾向A，我认为该证据充分，因此维持原判断。",
-  "confidence": 0.88,
-  "concerns": ["证据样本有限", "需进一步验证"]
-}}
-
-==============================
-【附加注意】
-- 请不要在 JSON 之外输出任何文字、说明或解释。
-- treatment_preferences 的键必须是选项索引（如 \"A\"、\"B\"），不要使用选项全文。
-- 所有选项索引（"A"、"B"、"C" 等）必须完整出现在 `treatment_preferences` 中。
-- 若团队存在意见分歧，请在 reasoning 中体现平衡考虑。
-- 生成结果需可直接适配 RoleOpinion 类。
-"""
+            """
         elif dataset_name == "ddxplus":
             prompt = f"""
             你是多学科会诊（MDT, Multidisciplinary Team）的一名成员，当前身份为 **{role_descriptions.get(role, role.value)}**。
@@ -496,7 +605,6 @@ C = maybe （不确定/视情况而定）
             ==============================
             【多学科对话记录】
             以下是团队本轮的讨论过程，包含来自其他医生（如肿瘤科、影像科、外科、营养科、心理科等）的观点：
-            {dialogue_text}
 
             ==============================
             【当前任务】
@@ -571,7 +679,6 @@ C = maybe （不确定/视情况而定）
             ==============================
             【多学科对话记录】
             以下是团队本轮的讨论过程，包含来自其他医生（如肿瘤科、影像科、外科、营养科、心理科等）的观点：
-            {dialogue_text}
 
             ==============================
             【当前任务】
@@ -827,7 +934,6 @@ C = maybe （不确定/视情况而定）
                     temperature=0.7,
                     max_tokens=self.config.max_tokens,
                 )
-                logger.debug(f"LLM response debug: {response}")
                 return response.choices[0].message.content.strip()
             else:
                 # 降级到模板化回复
@@ -865,7 +971,9 @@ C = maybe （不确定/视情况而定）
                     messages=[
                         {
                             "role": "system",
-                            "content": f"You are a member of a multidisciplinary medical team (MDT). Your current role is **{role.value}**."
+                            "content": f"你是多学科医疗团队（MDT）的成员，当前身份为 **{role.value}**。"
+                                       f"你的任务是根据你之前生成的初始意见，为每个问题选项生成 **初始陈述**。"
+                                       f"分析每个选项，解释其可能正确或不正确的原因，并参考你的初始意见中的评分、推理和证据。"
                         },
                         {"role": "user", "content": prompt},
                     ],
@@ -893,7 +1001,6 @@ C = maybe （不确定/视情况而定）
             question_options: List[medqa_types.QuestionOption] = None,
             dataset_name: str = None
     ) -> str:
-        """构建聚焦治疗选项的推理提示词"""
         role_descriptions = {
             RoleType.ONCOLOGIST: "肿瘤科医生，具备扎实的病理与内科学基础，能够从疾病发生机制角度判断病变部位和性质。",
             RoleType.NURSE: "护士，熟悉常见疾病的临床表现和基础生理知识，能从临床护理经验判断疾病常见部位。",
@@ -1563,17 +1670,19 @@ C = maybe （不确定/视情况而定）
                         {
                             "role": "system",
                             "content": (
-                                f"你是多学科医疗团队（MDT）的成员，当前身份是 {role.value}。"
-                                "你的任务是基于上一轮你的观点, 以及 MDT_LEADER 的讨论总结和指导方向"
-                                "你需要遵循你所代表的医学专业视角，不要给最终答案，而是围绕该选项提供论据、风险、优势和建议。"
+                                f"你是多学科医疗团队（MDT）的一名成员，当前身份为 **{role.value}**。"
+                                "你的任务是在医学知识问答场景中，以简洁、自然、有个人特色的方式参与推理型讨论，"
+                                "并根据 MDT_LEADER 的总结与讨论方向生成你的观点。你需要根据你的医学专业视角，"
+                                "结合上一轮的观点和 MDT_LEADER 的指导意见，提供清晰、严谨的医学推理。"
+                                "请注意，不要给出最终答案，而是帮助团队逐步形成共识。"
                             )
-
                         },
                         {"role": "user", "content": prompt},
                     ],
                     temperature=self.config.temperature,
                     max_tokens=self.config.max_tokens,
                 )
+
                 print("DEBUG查看错误: LLM响应原始内容:", response)
                 logger.info(f"新方案_MDT_LEADER生成response:{response}")
                 response_text = response.choices[0].message.content.strip()

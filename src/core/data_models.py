@@ -12,6 +12,8 @@ from datetime import datetime
 from experiments.medqa_types import MedicalQuestionState, QuestionOption
 
 
+
+
 @dataclass(frozen=True)
 class RoleRegistry:
     """
@@ -20,7 +22,26 @@ class RoleRegistry:
     name: str  # 对应Enum的name
     value: str  # 对应Enum的value
     description: str = "无描述"  # 可选参数
+    weight: float = 0 # 权重
 
+class RoleManager:
+    def __init__(self):
+        # 用于存储所有注册的角色
+        self.roles: Dict[str, RoleRegistry] = {}
+
+    def register_role(self, name: str, value: str, description: str = "无描述"):
+        # 创建一个新的 RoleRegistry 实例
+        role = RoleRegistry(name=name, value=value, description=description)
+        # 将角色添加到 roles 字典中，以 name 为键
+        self.roles[name] = role
+
+    def get_role(self, name: str) -> RoleRegistry:
+        # 获取角色实例
+        return self.roles.get(name)
+
+    def list_roles(self):
+        # 返回所有已注册的角色
+        return list(self.roles.values())
 
 class RoleType(Enum):
     """医疗团队角色类型"""

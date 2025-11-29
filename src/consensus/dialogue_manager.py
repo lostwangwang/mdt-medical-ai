@@ -63,7 +63,6 @@ class MultiAgentDialogueManager:
     ) -> ConsensusResult:
         """
         进行MDT讨论
-
         讨论流程:
         1. 初始化讨论 - 各角色基于RAG检索的医学知识生成初始意见
         2. 多轮对话协商 - 角色间就治疗方案进行结构化讨论
@@ -71,14 +70,12 @@ class MultiAgentDialogueManager:
         4. 争议聚焦 - 针对分歧较大的治疗方案深入讨论
         5. 共识达成 - 生成最终的治疗建议和共识结果
         """
-        print("Question options in dialogue manager:", question_options)
         logger.info(f"Starting MDT discussion for question {question_state}")
 
         # 初始化对话 - 各角色生成基于证据的初始意见
         opinions_list = self._initialize_discussion_medqa(
             question_state, question_options, dataset_name
         )
-        logger.info(f"Initial opinions: {opinions_list}")
         # 将意见列表转换为字典，方便按角色快速访问
         opinions_dict = {opinion.role: opinion for opinion in opinions_list}
         self.df, self.W, self.p_value, self.consensus = (
@@ -87,21 +84,19 @@ class MultiAgentDialogueManager:
         consensus_dict = {
             "df": self.df,
             "W": self.W,
-            "p_value": self.p_value
+            "p_value": self.p_value,
+            "consensus": self.consensus,
         }
         # 实例化一个mdt_leader
         mdt_leader_role = RoleRegistry("MDT LEADER", "MDT LEADER")
         self.mdt_leader = RoleAgent(role=mdt_leader_role, llm_interface=self.llm_interface)
         mdt_leader_summary = self._mdt_leader_summary_medqa(question_state, question_options,
                                                             self.dialogue_rounds[-1], consensus_dict)
-        logger.info(f"MDT_LEADER_SUMMARY_dialogue_manager: {mdt_leader_summary}")
-        logger.info(f"Initial opinions: {opinions_dict}")
-        self.consensus = False
+
         # 还是需要进行一次讨论的，所以我们需要
         if self.consensus == True:
             print("有共识结果,不用再继续跑了")
             logger.info(f"第{self.current_round}轮有共识结果")
-            # 并且让MDT_LEADER进行总结
         else:
             # 进行多轮对话协商
             # 将MDT_LEADER输入的内容下一轮的对话内容中
@@ -109,18 +104,10 @@ class MultiAgentDialogueManager:
                 self.current_round += 1
                 print(f"当前是第{self.current_round}轮对话")
                 logger.info(f"Starting dialogue round {self.current_round}")
-
-                # 进行一轮结构化对话
-                current_round = self._conduct_dialogue_round_medqa(
-                    question_state, question_options, opinions_dict, mdt_leader_summary, dataset_name
-                )
-                logger.info(f"dialogue round {self.current_round}: {current_round}")
-                self.dialogue_rounds.append(current_round)
-                logger.info(f"previous opinions dict: {opinions_dict}")
-                # 基于对话内容更新各角色立场
+                # 1. 基于上一轮的对话内容更新各角色立场
                 new_opinions_dict = self._update_agent_opinions_medqa(
                     question_state,
-                    current_round,
+                    self.dialogue_rounds[-1],
                     opinions_dict,
                     question_options,
                     mdt_leader_summary,
@@ -128,12 +115,25 @@ class MultiAgentDialogueManager:
                 )
                 logger.info(f"Updated opinions dict: {new_opinions_dict}")
                 opinions_dict = new_opinions_dict
+                # 2. 进行一轮结构化对话
+                current_round = self._conduct_dialogue_round_medqa(
+                    question_state, question_options, opinions_dict, mdt_leader_summary, dataset_name
+                )
+                logger.info(f"dialogue round {self.current_round}: {current_round}")
+                self.dialogue_rounds.append(current_round)
                 self.df, self.W, self.p_value, self.consensus = self._check_discussion_convergence_medqa(
                     opinions_dict, question_options
                 )
-
-        logger.info(f"the last round: {self.current_round}")
-        logger.info(f"final opinions dict: {opinions_dict}")
+                consensus_dict = {
+                    "df": self.df,
+                    "W": self.W,
+                    "p_value": self.p_value,
+                    "consensus": self.consensus,
+                }
+                # 3. 这里要更新MDT_LEADER的内容
+                mdt_leader_summary = self._mdt_leader_summary_medqa(
+                    question_state, question_options, current_round, consensus_dict, opinions_dict
+                )
 
         print(f"第{self.current_round}轮达成共识")
         logger.info(f"第{self.current_round}轮达成共识!!!")
@@ -148,37 +148,31 @@ class MultiAgentDialogueManager:
                 "p_value": self.p_value,
                 "consensus": self.consensus,
             },
+            "mdt_leader_final_summary": mdt_leader_summary,
         }
         return final_result
+
+    def _mdt_leader_recruit_agents_medqa(self, question_state: MedicalQuestionState, question_options: List[QuestionOption]):
+        """
+        根据问题内容，进行角色分配
+        """
+        self.mdt_leader.recurt_agents_medqa(question_state, question_options)
+        # 获取角色列表
+        role_list = RoleRegistry.get_role_list()
+        # 获取角色数量
+        role_num = len(role_list)
 
     def _mdt_leader_summary_medqa(
             self,
             question_state: MedicalQuestionState,
             question_options: List[QuestionOption],
             dialogue_round: DialogueRound,
-            consensus_dict: Dict[str, Any]
+            consensus_dict: Dict[str, Any],
+            opinions_dict: Dict[RoleType, Union[RoleOpinion, QuestionOpinion]] = None,
     ):
         response = self.mdt_leader.generate_mdt_leader_summary_dataset(question_state, question_options, dialogue_round,
-                                                                       consensus_dict)
+                                                                       consensus_dict, opinions_dict)
         return response
-
-    def get_df_and_w(
-            self,
-            question_options: List[QuestionOption],
-            opinions_dict: Dict[RoleType, RoleOpinion],
-    ):
-        self.consensus_calculator.set_treatments(question_options)
-        print("get_df_and_w行数:", self.consensus_calculator.m)
-        print("get_df_and_w列数:", self.consensus_calculator.n)
-
-        self.consensus_calculator.build_weighted_matrix(opinions_dict)
-        self.consensus_calculator.compute_kendalls_w()
-        self.df, self.W, _, _ = self.consensus_calculator.summarize(
-            consensus_threshold=self.convergence_threshold
-        )
-        logger.info(f"get_df_and_w第{self.current_round}轮df: {self.df}")
-        logger.info(f"get_df_and_w第{self.current_round}轮W: {self.W}")
-        return self.df, self.W
 
     def _conduct_dialogue_round_medqa(
             self,
@@ -280,12 +274,6 @@ class MultiAgentDialogueManager:
         opinions_dict = {opinion.role: opinion for opinion in opinions_list}
         initial_round.opinion_dict = opinions_dict
         self.dialogue_rounds.append(initial_round)
-        logger.info(
-            f"Initialized discussion with {len(initial_round.messages)} initial opinions\n"
-            f"Initialized round messages: {self.dialogue_rounds}"
-        )
-        # 这里为什么只返回opinions_list, 而不需要dialogue_rounds呢
-        # 不用传，因为在self.dialogue里面呢
         return opinions_list
 
     def _create_initial_message_medqa(
@@ -502,18 +490,17 @@ class MultiAgentDialogueManager:
         - 考虑其他角色的观点，调整自己的立场
         """
         new_opinions_dict: Dict[RoleType, RoleOpinion] = {}
-
-        # 大模型分析当前的治疗意见
         for role, agent in self.agents.items():
             # 根据当前的对话对话内容以及其他角色的对话进行分析,更新角色的治疗偏好和治疗意见
             # current_dialogue = current_round.messages[-1]
             previous_opinion = opinions_dict[role.value]
             logger.info(f"Previous opinion for {role.value}: {previous_opinion}")
-            new_opintion = agent._update_agent_opinions_and_preferences_medqa(
+            new_opintion = agent._update_agent_opinions_and_scores_medqa(
                 question_state,
                 current_round,
                 previous_opinion,
                 question_options,
+                mdt_leader_summary,
                 dataset_name,
             )
             new_opinions_dict[role.value] = new_opintion

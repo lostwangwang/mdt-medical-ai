@@ -209,33 +209,62 @@ class RoleAgent:
         }
         return specializations.get(self.role, {})
 
+    def recurt_agents_medqa(
+            self,
+            question_state: MedicalQuestionState,
+            question_options: List[QuestionOption]
+    ):
+        response = self.llm_interface.llm_recurt_agents_medqa(question_state, question_options)
+        if isinstance(response, str):
+            try:
+                reasoning = fix_and_parse_single_json(response)
+            except Exception as e:
+                logger.warning(
+                    f"json解析失败:{e}, 原始字符串:{reasoning}"
+                )
+        elif isinstance(response, dict):
+            pass
+        else:
+            logger.warning(
+                f"未知的返回类型:{type(response)}"
+            )
+            return None
+        return reasoning
+
+
     def generate_mdt_leader_summary_dataset(
             self,
             question_state: MedicalQuestionState,
             question_options: List[QuestionOption],
             dialogue_rounds: DialogueRound,
             consensus_dict: Dict[str, Any],
+            opinions_dict: Dict[RoleType, Union[RoleOpinion, QuestionOpinion]] = None,
     ):
-        mdt_leader_summary = self.llm_interface.llm_generate_mdt_leader_content(question_state, question_options,
-                                                                                dialogue_rounds,
-                                                                                consensus_dict)
-        logger.info(f"[DEBUG_MDT_LEADER_SUMMARY]_mdt_leader_summary: {mdt_leader_summary}")
+        current_round = dialogue_rounds.round_number
+        if consensus_dict["consensus"] == False:
+            mdt_leader_summary = self.llm_interface.llm_generate_mdt_leader_content(question_state, question_options,
+                                                                                    dialogue_rounds,
+                                                                                    consensus_dict)
+        elif consensus_dict["consensus_type"] == True or current_round == 3:
+            mdt_leader_summary = self.llm_interface.llm_generate_final_mdt_leader_summary(question_state,
+                                                                                          question_options,
+                                                                                          dialogue_rounds,
+                                                                                          consensus_dict,
+                                                                                          opinions_dict)
         return mdt_leader_summary
 
-    def _update_agent_opinions_and_preferences_medqa(
+    def _update_agent_opinions_and_scores_medqa(
             self,
             question_state: MedicalQuestionState,
             current_round: DialogueRound,
-            previous_opinion: RoleOpinion,
+            previous_opinion: Union[RoleOpinion, QuestionOpinion],
             question_options: List[QuestionOption],
-            focus_question: QuestionOption,
+            mdt_leader_summary: str,
             dataset_name: str = None,
-            df: DataFrame = None,
-            W: float = 0.0
-    ) -> RoleOpinion:
+    ) -> Union[RoleOpinion, QuestionOpinion]:
         """根据当前轮次的对话内容,更新角色的医疗问题偏好和医疗问题意见以及置信度"""
         reasoning = self._generate_update_agent_opinions_reasoning_medqa(
-            question_state, current_round, previous_opinion, question_options, focus_question, dataset_name, df, W
+            question_state, current_round, previous_opinion, question_options, mdt_leader_summary, dataset_name
         )
         logger.debug(f"{self.role.value}更新医疗偏好:{reasoning}")
         print(f"{self.role.value}更新医疗偏好:{reasoning}")
@@ -252,16 +281,16 @@ class RoleAgent:
             logger.error(f"未知的推理类型:{type(reasoning)}, 原始字符串:{reasoning}")
             return None
 
-        role_option = RoleOpinion(
+        role_opinion = QuestionOpinion(
             role=self.role.value,
-            treatment_preferences=reasoning["treatment_preferences"],
+            scores=reasoning["scores"],
             reasoning=reasoning["reasoning"],
-            confidence=reasoning["confidence"],
-            concerns=reasoning["concerns"],
+            evidence_strength=reasoning["evidence_strength"],
+            evidences=reasoning["evidences"],
         )
         # 更新当前角色的 TreatmentPreferences
-        self.current_stance = role_option.treatment_preferences
-        return role_option
+        self.current_stance = role_opinion.scores
+        return role_opinion
 
     def _update_agent_opinions_and_preferences(
             self,
@@ -290,12 +319,10 @@ class RoleAgent:
             self,
             question_state: MedicalQuestionState,
             current_round: DialogueRound,
-            previous_opinion: RoleOpinion,
+            previous_opinion: Union[RoleOpinion, QuestionOpinion],
             question_options: List[QuestionOption],
-            focus_question: QuestionOption,
+            mdt_leader_summary: str,
             dataset_name: str = None,
-            df: DataFrame = None,
-            W: float = 0.0
     ):
         """根据当前轮次的对话内容,生成更新角色医疗问题意见的推理"""
         # 如果有LLM接口，使用智能推理
@@ -308,17 +335,15 @@ class RoleAgent:
                     current_round=current_round,
                     previous_opinion=previous_opinion,
                     question_options=question_options,
-                    focus_question=focus_question,
+                    mdt_leader_summary=mdt_leader_summary,
                     dataset_name=dataset_name,
-                    df=df,
-                    W=W
                 )
                 if reasoning and len(reasoning.strip()) > 0:
                     logger.debug(
                         f"[更新立场生成推理]Generated LLM reasoning for {self.role.value}: {reasoning}..."
                     )
 
-                    return reasoning
+                return reasoning
 
             except Exception as e:
                 logger.warning(
@@ -369,7 +394,6 @@ class RoleAgent:
             question_options,
             dataset_name
         )
-        logger.warning(f"[DEBUG生成初始立场推理]原始推理:{reasoning}, 类型:{type(reasoning)}")
         if isinstance(reasoning, str):
             try:
                 reasoning = fix_and_parse_single_json(reasoning)
@@ -382,8 +406,6 @@ class RoleAgent:
         else:
             logger.error(f"未知的推理类型:{type(reasoning)}, 原始字符串:{reasoning}")
             return None
-        logging.debug(f"[生成初始立场推理]Generated LLM reasoning for {self.role.value}: {reasoning}")
-        logger.info(f"DEBUG: 看看转换对了吗:{type(reasoning)}, {reasoning}")
         role_opinion = QuestionOpinion(
             role=self.role.value,
             scores=reasoning["scores"],
@@ -415,12 +437,7 @@ class RoleAgent:
                     question_options=question_options,
                     dataset_name=dataset_name
                 )
-                logger.info(f"DEBUG: 我想知道这里返回的类型是什么:{type(reasoning)}")
                 if reasoning and len(reasoning.strip()) > 0:
-                    logger.debug(
-                        f"Generated LLM reasoning for {self.role.value}: {reasoning}..."
-                    )
-
                     return reasoning
 
             except Exception as e:
