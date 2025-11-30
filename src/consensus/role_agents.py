@@ -238,14 +238,14 @@ class RoleAgent:
             question_options: List[QuestionOption],
             dialogue_rounds: DialogueRound,
             consensus_dict: Dict[str, Any],
-            opinions_dict: Dict[RoleType, Union[RoleOpinion, QuestionOpinion]] = None,
+            opinions_dict: Dict[Union[RoleType, RoleRegistry], Union[RoleOpinion, QuestionOpinion]] = None,
     ):
         current_round = dialogue_rounds.round_number
         if consensus_dict["consensus"] == False:
             mdt_leader_summary = self.llm_interface.llm_generate_mdt_leader_content(question_state, question_options,
                                                                                     dialogue_rounds,
                                                                                     consensus_dict)
-        elif consensus_dict["consensus_type"] == True or current_round == 3:
+        elif consensus_dict["consensus"] == True or current_round == 3:
             mdt_leader_summary = self.llm_interface.llm_generate_final_mdt_leader_summary(question_state,
                                                                                           question_options,
                                                                                           dialogue_rounds,
@@ -406,8 +406,9 @@ class RoleAgent:
         else:
             logger.error(f"未知的推理类型:{type(reasoning)}, 原始字符串:{reasoning}")
             return None
+
         role_opinion = QuestionOpinion(
-            role=self.role.value,
+            role=self.role,
             scores=reasoning["scores"],
             reasoning=reasoning["reasoning"],
             evidence_strength=reasoning["evidence_strength"],
@@ -424,9 +425,6 @@ class RoleAgent:
             dataset_name: str = None
     ) -> str:
         """生成决策推理 - 专为MedQA场景设计"""
-        # 找到最推荐的治疗
-        # best_treatment = max(treatment_prefs.items(), key=lambda x: x[1])
-
         # 如果有LLM接口，使用智能推理
         if self.llm_interface:
             try:
@@ -711,7 +709,8 @@ class RoleAgent:
     def generate_dialogue_response_medqa(
             self,
             question_state: MedicalQuestionState,
-            opinions_dict: Dict[RoleType, RoleOpinion] = None,
+            question_options: List[QuestionOption],
+            opinions_dict: Dict[Union[RoleType, RoleRegistry], Union[RoleOpinion,QuestionOpinion]] = None,
             last_round_messages: List[DialogueMessage] = None,
             mdt_leader_summary: str = None,
             dataset_name: str = None
@@ -719,6 +718,7 @@ class RoleAgent:
         # 生成回应内容
         response_content = self._construct_response_medqa(
             question_state,
+            question_options,
             opinions_dict=opinions_dict,
             last_round_messages=last_round_messages,
             mdt_leader_summary=mdt_leader_summary,
@@ -764,7 +764,8 @@ class RoleAgent:
     def _construct_response_medqa(
             self,
             question_state: MedicalQuestionState,
-            opinions_dict: Dict[RoleType, RoleOpinion] = None,
+            question_options: List[QuestionOption],
+            opinions_dict: Dict[Union[RoleType, RoleRegistry], Union[RoleOpinion, QuestionOpinion]] = None,
             last_round_messages: List[DialogueMessage] = None,
             mdt_leader_summary: str = None,
             dataset_name: str = None
@@ -781,6 +782,7 @@ class RoleAgent:
                 # 使用LLM生成自然对话回应
                 response = self.llm_interface.generate_dialogue_response_medqa(
                     question_state=question_state,
+                    question_options=question_options,
                     role=self.role,
                     current_opinion=current_opinion,
                     dialogue_history=dialogue_history,

@@ -46,16 +46,13 @@ if __name__ == "__main__":
     print(path)
     # data = [
     #     {
-    #         "question": "A 68-year-old African American male presents to his primary care provider complaining of progressively worsening back pain. The pain is localized to the lower back and sometimes wakes him up from sleep. He has a history of hypertension and admits to a 50 pack-year smoking history. Further questioning reveals that he has also experienced fatigue and an unintentional weight loss of 18 pounds over the past year. Laboratory analysis is notable for an elevated alkaline phosphatase. A radiograph of the patient’s spine demonstrates multiple sclerotic lesions in the lumbar vertebral bodies. Which of the following tests would most likely confirm the diagnosis in this patient?",
-    #         "answer": "Transrectal ultrasound-guided prostate biopsy",
-    #         "options": {"A": "Renal biopsy", "B": "Serum protein electrophoresis",
-    #                     "C": "Fine needle aspiration of the thyroid",
-    #                     "D": "Transrectal ultrasound-guided prostate biopsy", "E": "Chest radiograph"},
-    #         "meta_info": "step1", "answer_idx": "D"
-    #     }
+    #         "question": "A 23-year-old woman presents to the emergency department because of nausea. She has been experiencing severe intermittent nausea and diarrhea for the last year and refuses to leave the emergency department until she is told what is causing her symptoms. She hates hospitals but has reluctantly undergone numerous workups and imaging studies in order to discern what is wrong. All of the studies have been normal. She says that these symptoms have been causing her severe distress and is impairing her ability to perform her job. She says that she feels as if the nausea is worse when she is trying to work but says that she will continue to work as an insurance agent despite the physical discomfort. She has started restricting her diet to only graham crackers because she thinks that helps her symptoms. She has also started avoiding eating lunch because of the nausea. Which of the following disorders is most consistent with this patient's presentation?",
+    #         "answer": "Somatic symptom disorder",
+    #         "options": {"A": "Conversion disorder", "B": "Factitious disorder", "C": "Illness anxiety disorder",
+    #                     "D": "Malingering", "E": "Somatic symptom disorder"}, "meta_info": "step1", "answer_idx": "E"}
     #
     # ]
-    data = read_jsonl(path, random_sample=5, seed=42)
+    data = read_jsonl(path, random_sample=3, seed=42)
     right_cnt = 0
     for idx, item in enumerate(data, start=1):
         print(f"执行第{idx}个问题: {item["question"]}")

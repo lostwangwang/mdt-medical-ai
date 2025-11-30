@@ -71,7 +71,17 @@ class MultiAgentDialogueManager:
         5. 共识达成 - 生成最终的治疗建议和共识结果
         """
         logger.info(f"Starting MDT discussion for question {question_state}")
-
+        # 实例化一个mdt_leader
+        mdt_leader_role = RoleRegistry("MDT LEADER", "MDT LEADER")
+        self.mdt_leader = RoleAgent(role=mdt_leader_role, llm_interface=self.llm_interface)
+        response = self.mdt_leader.recurt_agents_medqa(question_state, question_options)
+        recruited_experts = response['recruited_experts']
+        role_list = []
+        for expert in recruited_experts:
+            registry = RoleRegistry(expert['name'], expert['value'], expert['description'], expert['weight'])
+            role_list.append(registry)
+        self.agents = {role: RoleAgent(role, llm_interface=self.llm_interface) for role in role_list}
+        self.consensus_calculator.set_roles(role_list)
         # 初始化对话 - 各角色生成基于证据的初始意见
         opinions_list = self._initialize_discussion_medqa(
             question_state, question_options, dataset_name
@@ -87,17 +97,17 @@ class MultiAgentDialogueManager:
             "p_value": self.p_value,
             "consensus": self.consensus,
         }
-        # 实例化一个mdt_leader
-        mdt_leader_role = RoleRegistry("MDT LEADER", "MDT LEADER")
-        self.mdt_leader = RoleAgent(role=mdt_leader_role, llm_interface=self.llm_interface)
-        mdt_leader_summary = self._mdt_leader_summary_medqa(question_state, question_options,
-                                                            self.dialogue_rounds[-1], consensus_dict)
+
 
         # 还是需要进行一次讨论的，所以我们需要
         if self.consensus == True:
             print("有共识结果,不用再继续跑了")
             logger.info(f"第{self.current_round}轮有共识结果")
+            mdt_leader_summary = self._mdt_leader_summary_medqa(question_state, question_options,
+                                                                self.dialogue_rounds[-1], consensus_dict, opinions_dict)
         else:
+            mdt_leader_summary = self._mdt_leader_summary_medqa(question_state, question_options,
+                                                                self.dialogue_rounds[-1], consensus_dict)
             # 进行多轮对话协商
             # 将MDT_LEADER输入的内容下一轮的对话内容中
             while self.current_round < self.max_rounds and not self.consensus:
@@ -178,7 +188,7 @@ class MultiAgentDialogueManager:
             self,
             question_state: MedicalQuestionState,
             question_options: List[QuestionOption],
-            opinions_dict: Dict[RoleType, RoleOpinion],
+            opinions_dict: Dict[Union[RoleType, RoleRegistry], Union[RoleOpinion, QuestionOpinion]],
             mdt_leader_summary: str,
             dataset_name: str = None,
     ) -> Tuple[DialogueRound, QuestionOption]:
@@ -256,11 +266,11 @@ class MultiAgentDialogueManager:
 
         for role, agent in self.agents.items():
             # 选取角色opinion
-            opinion = [opinion for opinion in opinions_list if opinion.role == role.value]
+            opinion_result = [opinion for opinion in opinions_list if opinion.role == role]
             # 生成初始发言
             initial_message = self._create_initial_message_medqa(
                 agent,
-                opinion[0],
+                opinion_result[0],
                 question_state,
                 question_options,
                 dataset_name
@@ -438,13 +448,9 @@ class MultiAgentDialogueManager:
         """
         检查讨论是否收敛
         """
-        print("判断是否收敛之前输出None吗?")
         # if self.current_round < 2:
         #     return False
         self.consensus_calculator.set_treatments(question_options)
-        print("行数:", self.consensus_calculator.m)
-        print("列数:", self.consensus_calculator.n)
-
         self.consensus_calculator.build_weighted_matrix(opinions_dict)
         self.consensus_calculator.compute_kendalls_w()
         self.df, self.W, self.p_value, self.consensus = (
@@ -478,7 +484,7 @@ class MultiAgentDialogueManager:
             self,
             question_state: MedicalQuestionState,
             current_round: DialogueRound,
-            opinions_dict: Dict[RoleType, Union[RoleOpinion, QuestionOpinion]],
+            opinions_dict: Dict[Union[RoleType, RoleRegistry], Union[RoleOpinion, QuestionOpinion]],
             question_options: List[QuestionOption],
             mdt_leader_summary: str,
             dataset_name: str = None
@@ -1166,7 +1172,7 @@ class MultiAgentDialogueManager:
             round_data: DialogueRound,
             question_state: MedicalQuestionState,
             question_options: List[QuestionOption],
-            opinions_dict: Dict[RoleType, RoleOpinion],
+            opinions_dict: Dict[Union[RoleType, RoleRegistry], Union[RoleOpinion, QuestionOpinion]],
             mdt_leader_summary: str,
             dataset_name: str = None,
     ) -> DialogueRound:
@@ -1177,6 +1183,7 @@ class MultiAgentDialogueManager:
             last_round_messages = self._get_last_round_previous_messages()
             response = agent.generate_dialogue_response_medqa(
                 question_state,
+                question_options,
                 opinions_dict,
                 last_round_messages,
                 mdt_leader_summary,

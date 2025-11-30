@@ -24,25 +24,6 @@ class RoleRegistry:
     description: str = "无描述"  # 可选参数
     weight: float = 0 # 权重
 
-class RoleManager:
-    def __init__(self):
-        # 用于存储所有注册的角色
-        self.roles: Dict[str, RoleRegistry] = {}
-
-    def register_role(self, name: str, value: str, description: str = "无描述"):
-        # 创建一个新的 RoleRegistry 实例
-        role = RoleRegistry(name=name, value=value, description=description)
-        # 将角色添加到 roles 字典中，以 name 为键
-        self.roles[name] = role
-
-    def get_role(self, name: str) -> RoleRegistry:
-        # 获取角色实例
-        return self.roles.get(name)
-
-    def list_roles(self):
-        # 返回所有已注册的角色
-        return list(self.roles.values())
-
 class RoleType(Enum):
     """医疗团队角色类型"""
     ONCOLOGIST = "oncologist"  # 肿瘤科医生
@@ -60,6 +41,11 @@ class ChatRole(Enum):
     USER = "user"  # 用户/患者
     SYSTEM = "system"  # 系统
 
+@dataclass(frozen=True)
+class TreatmentOption:
+    """治疗方案选项"""
+    name: str
+    value: str
 
 class TreatmentOption(Enum):
     """治疗方案选项"""
@@ -164,7 +150,7 @@ class QuestionOpinion:
         evidences: List[str]: 支持这个选项的证据列表
     """
 
-    role: RoleType
+    role: Union[RoleType, RoleRegistry]
     scores: Dict[QuestionOption, float]  # -1 to +1
     reasoning: str
     evidence_strength: float  # 0 to 1
@@ -186,7 +172,7 @@ class DialogueMessage:
         treatment_focus (TreatmentOption): 当前治疗焦点
     """
 
-    role: Union[RoleType, ChatRole]
+    role: Union[RoleType, ChatRole, RoleRegistry]
     content: str
     timestamp: datetime
     message_type: str  # "initial_opinion", "response", "rebuttal", "consensus"
@@ -209,7 +195,7 @@ class DialogueRound:
 
     round_number: int
     messages: List[DialogueMessage]
-    opinion_dict: Dict[RoleType, RoleOpinion]
+    opinion_dict: Dict[Union[RoleType, RoleRegistry], Union[RoleOpinion, QuestionOpinion]]
     consensus_status: str  # "discussing", "converging", "concluded"
 
 

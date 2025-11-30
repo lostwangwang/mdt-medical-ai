@@ -12,7 +12,7 @@ import os
 src_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if src_path not in sys.path:
     sys.path.append(src_path)
-from src.core.data_models import RoleType, TreatmentOption, RoleOpinion, QuestionOpinion
+from src.core.data_models import RoleType, TreatmentOption, RoleOpinion, QuestionOpinion, RoleRegistry
 from experiments.medqa_types import QuestionOption
 
 
@@ -39,15 +39,20 @@ class CalculateConsensus:
         self.treatments = treatments
         self.n = len(self.treatments)
 
-    def build_weighted_matrix(self, opinions_dict: dict[RoleType, Union[RoleOpinion, QuestionOpinion]]):
+    def set_roles(self, roles: List[Union[RoleType, RoleRegistry]]):
+        self.roles = roles
+        self.m = len(self.roles)
+
+    def build_weighted_matrix(self, opinions_dict: dict[Union[RoleType, RoleRegistry], Union[RoleOpinion, QuestionOpinion]]):
         """构建偏好×置信度的加权共识矩阵"""
         score_matrix = np.zeros((self.m, self.n))
         for i, role in enumerate(self.roles):
-            prefs = opinions_dict[role.value].scores
-            conf = opinions_dict[role.value].evidence_strength
+            prefs = opinions_dict[role].scores
+            conf = opinions_dict[role].evidence_strength
+            role_weight = role.weight
             # 这里要怎么改呢
             # score_matrix[i, :] = [prefs[t.value] * conf for t in self.treatments]
-            score_matrix[i, :] = [prefs[t.name] * conf for t in self.treatments]
+            score_matrix[i, :] = [prefs[t.name] * conf * role_weight for t in self.treatments]
         self.df_scores = pd.DataFrame(score_matrix, index=[role.value for role in self.roles],
                                       columns=[t.value for t in self.treatments]).T
         return self.df_scores
@@ -94,7 +99,7 @@ class CalculateConsensus:
         df = self.df_scores.copy()
         df["mean"] = df.mean(axis=1)
         df["std"] = df.std(axis=1)
-        consensus = True if self.W and self.W > consensus_threshold else False
+        consensus = True if self.W and self.W >= consensus_threshold else False
         print(f"Kendall's W 协调系数: {self.W}, p 值: {self.p_value}, 共识: {consensus}")
         return df, self.W, self.p_value, consensus
 
@@ -109,25 +114,3 @@ class CalculateConsensus:
         plt.ylabel("Score")
         plt.tight_layout()
         plt.show()
-
-
-if __name__ == "__main__":
-    # 示例数据（每个角色的偏好和置信度）
-    role_type = list(RoleType)
-    print(role_type)
-    treatments = list(TreatmentOption)
-    print(treatments)
-    data = {}
-    calc = CalculateConsensus()
-    calc.set_treatments(treatments)
-    calc.build_weighted_matrix()
-    print(calc.df_scores)
-    calc.compute_kendalls_w()
-    df, W, p_value, consensus = calc.summarize()
-    print("W的类型", type(W))
-    print(f"Kendall's W 协调系数: {W}, p 值: {p_value}, 共识: {consensus}")
-    print(df['mean'])
-    # 如何选出最优的治疗方案
-    best_treatment = df['mean'].idxmax()
-    print(f"最优治疗方案: {best_treatment}")
-    print(f"最优治疗方案枚举值: {TreatmentOption(best_treatment).name}")
