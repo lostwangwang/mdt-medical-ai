@@ -40,31 +40,19 @@ def read_jsonl(file_path: str, random_sample: int = None, seed: int = 42) -> Lis
 
 
 if __name__ == "__main__":
-
     # path = os.path.join(project_root, "data/examples/medqa/data_clean/questions/Mainland/dev.jsonl")
     # path = "../../" + "data/examples/medqa/data_clean/questions/Mainland/dev.jsonl"
-    path = "../../data/examples/medqa/data_clean/questions/US/dev.jsonl"
+    path = "../../data/examples/medqa/data_clean/questions/US/test_update_no_image.jsonl"
     print(path)
-    # data = read_jsonl(path, 50, seed=42)
-    data = [
-        # {
-        #     "question": "A 59-year-old man with long-standing hypertension is brought to the emergency department because of vomiting and headache for 2 hours. He reports that he has been unable to refill the prescription for his antihypertensive medications. His blood pressure is 210/120 mm Hg. Fundoscopy shows bilateral optic disc swelling. An ECG shows left ventricular hypertrophy. Treatment with intravenous fenoldopam is begun. Which of the following intracellular changes is most likely to occur in renal vascular smooth muscle as a result of this drug?",
-        #     "answer": "Increased production of cyclic adenosine monophosphate",
-        #     "options": {"A": "Increased activity of myosin light-chain kinase",
-        #                 "B": "Increased activity of protein kinase C",
-        #                 "C": "Increased activity of guanylate cyclase",
-        #                 "D": "Increased production of cyclic adenosine monophosphate",
-        #                 "E": "Increased intracellular concentration of calcium"}, "meta_info": "step1",
-        #     "answer_idx": "D"
-        # }
-        {
-            "question": "A 35-year-old female presents to your office for a routine physical. She informs you that she is pregnant, and that the father of her child has Waardenburg’s syndrome. She asks you about common findings in Waardenburg’s syndrome. Which of the following features are not associated of Waardenburg’s syndrome?",
-            "answer": "Conductive hearing loss",
-            "options": {"A": "Heterochromia", "B": "Hair hypopigmentation", "C": "Conductive hearing loss",
-                        "D": "Lateral displacement of inner canthi", "E": "Broad nasal root"}, "meta_info": "step2&3",
-            "answer_idx": "C"}
-    ]
-
+    # data = [
+    #     {
+    #         "question": "A 23-year-old woman presents to the emergency department because of nausea. She has been experiencing severe intermittent nausea and diarrhea for the last year and refuses to leave the emergency department until she is told what is causing her symptoms. She hates hospitals but has reluctantly undergone numerous workups and imaging studies in order to discern what is wrong. All of the studies have been normal. She says that these symptoms have been causing her severe distress and is impairing her ability to perform her job. She says that she feels as if the nausea is worse when she is trying to work but says that she will continue to work as an insurance agent despite the physical discomfort. She has started restricting her diet to only graham crackers because she thinks that helps her symptoms. She has also started avoiding eating lunch because of the nausea. Which of the following disorders is most consistent with this patient's presentation?",
+    #         "answer": "Somatic symptom disorder",
+    #         "options": {"A": "Conversion disorder", "B": "Factitious disorder", "C": "Illness anxiety disorder",
+    #                     "D": "Malingering", "E": "Somatic symptom disorder"}, "meta_info": "step1", "answer_idx": "E"}
+    #
+    # ]
+    data = read_jsonl(path, random_sample=3, seed=42)
     right_cnt = 0
     for idx, item in enumerate(data, start=1):
         print(f"执行第{idx}个问题: {item["question"]}")
@@ -90,7 +78,7 @@ if __name__ == "__main__":
         logging.info(f"第{idx}个问题的共识矩阵: {df}")
         best_treatment = df['mean'].idxmax()
         logging.info(f"第{idx}个问题的最佳治疗方案: {best_treatment}")
-        logging.info(f"第{idx}个问题的平均投票: {df['mean']}")
+        logging.info(f"第{idx}个问题的平均分数: {df['mean']}")
         if medqa_types.QuestionOption(best_treatment).name == question_state.answer_idx:
             logging.info(f"第{idx}个问题的智能体给的答案: {best_treatment}，正确")
             right_cnt += 1
@@ -99,5 +87,5 @@ if __name__ == "__main__":
         print(f"当前已经答对的问题数: {right_cnt}, 当前是第{idx}个问题")
         logging.debug(f"当前已经答对的问题数: {right_cnt}")
         logging.info(f"第{idx}个问题的正确答案: {question_state.answer_idx}")
-
+        logging.info(f"第{idx}个问题的智能体给的最终方案: {final_result["mdt_leader_final_summary"]}")
     logging.info(f"总体准确率: {right_cnt / len(data):.2f}")

@@ -12,9 +12,20 @@ from datetime import datetime
 from experiments.medqa_types import MedicalQuestionState, QuestionOption
 
 
+
+
+@dataclass(frozen=True)
+class RoleRegistry:
+    """
+    在这里，我想要动态注册角色
+    """
+    name: str  # 对应Enum的name
+    value: str  # 对应Enum的value
+    description: str = "无描述"  # 可选参数
+    weight: float = 0 # 权重
+
 class RoleType(Enum):
     """医疗团队角色类型"""
-    # SURGEON = "surgeon"  # 外科医生？需要去掉
     ONCOLOGIST = "oncologist"  # 肿瘤科医生
     RADIOLOGIST = "radiologist"  # 影像科医生
     NURSE = "nurse"  # 护士
@@ -26,9 +37,15 @@ class RoleType(Enum):
 
 class ChatRole(Enum):
     """非医疗对话角色类型"""
+
     USER = "user"  # 用户/患者
     SYSTEM = "system"  # 系统
 
+@dataclass(frozen=True)
+class TreatmentOption:
+    """治疗方案选项"""
+    name: str
+    value: str
 
 class TreatmentOption(Enum):
     """治疗方案选项"""
@@ -45,9 +62,9 @@ class TreatmentOption(Enum):
 class PatientState:
     """
     患者状态摘要:
-    
+
     包含患者基本信息、诊断、分期、实验室结果、 vital 指标、症状、 comor病、心理状态、生活质量评分和时间戳。
-    
+
     Attributes:
         patient_id (str): 患者唯一标识符。
         age (int): 患者年龄。
@@ -78,9 +95,9 @@ class PatientState:
 @dataclass
 class MedicalEvent:
     """医疗事件
-    
+
     包含患者ID、事件时间、事件类型、事件名称、事件值和可选的备注。
-    
+
     Attributes:
         patient_id (str): 患者唯一标识符。
         time (datetime): 事件发生时间。
@@ -102,7 +119,7 @@ class MedicalEvent:
 class RoleOpinion:
     """
     角色意见
-    
+
     包含角色的治疗偏好、推理、置信度和关注的问题。
     Attributes:
         role (RoleType): 角色类型
@@ -111,7 +128,7 @@ class RoleOpinion:
         confidence (float): 置信度，0到1之间的值
         concerns (List[str]): 关注的问题列表
     """
-    
+
     role: RoleType
     treatment_preferences: Dict[TreatmentOption, float]  # -1 to +1
     reasoning: str
@@ -120,12 +137,33 @@ class RoleOpinion:
 
 
 @dataclass
+class QuestionOpinion:
+    """
+    角色对选项的意见
+
+    包含角色的支持度、推理、置信度以及支持这个选项的证据列表。
+    Attributes:
+        role (RoleType): 角色类型
+        scores: Dict[QuestionOption, float]
+        reasoning (str): 推理过程，说明为什么选择了这些选项。
+        evidence_strength (float): 证据强度，0到1之间的值
+        evidences: List[str]: 支持这个选项的证据列表
+    """
+
+    role: Union[RoleType, RoleRegistry]
+    scores: Dict[QuestionOption, float]  # -1 to +1
+    reasoning: str
+    evidence_strength: float  # 0 to 1
+    evidences: List[str]
+
+
+@dataclass
 class DialogueMessage:
     """
     对话消息
-    
+
     包含角色的对话内容、时间戳、消息类型、引用角色、引用证据和治疗焦点。
-    
+
     Attributes:
         role (Union[RoleType, ChatRole]): 角色类型（医疗或用户/系统）
         content (str): 对话内容
@@ -134,41 +172,40 @@ class DialogueMessage:
         treatment_focus (TreatmentOption): 当前治疗焦点
     """
 
-    role: Union[RoleType, ChatRole]
+    role: Union[RoleType, ChatRole, RoleRegistry]
     content: str
     timestamp: datetime
     message_type: str  # "initial_opinion", "response", "rebuttal", "consensus"
-    treatment_focus: Union[TreatmentOption, QuestionOption] = None
 
 
 @dataclass
 class DialogueRound:
     """
     对话轮次
-    
+
     包含轮次编号、消息列表、治疗焦点和共识状态。
-    
+    其实我感觉这里我还可以加上MDT_LEADER_SUMMARY
+
     Attributes:
         round_number (int): 轮次编号
         messages (List[DialogueMessage]): 该轮次的所有消息列表
-        focus_treatment (Optional[TreatmentOption]): 当前治疗焦点
+        opinion_dict(Dict[RoleType, RoleOpinion]): 角色意见
         consensus_status (str): 共识状态，如"discussing", "converging", "concluded"
     """
 
     round_number: int
     messages: List[DialogueMessage]
-    focus_treatment: Union[TreatmentOption, QuestionOption]
+    opinion_dict: Dict[Union[RoleType, RoleRegistry], Union[RoleOpinion, QuestionOpinion]]
     consensus_status: str  # "discussing", "converging", "concluded"
-
 
 
 @dataclass
 class ConsensusResult:
     """
     共识结果
-    
+
     包含共识矩阵、角色意见、聚合得分、冲突和达成共识的消息。
-    
+
     Attributes:
         consensus_matrix (Any): 共识矩阵，通常是pandas.DataFrame
         role_opinions (Dict[RoleType, RoleOpinion]): 每个角色的意见
@@ -196,15 +233,16 @@ class ConsensusResult:
 class RLState:
     """
     强化学习状态
-    
+
     包含患者特征、共识特征、治疗偏好和时间特征。
-    
+
     Attributes:
         patient_features (List[float]): 患者特征向量
         consensus_features (List[float]): 共识特征向量
         treatment_preferences (List[float]): 治疗偏好向量
         temporal_features (List[float]): 时间特征向量
     """
+
     patient_features: List[float]
     consensus_features: List[float]
     treatment_preferences: List[float]
@@ -215,9 +253,9 @@ class RLState:
 class RLAction:
     """
     强化学习动作
-    
+
     包含推荐的治疗方案、置信度和解释。
-    
+
     Attributes:
         treatment_recommendation (TreatmentOption): 推荐的治疗方案
         confidence_level (float): 置信度，0到1之间的值
@@ -233,9 +271,9 @@ class RLAction:
 class RLReward:
     """
     强化学习奖励
-    
+
     包含共识奖励、一致性奖励、冲突惩罚、患者适用性奖励和总奖励。
-    
+
     Attributes:
         consensus_score (float): 共识奖励
         consistency_bonus (float): 一致性奖励
@@ -255,9 +293,9 @@ class RLReward:
 class MemoryState:
     """
     记忆状态（与杜军的Memory Controller接口）
-    
+
     包含患者ID、个人记忆、群组记忆、时间序列和最后更新时间。
-    
+
     Attributes:
         patient_id (str): 患者ID
         individual_memory (Dict[str, Any]): 个人记忆，如患者特征、治疗偏好等

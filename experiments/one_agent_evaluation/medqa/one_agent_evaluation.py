@@ -133,17 +133,8 @@ def save_to_csv(results, filename=f"results_{int(time.time())}.csv"):
 if __name__ == "__main__":
     path = "../../../data/examples/medqa/data_clean/questions/US/dev.jsonl"
     total_count = 50
-    cases = read_jsonl(path, total_count)
-    # cases = [{
-    #     "question": "A 59-year-old man with long-standing hypertension is brought to the emergency department because of vomiting and headache for 2 hours. He reports that he has been unable to refill the prescription for his antihypertensive medications. His blood pressure is 210/120 mm Hg. Fundoscopy shows bilateral optic disc swelling. An ECG shows left ventricular hypertrophy. Treatment with intravenous fenoldopam is begun. Which of the following intracellular changes is most likely to occur in renal vascular smooth muscle as a result of this drug?",
-    #     "answer": "Increased production of cyclic adenosine monophosphate",
-    #     "options": {"A": "Increased activity of myosin light-chain kinase",
-    #                 "B": "Increased activity of protein kinase C",
-    #                 "C": "Increased activity of guanylate cyclase",
-    #                 "D": "Increased production of cyclic adenosine monophosphate",
-    #                 "E": "Increased intracellular concentration of calcium"}, "meta_info": "step1",
-    #     "answer_idx": "D"}
-    # ]
+    # cases = read_jsonl(path, total_count)
+    cases = [{"question": "A 23-year-old woman presents to the emergency department with abdominal pain. The patient states that she has pain in her back that radiates to her abdomen. The pain started yesterday and is episodic. She describes the pain as a 10/10 when it occurs. The patient has a past medical history of asthma, anxiety, and chlamydia that was appropriately treated. Her current medications include fluoxetine. The patient's lab values are ordered as seen below.\n\nHemoglobin: 14 g/dL\nHematocrit: 40%\nLeukocyte count: 8,500 cells/mm^3 with normal differential\nPlatelet count: 225,000/mm^3\n\nSerum:\nNa+: 140 mEq/L\nCl-: 100 mEq/L\nK+: 4.9 mEq/L\nHCO3-: 24 mEq/L\nBUN: 22 mg/dL\nGlucose: 89 mg/dL\nCreatinine: 1.2 mg/dL\nCa2+: 10.0 mg/dL\nAST: 11 U/L\nALT: 11 U/L\n\nUrine:\nColor: amber\nNitrites: negative\nNa+: 12 mmol/24 hours\nBeta-hCG: positive\nRed blood cells: 11/hpf\n\nWhich of the following is the best test for this patient's most likely diagnosis?", "answer": "Renal ultrasound", "options": {"A": "Abdominal radiograph", "B": "Abdominal CT", "C": "Transvaginal ultrasound", "D": "Abdominal ultrasound", "E": "Renal ultrasound"}, "meta_info": "step2&3", "answer_idx": "E"}]
     print(f"=== 读取了 {len(cases)} 条病例数据 ===")
     results, acc = evaluate_dataset(cases)
     save_to_csv(results)
