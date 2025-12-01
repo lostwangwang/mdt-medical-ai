@@ -14,10 +14,17 @@ from experiments.one_agent_evaluation.llm.llm_client import LLMClient
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - %(filename)s:%(lineno)d - %(funcName)s() - %(levelname)s - %(message)s",
-    filename=f'/mnt/e/project/LLM/baseline/demo/test_ddxplus/log/ddxplus_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log',  # 日志文件路径
+    filename=f'ddxplus_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log',  # 日志文件路径
     filemode="a",  # 追加模式（默认）
 )
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
+model_name = os.getenv("MODEL_NAME")
+api_key = os.getenv("QWEN_API_KEY")
+base_url = os.getenv("BASE_URL")
 
 # 定义数据类（映射 CSV 列）
 class MedicalRecord:
@@ -47,7 +54,7 @@ class MedicalRecord:
         return [item[0] for item in sorted_diagnosis]
 
 
-path = "/mnt/e/project/LLM/baseline/ddxplus/data/release_test_patients/release_test_patients.csv"
+path = "../../../data/examples/ddxplus/release_test_patients.csv"
 
 # 读取并解析 CSV
 df = pd.read_csv(path, encoding="utf-8")
@@ -86,9 +93,9 @@ def build_prompt(data: dict) -> tuple[Any, Any, Any]:
 if __name__ == "__main__":
     # 运行一些测试代码
     llm_client = LLMClient(
-        model_name=os.getenv("MODEL_NAME"),
-        api_key=os.getenv("API_KEY"),
-        api_base=os.getenv("API_BASE"),
+        model_name=model_name,
+        api_key=api_key,
+        api_base=base_url,
     )
     llm_client.init_client()
     # SEED = 42

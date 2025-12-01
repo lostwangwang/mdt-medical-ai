@@ -52,7 +52,14 @@ if __name__ == "__main__":
     #                     "D": "Malingering", "E": "Somatic symptom disorder"}, "meta_info": "step1", "answer_idx": "E"}
     #
     # ]
-    data = read_jsonl(path, random_sample=3, seed=42)
+    # data = [{"question": "An 83-year-old man is admitted to the hospital with fever, weakness, and decreased responsiveness. He is diagnosed with urosepsis based on urinalysis and culture and started on ceftriaxone and intravenous fluids. By hospital day 3, he is clinically improving. During the evening, the patient becomes irritable. He is talking to someone despite nobody being present in the room. He is easily agitated and attempts to strike a nurse with a remote control to his TV. Subsequently, the patient keeps getting out of bed and trying to walk away despite being a fall risk. Which of the following is the most appropriate next step in management?", "answer": "Olanzapine", "options": {"A": "Diphenhydramine", "B": "Lorazepam", "C": "Olanzapine", "D": "Phenobarbital", "E": "Physical restraints"}, "meta_info": "step2&3", "answer_idx": "C"}]
+    data = read_jsonl(path, random_sample=50, seed=42)
+    # data = [
+    #     {
+    #         "question": "A 53-year-old man with recurrent pancreatic adenocarcinoma is enrolled in a clinical trial for a novel chemotherapeutic agent that his physician believes may be beneficial to his condition. The novel drug was previously tested in a small population and is now undergoing a larger phase 3 trial in preparation for FDA approval. A dose-response trial had the following results:\n\n10 mg dose - 6/59 patients demonstrated improvement\n20 mg dose - 19/49 patients demonstrated improvement\n30 mg dose - 26/53 patients demonstrated improvement\n40 mg dose - 46/51 patients demonstrated improvement\n\nThe same trial also had the following safety profile:\n\n20 mg dose - 5/49 patients had a treatment related adverse event\n40 mg dose - 11/51 patients had a treatment related adverse event\n60 mg dose - 15/42 patients had a treatment related adverse event\n80 mg dose - 23/47 patients had a treatment related adverse event\n100 mg dose - 47/52 patients had a treatment related adverse event\n\nBased on this study, which of the following represents the most likely therapeutic index for this novel chemotherapeutic agent?",
+    #         "answer": "2.67", "options": {"A": "0.375", "B": "0.5", "C": "2", "D": "2.5", "E": "2.67"},
+    #         "meta_info": "step1", "answer_idx": "E"}
+    # ]
     right_cnt = 0
     for idx, item in enumerate(data, start=1):
         print(f"执行第{idx}个问题: {item["question"]}")
@@ -76,16 +83,28 @@ if __name__ == "__main__":
                                                                      dataset_name="medqa")
         df = final_result["final_consensus"]["df"]
         logging.info(f"第{idx}个问题的共识矩阵: {df}")
-        best_treatment = df['mean'].idxmax()
-        logging.info(f"第{idx}个问题的最佳治疗方案: {best_treatment}")
-        logging.info(f"第{idx}个问题的平均分数: {df['mean']}")
-        if medqa_types.QuestionOption(best_treatment).name == question_state.answer_idx:
-            logging.info(f"第{idx}个问题的智能体给的答案: {best_treatment}，正确")
+        mdt_leader_final_summary = final_result["mdt_leader_final_summary"]
+        print(mdt_leader_final_summary["label"])
+        label = mdt_leader_final_summary["label"]
+        if label == question_state.answer_idx:
+            logging.info(f"第{idx}个问题的智能体给的答案: {label}，回答正确")
             right_cnt += 1
         else:
-            logging.info(f"第{idx}个问题的最佳治疗方案: {best_treatment}，错误")
-        print(f"当前已经答对的问题数: {right_cnt}, 当前是第{idx}个问题")
-        logging.debug(f"当前已经答对的问题数: {right_cnt}")
-        logging.info(f"第{idx}个问题的正确答案: {question_state.answer_idx}")
-        logging.info(f"第{idx}个问题的智能体给的最终方案: {final_result["mdt_leader_final_summary"]}")
+            logging.info(f"第{idx}个问题正确的答案: {question_state.answer_idx}，回答错误")
+        logging.info(f"第{idx}个问题的最终答案标签: {mdt_leader_final_summary['label']}")
+        logging.info(f"第{idx}个问题最终答案的内容: {mdt_leader_final_summary['content']}")
+        logging.info(f"第{idx}个问题的最终摘要: {mdt_leader_final_summary['decision_reasoning']}")
+        # best_treatment = df['mean'].idxmax()
+        # logging.info(f"第{idx}个问题的最佳治疗方案: {best_treatment}")
+        # logging.info(f"第{idx}个问题的平均分数: {df['mean']}")
+        # if medqa_types.QuestionOption(best_treatment).name == question_state.answer_idx:
+        #     logging.info(f"第{idx}个问题的智能体给的答案: {best_treatment}，正确")
+        #     right_cnt += 1
+        # else:
+        #     logging.info(f"第{idx}个问题的最佳治疗方案: {best_treatment}，错误")
+        # print(f"当前已经答对的问题数: {right_cnt}, 当前是第{idx}个问题")
+        # logging.debug(f"当前已经答对的问题数: {right_cnt}")
+        # logging.info(f"第{idx}个问题的正确答案: {question_state.answer_idx}")
+        # logging.info(f"第{idx}个问题的智能体给的最终方案: {final_result["mdt_leader_final_summary"]}")
+
     logging.info(f"总体准确率: {right_cnt / len(data):.2f}")

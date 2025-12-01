@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import rankdata, chi2
 import matplotlib.pyplot as plt
-from typing import List, Union
+from typing import List, Union, Dict
 import sys
 import os
 
@@ -43,18 +43,25 @@ class CalculateConsensus:
         self.roles = roles
         self.m = len(self.roles)
 
-    def build_weighted_matrix(self, opinions_dict: dict[Union[RoleType, RoleRegistry], Union[RoleOpinion, QuestionOpinion]]):
+    def build_weighted_matrix(self, opinions_dict: Dict[Union[RoleType, RoleRegistry], Union[RoleOpinion, QuestionOpinion]]):
         """构建偏好×置信度的加权共识矩阵"""
         score_matrix = np.zeros((self.m, self.n))
         for i, role in enumerate(self.roles):
             prefs = opinions_dict[role].scores
             conf = opinions_dict[role].evidence_strength
             role_weight = role.weight
+            # 将原始分数从 -1~1 映射到 0~1
+            mapped_scores = [(prefs[t.name] + 1) / 2 for t in self.treatments]
             # 这里要怎么改呢
             # score_matrix[i, :] = [prefs[t.value] * conf for t in self.treatments]
-            score_matrix[i, :] = [prefs[t.name] * conf * role_weight for t in self.treatments]
-        self.df_scores = pd.DataFrame(score_matrix, index=[role.value for role in self.roles],
-                                      columns=[t.value for t in self.treatments]).T
+            # score_matrix[i, :] = [prefs[t.name] * conf for t in self.treatments]
+            # 最终矩阵 = 映射后的分数 × 证据强度 × 角色权重
+            score_matrix[i, :] = [s * conf * role_weight for s in mapped_scores]
+        self.df_scores = pd.DataFrame(
+            score_matrix,
+            index=[role.value for role in self.roles],
+            columns=[t.value for t in self.treatments]
+        ).T
         return self.df_scores
 
     def compute_kendalls_w(self):

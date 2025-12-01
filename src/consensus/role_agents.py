@@ -245,12 +245,28 @@ class RoleAgent:
             mdt_leader_summary = self.llm_interface.llm_generate_mdt_leader_content(question_state, question_options,
                                                                                     dialogue_rounds,
                                                                                     consensus_dict)
-        elif consensus_dict["consensus"] == True or current_round == 3:
-            mdt_leader_summary = self.llm_interface.llm_generate_final_mdt_leader_summary(question_state,
+        elif consensus_dict["consensus"] == True:
+            response = self.llm_interface.llm_generate_final_mdt_leader_summary(question_state,
                                                                                           question_options,
                                                                                           dialogue_rounds,
                                                                                           consensus_dict,
                                                                                           opinions_dict)
+            if isinstance(response, str):
+                try:
+                    reasoning = fix_and_parse_single_json(response)
+                except Exception as e:
+                    logger.warning(
+                        f"json解析失败:{e}, 原始字符串:{reasoning}"
+                    )
+            elif isinstance(response, dict):
+                pass
+            else:
+                logger.warning(
+                    f"final_mdt_prompt未知的返回类型:{type(response)}"
+                )
+                return None
+            mdt_leader_summary = reasoning
+        logger.info(f"current_round:{current_round}, MDT_LEADER_SUMMARY: {mdt_leader_summary}")
         return mdt_leader_summary
 
     def _update_agent_opinions_and_scores_medqa(

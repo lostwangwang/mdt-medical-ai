@@ -17,7 +17,7 @@ class LLMClient:
     def ask_model(self, role: str, content: str, prompt: str) -> dict:
         try:
             response = self.client.chat.completions.create(
-                model="qwen3-max-preview",
+                model=self.model_name,
                 messages=[
                     {
                         "role": role,

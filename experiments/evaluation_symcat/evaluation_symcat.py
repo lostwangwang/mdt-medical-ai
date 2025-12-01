@@ -57,13 +57,14 @@ if __name__ == "__main__":
             f"Which option is most likely?"
         )
         print(f"生成的问题: {question}")
+        reverse_options = {v: k for k, v in rec.options.items()}
         question_state = medqa_types.MedicalQuestionState(
             patient_id=rec.patient_id,
             question=question,
             options=rec.options,
             answer=rec.pathology,
             meta_info="",
-            answer_idx=rec.pathology,
+            answer_idx=reverse_options[rec.pathology],
         )
         medqa_types.init_question_option(rec.options)
         print("枚举成员列表：", list(medqa_types.QuestionOption))
@@ -80,13 +81,16 @@ if __name__ == "__main__":
         )
         df = final_result["final_consensus"]["df"]
         logging.info(f"第{idx}个问题的共识矩阵: {df}")
-        best_treatment = df["mean"].idxmax()
-        logging.info(f"第{idx}个问题的最佳治疗方案: {best_treatment}")
-        logging.info(f"第{idx}个问题的平均投票: {df['mean']}")
-        if medqa_types.QuestionOption(best_treatment).value == question_state.answer:
-            logging.info(f"第{idx}个问题的智能体给的答案: {best_treatment}，正确")
+        mdt_leader_final_summary = final_result["mdt_leader_final_summary"]
+        print(mdt_leader_final_summary["label"])
+        label = mdt_leader_final_summary["label"]
+        if label == question_state.answer_idx:
+            logging.info(f"第{idx}个问题的智能体给的答案: {label}，回答正确")
             right_cnt += 1
         else:
-            logging.info(f"第{idx}个问题的最佳治疗方案: {best_treatment}，错误")
-        logging.info(f"第{idx}个问题的正确答案: {question_state.answer_idx}")
+            logging.info(f"第{idx}个问题正确的答案: {question_state.answer_idx}，回答错误")
+        logging.info(f"第{idx}个问题的最终答案标签: {mdt_leader_final_summary['label']}")
+        logging.info(f"第{idx}个问题最终答案的内容: {mdt_leader_final_summary['content']}")
+        logging.info(f"第{idx}个问题的最终摘要: {mdt_leader_final_summary['decision_reasoning']}")
+        logging.info(f"当前已经答对的问题的数量: {right_cnt}")
     logging.info(f"总体准确率: {right_cnt / len(data):.2f}")

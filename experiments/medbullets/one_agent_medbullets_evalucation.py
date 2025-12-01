@@ -12,20 +12,21 @@ from openai import OpenAI
 load_dotenv()
 
 # 优先从 DashScope 兼容模式环境变量读取，其次回退到常见的 OPENAI_API_KEY
-API_KEY = os.getenv("DASHSCOPE_API_KEY") or os.getenv("OPENAI_API_KEY")
+API_KEY = os.getenv("QWEN_API_KEY")
 if not API_KEY:
     raise RuntimeError("未检测到 API Key。请在系统环境或 .env 中设置 DASHSCOPE_API_KEY 或 OPENAI_API_KEY。")
 
 # 模型可通过环境变量覆盖，默认使用 DashScope 预览模型
-MODEL_NAME = os.getenv("DASHSCOPE_MODEL", "qwen3-max-preview")
+MODEL_NAME = os.getenv("MODEL_NAME")
+base_url = os.getenv("BASE_URL")
 
 # ✅ 初始化阿里云 DashScope 客户端（OpenAI 兼容模式）
 client = OpenAI(
     api_key=API_KEY,
-    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+    base_url=base_url,
 )
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DATA_PATH = PROJECT_ROOT / "data" / "examples" / "medbullets" / "medbullets_op4.json"
 RESULTS_DIR = PROJECT_ROOT / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
@@ -202,10 +203,10 @@ def save_to_csv(results: List[Dict[str, Any]], filename: Optional[str] = None) -
 
 
 if __name__ == "__main__":
-    # 可通过环境变量 LIMIT 控制样本数量
-    limit_env = os.getenv("MEDBULLETS_LIMIT")
-    limit = int(limit_env) if limit_env and limit_env.isdigit() else None
-
+    # # 可通过环境变量 LIMIT 控制样本数量
+    # limit_env = os.getenv("MEDBULLETS_LIMIT")
+    # limit = int(limit_env) if limit_env and limit_env.isdigit() else None
+    limit = 50
     print(f"读取数据: {DATA_PATH}")
     dataset = load_medbullets_op4(str(DATA_PATH), limit=limit)
     print(f"=== 读取了 {len(dataset)} 条题目 ===")
