@@ -7,10 +7,18 @@ import yaml
 
 from experiments.one_agent_evaluation.llm.llm_client import LLMClient
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
+model_name = os.getenv("MODEL_NAME")
+api_key = os.getenv("QWEN_API_KEY")
+base_url = os.getenv("BASE_URL")
+
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - %(filename)s:%(lineno)d - %(funcName)s() - %(levelname)s - %(message)s",
-    filename=f'/mnt/e/project/LLM/baseline/demo/test_symcat/log/symcat_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log',  # 日志文件路径
+    filename=f'symcat_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log',  # 日志文件路径
     filemode="a",  # 追加模式（默认）
 )
 
@@ -59,7 +67,7 @@ class PatientRecord:
         return symptom_dict
 
 
-path = "/mnt/e/project/LLM/baseline/ChallengeClinicalQA/symcat_style_dataset.jsonl"
+path = "../../../data/examples/symcat/symcat_style_dataset.jsonl"
 
 import json
 
@@ -128,9 +136,9 @@ if __name__ == "__main__":
     #     # 运行一些测试代码
     logging.info("开始运行....")
     llm_client = LLMClient(
-        model_name=os.getenv("MODEL_NAME"),
-        api_key=os.getenv("DASHSCOPE_API_KEY"),
-        api_base=os.getenv("DASHSCOPE_BASE_URL"),
+        model_name=model_name,
+        api_key=api_key,
+        api_base=base_url,
     )
     llm_client.init_client()
     random.seed()

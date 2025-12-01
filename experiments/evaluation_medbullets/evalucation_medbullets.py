@@ -114,7 +114,7 @@ if __name__ == "__main__":
     path = "/mnt/e/project/LLM/mdt_medical_ai/data/examples/medbullets/medbullets_op4.json"
     # 读取前若干条样本以快速验证
     print(path)
-    data = load_medbullets(path, n=3)
+    data = load_medbullets(path, n=50)
     print(data)
     print(f"载入样本数: {len(data)}")
     if len(data) == 0:
@@ -152,22 +152,35 @@ if __name__ == "__main__":
                                                                      dataset_name="medbullets")
         df = final_result["final_consensus"]["df"]
         logging.info(f"第{idx}个问题的共识矩阵: {df}")
-
-        best_treatment = df['mean'].idxmax()
-        logging.info(f"第{idx}个问题的最佳治疗方案: {best_treatment}")
-        logging.info(f"第{idx}个问题的平均投票: {df['mean']}")
-
-        # 将最佳方案的值映射回枚举，取其name（字母），与正确答案对比
-        try:
-            chosen_letter = medqa_types.QuestionOption(best_treatment).name
-        except Exception:
-            # 若idxmax返回的是枚举成员而非值，兜底处理
-            chosen_letter = getattr(best_treatment, 'name', str(best_treatment))
-
-        if chosen_letter == question_state.answer_idx:
-            logging.info(f"第{idx}个问题的智能体给的答案: {chosen_letter}，正确")
+        mdt_leader_final_summary = final_result["mdt_leader_final_summary"]
+        print(mdt_leader_final_summary["label"])
+        label = mdt_leader_final_summary["label"]
+        if label == question_state.answer_idx:
+            logging.info(f"第{idx}个问题的智能体给的答案: {label}，回答正确")
             right_cnt += 1
         else:
-            logging.info(f"第{idx}个问题的智能体给的答案: {chosen_letter}，错误（正确: {question_state.answer_idx}）")
+            logging.info(f"第{idx}个问题正确的答案: {question_state.answer_idx}，回答错误")
+        logging.info(f"第{idx}个问题的最终答案标签: {mdt_leader_final_summary['label']}")
+        logging.info(f"第{idx}个问题最终答案的内容: {mdt_leader_final_summary['content']}")
+        logging.info(f"第{idx}个问题的最终摘要: {mdt_leader_final_summary['decision_reasoning']}")
+        logging.info(f"当前已经答对的问题的数量: {right_cnt}")
+        # logging.info(f"第{idx}个问题的共识矩阵: {df}")
+        #
+        # best_treatment = df['mean'].idxmax()
+        # logging.info(f"第{idx}个问题的最佳治疗方案: {best_treatment}")
+        # logging.info(f"第{idx}个问题的平均投票: {df['mean']}")
+        #
+        # # 将最佳方案的值映射回枚举，取其name（字母），与正确答案对比
+        # try:
+        #     chosen_letter = medqa_types.QuestionOption(best_treatment).name
+        # except Exception:
+        #     # 若idxmax返回的是枚举成员而非值，兜底处理
+        #     chosen_letter = getattr(best_treatment, 'name', str(best_treatment))
+        #
+        # if chosen_letter == question_state.answer_idx:
+        #     logging.info(f"第{idx}个问题的智能体给的答案: {chosen_letter}，正确")
+        #     right_cnt += 1
+        # else:
+        #     logging.info(f"第{idx}个问题的智能体给的答案: {chosen_letter}，错误（正确: {question_state.answer_idx}）")
 
     logging.info(f"总体准确率: {right_cnt / max(1, len(data)):.2f}")

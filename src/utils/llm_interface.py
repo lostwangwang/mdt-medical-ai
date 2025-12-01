@@ -235,13 +235,12 @@ class LLMInterface:
                 - 明确指出哪些选项得到了共识，哪些选项存在分歧，并简要说明分歧的原因。
                 - 在综合各智能体意见、证据和分析后，给出你认为最可能的正确选项或最终结论。
                 - 提供此结论的依据（支持的证据和理由），并指出为什么选择该选项而排除其他选项。
-                - 强调支持该结论的关键证据或推理，简洁明了。
 
                 请输出以下格式的 JSON：
                 {{
                     "label": "{{最终选项标签}}",  # 最终选项标签（例如 "E"）
                     "content": "{{选项内容}}",  # 选项内容的具体内容
-                    "decision_reasoning": "{{决策推理}}",  # 依据专家意见和证据的推理过程
+                    "decision_reasoning": "{{决策推理}}",  # 依据专家意见和证据的推理过程,100~150字即可
                 }}
                 """
         return prompt
@@ -452,8 +451,7 @@ class LLMInterface:
         previous_opinion_str = self.format_opinion_for_prompt(previous_opinion, role.value)
         new_evidence = [msg.content for msg in current_round.messages if msg.role == role]
         print(f"[DEBUG]current_round:{current_round}")
-
-        if dataset_name == "medqa":
+        if dataset_name in ["medqa", "pubmedqa", "symcat", "ddxplus", "medbullets"]:
             prompt = f"""
             你是一名医疗多学科团队（MDT）的成员。
             你的当前角色是：**{role.value}**。描述: {role.description}, 权重: {role.weight}
@@ -727,7 +725,7 @@ class LLMInterface:
             question_options: List[medqa_types.QuestionOption] = None,
             dataset_name: str = None
     ) -> str:
-        if dataset_name == "medqa":
+        if dataset_name in ["medqa", "pubmedqa", "symcat", "ddxplus", "medbullets"]:
             prompt = f"""
             你是一个多学科医疗团队（MDT）的一名成员，当前身份是 **{role.value}**。描述: {role.description}, 权重: {role.weight} "
 
@@ -779,7 +777,7 @@ class LLMInterface:
         role_value = role.value
         role_desc = role.description
         role_weight = role.weight
-        if dataset_name == "medqa":
+        if dataset_name in ["medqa", "pubmedqa", "symcat", "ddxplus", "medbullets"]:
             prompt = f"""
             你是多学科医疗团队（MDT）成员，当前身份为 **{role_value}**，角色描述：{role_desc}，权重：{role_weight}。  
             你的任务是根据题目的内容、症状类型、推理结构和涉及的医学领域，推理出最可能的正确答案，并为每个选项分配评分，表示该选项支持正确答案的程度。
@@ -1422,7 +1420,7 @@ class LLMInterface:
         # # 构建立场信息
         stance_info = self.format_opinion_for_prompt(current_opinion, role.value)
 
-        if dataset_name == "medqa":
+        if dataset_name in ["medqa", "pubmedqa", "symcat", "ddxplus", "medbullets"]:
             prompt = f"""
             你是多学科会诊（MDT）的一名成员，当前身份为 **{role.value}**。描述: {role.description}, 权重: {role.weight} "
             你的任务是在医学知识问答场景中，以简洁、自然、有个人特色的方式参与推理型讨论。

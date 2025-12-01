@@ -87,10 +87,10 @@ if __name__ == "__main__":
         print(mdt_leader_final_summary["label"])
         label = mdt_leader_final_summary["label"]
         if label == question_state.answer_idx:
-            logging.info(f"第{idx}个问题的智能体给的答案: {label}，正确")
+            logging.info(f"第{idx}个问题的智能体给的答案: {label}，回答正确")
             right_cnt += 1
         else:
-            logging.info(f"第{idx}个问题正确的答案: {question_state.answer_idx}，错误")
+            logging.info(f"第{idx}个问题正确的答案: {question_state.answer_idx}，回答错误")
         logging.info(f"第{idx}个问题的最终答案标签: {mdt_leader_final_summary['label']}")
         logging.info(f"第{idx}个问题最终答案的内容: {mdt_leader_final_summary['content']}")
         logging.info(f"第{idx}个问题的最终摘要: {mdt_leader_final_summary['decision_reasoning']}")

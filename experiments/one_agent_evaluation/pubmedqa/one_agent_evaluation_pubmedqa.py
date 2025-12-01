@@ -4,6 +4,14 @@ import logging
 from datetime import datetime
 import os
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
+model_name = os.getenv("MODEL_NAME")
+api_key = os.getenv("QWEN_API_KEY")
+base_url = os.getenv("BASE_URL")
+
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - %(filename)s:%(lineno)d - %(funcName)s() - %(levelname)s - %(message)s",
@@ -17,14 +25,12 @@ ds = load_dataset("qiaojin/PubMedQA", "pqa_labeled")
 logging.info("数据集划分：%s", ds.keys())  # 输出如 dict_keys(['train'])
 # ✅ 初始化阿里云 DashScope 客户端
 client = OpenAI(
-    api_key=os.getenv("DASHSCOPE_API_KEY"),  # 你的 Agent Token
-    base_url=os.getenv(
-        "DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    ),
+    api_key=api_key,  # 你的 Agent Token
+    base_url=base_url,
 )
 
 
-def get_datas(count: int = 100):
+def get_datas():
     ds = load_dataset("qiaojin/PubMedQA", "pqa_labeled")
     return ds
 
@@ -59,7 +65,7 @@ def ask_model(case: dict) -> dict:
 
     try:
         response = client.chat.completions.create(
-            model="qwen3-max-preview",
+            model=model_name,
             messages=[
                 {
                     "role": "system",
@@ -77,16 +83,14 @@ def ask_model(case: dict) -> dict:
 
 
 if __name__ == "__main__":
-    ds = get_datas(50)
-    case = format_data(ds["train"][0])
-    print(case)
-    # right_count = 0
-    # for i in range(50):
-    #     logging.info(f"==========第{i}题==============")
-    #     case = format_data(ds["train"][i])
-    #     prompt = build_prompt(case)
-    #     logging.info(prompt)
-    #     content = ask_model(case)
-    #     if content == case["final_decision"]:
-    #         right_count += 1
-    # logging.info(f"准确率: {right_count / 50:.2%}")
+    ds = get_datas()
+    right_count = 0
+    for i in range(50):
+        logging.info(f"==========第{i}题==============")
+        case = format_data(ds["train"][i])
+        prompt = build_prompt(case)
+        logging.info(prompt)
+        content = ask_model(case)
+        if content == case["final_decision"]:
+            right_count += 1
+    logging.info(f"准确率: {right_count / 50:.2%}")
