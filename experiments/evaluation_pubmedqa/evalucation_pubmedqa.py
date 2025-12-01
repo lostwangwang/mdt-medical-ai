@@ -48,7 +48,8 @@ if __name__ == "__main__":
         print(case["context"]["contexts"])
         for ctx in case["context"]["contexts"]:
             context_text += ctx + "\n"
-        question_context = case["question"] + "请从yes、no、maybe中选择一个你认为最合适的选项"
+
+        question_context = "Context: " + context_text + "\nQuestion: " + case["question"]
         reversed_options = {v: k for k, v in options.items()}
         question_state = medqa_types.MedicalQuestionState(
             patient_id=case["pubid"],
