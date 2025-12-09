@@ -146,7 +146,6 @@ class LLMInterface:
                 )
         except Exception as e:
             logger.error(f"LLM generation failed: {e}")
-        pass
 
     def _build_mdt_leader_content_prompt(
             self,
@@ -191,11 +190,12 @@ class LLMInterface:
             consensus_dict: Dict[str, Any],
             opinions_dict: Dict[Union[RoleType, RoleRegistry], Union[RoleOpinion, QuestionOpinion]] = None,
     ):
-        df_summary, cos_matrix_df, group_consensus, consensus_bool = consensus_dict["df_summary"], consensus_dict[
-            "cos_matrix_df"], consensus_dict["group_consensus"], consensus_dict["consensus_bool"]
-        means = df_summary["mean"]
+        # df_summary, cos_matrix_df, group_consensus, consensus_bool = consensus_dict["df_summary"], consensus_dict[
+        #     "cos_matrix_df"], consensus_dict["group_consensus"], consensus_dict["consensus_bool"]
+        df, group_icc, consensus = consensus_dict["df"], consensus_dict["group_icc"], consensus_dict["consensus"]
+        means = df["mean"]
         mean_scores = [f"{option.name}: {means[option.value]}" for option in question_options]
-        variances = [f"{option.name}: {df_summary['std'][option.value]}" for option in question_options]
+        variances = [f"{option.name}: {df['std'][option.value]}" for option in question_options]
         agents_messages = "\n\n".join([
             f"{msg.role.value}: {msg.content}"
             for msg in dialogue_round.messages
@@ -237,91 +237,82 @@ class LLMInterface:
             question_options: List[medqa_types.QuestionOption],
     ):
         prompt = f"""
-            你是医学智能推理系统中的 MDT Leader（多学科团队负责人）。
-            请根据题目和选项，自由选择最相关的医学专家，并为每个专家分配权重（0~1），反映其对题目解决的贡献度。
+            You are the MDT Leader (Multidisciplinary Team Leader) in a medical intelligent reasoning system.
+
+            Your task is to recruit the most relevant **medical expert roles** (not real people) for this question.
             
-            【输入信息】
-            - 问题: {question_state.question} 
-            - 选项: {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
-            步骤：
-            1. 分析问题内容和选项，判断题目难度（简单 / 中等 / 复杂）。
-            2. 根据难度选择专家：
-               - 简单题：1–2 位核心专家
-               - 中等题：2–3 位相关专家
-               - 复杂题：3–5 位多学科专家
-            3. 为每位专家分配权重（0~1）。
-            4. 输出 JSON，只包含：
-            请输出严格的 JSON 格式：
+            【Input Information】
+            - Question: {question_state.question}
+            - Options: {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
+            
+            【Requirements】
+            1. Recruit 3–5 **medical expert roles**, not real individuals.
+               - Use generic role names such as: "Pharmacologist", "Radiologist", "Oncologist",
+                 "Internal Medicine Specialist", "Neurologist", "Hematologist", "Pathologist", etc.
+               - DO NOT generate personal names, fictional doctors, or real-world people.
+            
+            2. Each role must represent a distinct medical subfield to ensure heterogeneity.
+            
+            3. Assign a weight (0–1) to each expert role:
+               - Core: 0.7–1.0
+               - Secondary: 0.3–0.6
+               - Weakly related: 0–0.3
+            
+            4. Output strictly in JSON, no extra explanation.
+            
+            【Output Format】
             {{
               "recruited_experts": [
                 {{
-                  "name": "<专家英文名>",
-                  "value": "<专家中文名>",
-                  "description": "<专家职责>",
-                  "weight": "<0~1>"
+                  "name": "<RoleTypeEnglish>", 
+                  "value": "<RoleTypeChinese>",
+                  "description": ""<A concise role description (10–25 words)>",
+                  "weight": <0~1>
                 }}
               ]
             }}
             
-            规则：
-            - 只选择与题目直接相关的专家
-            - 不限制可选专家种类
-            - JSON 格式严格，不要输出多余文字
-            - 保留至少一位专家，最多可选择适当数量
+            【Important Instructions】
+            - Only output role types, not personal identities.
+            - Do NOT use or fabricate any real or fictional human names.
+            - Ensure JSON is strictly valid.
         """
         # prompt = f"""
-        # 你是医学智能推理系统中的 MDT Leader（多学科团队负责人）。
-        # 你的任务是根据题目的内容、症状类型、推理结构、以及可能涉及的医学领域，自动为每道医学题目招募最合适的多学科专家团队，并为每个专家分配权重。
-        # 【输入信息】
-        # 输入信息包括：
-        # - 问题: {question_state.question}
-        # - 选项: {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
+        # You are the MDT Leader (Multidisciplinary Team Leader) in a medical intelligent reasoning system.
+        # Your task is to recruit the most relevant medical experts for this question and its options.
         #
-        # 【你需要完成的任务】
-        # 1. 根据题目判断其涉及的医学领域，决定最相关的专家角色。
-        # 2. 选择对解答该题最有帮助的专家，排除无关专家。
-        # 3. 为每个专家分配权重（0~1），反映其对问题解决的贡献度。
-        # 4. 输出结构化 JSON（只包含必要信息，去掉不相关描述）。
+        # 【Input Information】
+        # - Question: {question_state.question}
+        # - Options: {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
         #
-        # 【可选专家池】
-        # - 内科医生（Internist）
-        # - 外科医生（Surgeon）
-        # - 放射科医生（Radiologist）
-        # - 病理学家（Pathologist）
-        # - 药理学家（Pharmacologist）
-        # - 生物统计学家（Biostatistician）
-        # - 微生物学家（Microbiologist）
-        # - 临床研究专家（ClinicalResearcher）
-        # - 免疫学家（Immunologist）
-        # - 儿科医生（Pediatrician）
-        # - 妇产科医生（ObstetricianGynecologist）
-        # （根据题目内容选择相关专家。）
+        # 【Requirements】
+        # 1. Recruit 3–5 experts ensuring **heterogeneity**:
+        #    - Cover **different medical subfields** (e.g., diagnosis, treatment, pharmacology, imaging, oncology, surgery)
+        #    - Ensure **complementary expertise** so each expert focuses on a unique angle
+        # 2. Assign a **weight (0~1)** to each expert reflecting their **contribution to solving this question**
+        #    - Core expert: 0.7–1.0
+        #    - Secondary expert: 0.3–0.6
+        #    - Weakly related expert: 0–0.3
+        # 3. Avoid selecting multiple experts with overlapping expertise
+        # 4. Only output **strict JSON** as below; do not include explanations or extra text
         #
-        # 【专家选择逻辑】
-        # 1. 临床推理：内科医生 + 可能的放射科医生/急诊医生
-        # 2. 药物机制：药理学家
-        # 3. 统计/试验设计：生物统计学家
-        # 4. 鉴别诊断：内科医生 + 可能的急诊医生/放射科医生
-        # 5. 专科问题（儿科、妇产科等）：相应的专科医生
-        #
-        # 【输出 JSON 格式】
+        # 【Output Format】
         # {{
-        #   "task_type": "<推断的题目类型>",
         #   "recruited_experts": [
         #     {{
-        #       "name": "Pharmacologist",
-        #       "value": "药理学家",
-        #       "description": "负责药效学、剂量反应、作用机制分析。",
-        #       "weight": 0.92
-        #     }},
-        #     {{
-        #       "name": "Biostatistician",
-        #       "value": "生物统计学家",
-        #       "description": "负责数据、统计推断、试验设计分析。",
-        #       "weight": 0.88
+        #       "name": "<Expert English Name>",
+        #       "value": "<Expert Chinese Name>",
+        #       "description": "<Expert Responsibilities>",
+        #       "weight": "<0~1>"
         #     }}
         #   ]
         # }}
+        #
+        # 【Instructions】
+        # - Focus on **diversity and complementarity** in your selection
+        # - Weigh experts according to relevance to this specific question
+        # - Ensure at least one expert is selected, up to 5 experts
+        # - JSON must be strictly valid; do not output any text outside JSON
         # """
         return prompt
 
@@ -330,6 +321,12 @@ class LLMInterface:
             question_state: medqa_types.MedicalQuestionState,
             question_options: List[medqa_types.QuestionOption]
     ):
+        """
+        MDT LEADER负责通过分析问题的难易程度，并且为每个问题招募对应的角色
+        :param question_state: 问题信息
+        :param question_options: 问题选项
+        :return: 返回
+        """
         prompt = self._build_llm_recruit_agents_medqa_prompt(question_state, question_options)
         response = self.client.chat.completions.create(
             model=self.config.model_name,
@@ -337,10 +334,10 @@ class LLMInterface:
                 {
                     "role": "system",
                     "content": (
-                        "你是医学智能推理系统中的 MDT Leader（多学科团队负责人）。"
-                        "你的任务是根据每道医学题目及其选项，自由选择最相关的医学专家组成多学科团队。"
-                        "对于每位专家，请分配一个权重（0~1），表示该专家对题目解答的贡献度。"
-                        "你需要输出严格的 JSON 格式，不要输出理由或多余文字。"
+                        "You are the MDT Leader (Multidisciplinary Team Leader) in a medical reasoning system. "
+                        "Recruit relevant medical experts for each question, ensuring diversity across different specialties. "
+                        "Assign a weight (0~1) to each expert based on their contribution. "
+                        "Only output a strict JSON; do not include explanations or extra text."
                     )
                 },
                 {
@@ -359,6 +356,15 @@ class LLMInterface:
             consensus_dict: Dict[str, Any] = None,
             opinions_dict: Dict[Union[RoleType, RoleRegistry], Union[RoleOpinion, QuestionOpinion]] = None,
     ):
+        """
+        mdt_leader生成最终方案
+        :param question_state:
+        :param question_options:
+        :param dialogue_round:
+        :param consensus_dict:
+        :param opinions_dict:
+        :return:
+        """
         prompt = self._build_final_mdt_leader_summary_prompt(
             question_state, question_options, dialogue_round, consensus_dict, opinions_dict
         )
@@ -644,7 +650,14 @@ class LLMInterface:
             question_options: List[medqa_types.QuestionOption] = None,
             dataset_name: str = None
     ) -> str:
-        """生成MedQA场景下的治疗推理"""
+        """
+        生成角色的初始意见
+        :param question_state: 问题描述
+        :param role: 角色信息
+        :param question_options: 问题选项
+        :param dataset_name: 数据集名称
+        :return: 返回response
+        """
 
         prompt = self._build_treatment_reasoning_prompt_medqa(
             question_state, role, question_options, dataset_name
@@ -688,7 +701,15 @@ class LLMInterface:
             question_options: List[medqa_types.QuestionOption] = None,
             dataset_name: str = None
     ) -> str:
-        """我觉得不应该是生成聚焦方案的推理了。"""
+        """
+        每个智能体基于初始意见生成对话
+        :param question_state:
+        :param role:
+        :param opinion:
+        :param question_options:
+        :param dataset_name:
+        :return:
+        """
 
         prompt = self._build_all_treatment_reasoning_prompt_meqa(
             question_state,
@@ -737,40 +758,44 @@ class LLMInterface:
     ) -> str:
         if dataset_name in ["medqa", "pubmedqa", "symcat", "ddxplus", "medbullets"]:
             prompt = f"""
-            你是一个多学科医疗团队（MDT）的一名成员，当前身份是 **{role.value}**。描述: {role.description}, 权重: {role.weight} "
-            你的任务是根据你之前生成的意见，为每个选项生成**初步陈述**。请用自然语言解释你对所有选项的分析和推理。请注意：
-            
+            你是一个多学科医疗团队（MDT）的一名成员，当前身份是 **{role.value}**。
+            描述: {role.description}, 权重: {role.weight}
+
+            你的任务是基于你之前生成的**初步意见（initial opinion）**，为每个选项生成清晰的**初步陈述（initial statement）**。
+
+            请严格遵守以下要求：
+
             ==============================
             输入信息
-            
+
             * 问题：{question_state.question}
             * 选项：{[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
-            * 初步意见：
-            
-              * 评分：{opinion.scores}
+            * 初步意见（不得修改）：
+
+              * 各选项评分：{opinion.scores}
               * 推理：{opinion.reasoning}
               * 证据强度：{opinion.evidence_strength}
               * 证据：{opinion.evidences}
-            
+
             ==============================
             任务要求
-            
-            1. 分析**每个选项**，解释它可能正确或不正确的原因。
-            2. 参考你初步意见中的评分、推理、证据和证据强度进行分析。
-            3. 输出应简洁流畅，适合MDT讨论。
-            4. **不要重新评分**；不需要JSON格式输出，仅需文字说明。
-            5. 保持陈述在150-200字左右，突出关键选项和主要推理。
-            6. 你可以引用医学知识和逻辑推理，但避免假设患者的具体细节或偏好。
-            
+
+            1. 你必须分析**每个选项**，说明为什么可能正确或不正确。
+            2. 你的分析必须严格基于初步意见中的评分、推理和证据，不得引入与初步意见冲突的新观点。
+            3. **不得重新评分，不得改变倾向**。
+            4. 在结尾必须明确表达你的最终推荐选项，例如：
+               “因此，根据我的分析，我认为最可能正确的选项是 X。”
+            5. 输出应简洁流畅，150–200字，适合 MDT 讨论环境。
+            6. 不需要 JSON，仅自然语言说明。
+
             ==============================
             输出示例
-            
-            * “选项A … 分析；选项B … 分析；选项C … 分析；……”
-            * 强调支持高分选项的理由，并说明低分选项的反对理由。
-            
-            ==============================
-            现在请生成你的**初步陈述**：
 
+            “选项A …；选项B …；选项C …；……  
+            因此，我认为最可能正确的是 C。”
+
+            ==============================
+            现在请生成你的初步陈述：
             """
         return prompt
 
@@ -788,37 +813,99 @@ class LLMInterface:
         role_weight = role.weight
         if dataset_name in ["medqa", "pubmedqa", "symcat", "ddxplus", "medbullets"]:
             prompt = f"""
-            你是医学多学科团队（MDT, Multidisciplinary Team）的一名智能体成员，身份：{role_value}，角色描述：{role_desc}，角色权重：{role_weight}。
-
+            你是医学多学科团队（MDT, Multidisciplinary Team）的一名智能体成员，
+            身份：{role_value}，角色描述：{role_desc}，角色权重：{role_weight}。
+            你需要根据题目做出医学推理，并对每个选项进行量化评分。
+            
+            ==============================
             题目：
             {question_state.question}
-
+            
             选项：
             {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
+            ==============================
+            
+            你的任务包括：
+            
+            1. **识别关键证据**  
+               提取题目中支持或反驳各选项的关键证据（症状、实验室检查、影像、机制、数据等）。
+            
+            2. **推理正确答案**  
+               基于医学知识和证据链，推理哪个选项最可能正确，并给出理由。
+            
+            3. **严格量化评分（-1.0 ~ 1.0）**  
+               必须严格按照以下区间打分：
+               - 最合理、最可能正确 → 0.9~1.0
+               - 次优、部分合理 → 0.4~0.6
+               - 不太合理、证据弱 → -0.4~0.2
+               - 明显错误、与证据相反 → -0.8~-0.5
+               - 完全错误、方向相反 → -1.0
+               【约束】：
+               - 最合理选项分数必须比次优选项高至少 0.3
+               - 禁止所有选项给相近分数
+               - 分数必须能反映你的推理过程
+            
+            4. **证据强度（0~1）**  
+               - 直接数据 / 强逻辑支持 → 0.7~0.9  
+               - 间接数据 / 推测 / 部分合理 → 0.4~0.7  
+               - 弱证据 / 不充分 → 0.2~0.4  
+               - 所有选项证据强度不得全部接近 1，必须能区分优劣  
+               - 证据强度仅反映证据可靠性，不是个人信心
+            
+            5. **反思（Reflection）**  
+               - 对你刚才生成的评分和证据强度进行复核  
+               - 检查是否与证据一致，是否有分数区间违规，是否最合理选项高于次优选项至少 0.3  
+               - 如发现问题，调整评分和证据强度  
+               - 输出反思结论的简短说明
+            
+            6. **输出格式（严格 JSON，不加任何文字）**
+            
+            请严格输出如下格式（JSON）：
+            {{
+              "scores": {{"A": 0.0, "B": 0.0, "C": 0.0, "D": 0.0, "E": 0.0}},
+              "reasoning": "<简短推理说明>",
+              "evidence_strength": 0.0,
+              "evidences": ["<证据1>", "<证据2>"],
+              "reflection": "<简短反思说明>"
+            }}
+            
+            评分流程必须遵循：
+            列证据 → 推理出最可能正确答案 → 根据推理赋分 → 量化证据强度 → 自我反思 → 输出 JSON。
 
-            任务：
-            1. **识别关键证据**：根据题目内容（症状、检查数据、实验结果等）找出支持或反驳各选项的证据。
-            2. **推理正确答案**：结合你的专业知识，基于证据进行推理，得出最可能的正确答案。
-            3. **打分（-1.0 到 1.0）**：
-               - 正确答案应接近 0.8~1.0
-               - 明显错误选项应接近 -0.8~-1.0
-               - 其他选项根据证据强度和合理性打中间分
-            4. **证据强度**：根据证据可靠性和逻辑清晰度输出 0~1 的数值，用于加权聚合。
-            5. **输出要求**：
-               - 输出严格 JSON 格式
-               - 包含字段：
-                 ```json
-                 {{
-                   "scores": {{"A": 0.0, "B": 0.0, "C": 0.0, "D": 0.0, "E": 0.0}},
-                   "reasoning": "<简短推理说明>",
-                   "evidence_strength": 0.0,
-                   "evidences": ["<证据1>", "<证据2>"]
-                 }}
-                 ```
-               - 不要输出其他文字或说明
-            6. **打分逻辑链条**：
-               - 先列出证据 → 再推理出正确答案 → 然后根据推理结果打分 → 输出证据强度
             """
+
+            # prompt = f"""
+            # 你是医学多学科团队（MDT, Multidisciplinary Team）的一名智能体成员，身份：{role_value}，角色描述：{role_desc}，角色权重：{role_weight}。
+            #
+            # 题目：
+            # {question_state.question}
+            #
+            # 选项：
+            # {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
+            #
+            # 任务：
+            # 1. **识别关键证据**：根据题目内容（症状、检查数据、实验结果等）找出支持或反驳各选项的证据。
+            # 2. **推理正确答案**：结合你的专业知识，基于证据进行推理，得出最可能的正确答案。
+            # 3. **打分（-1.0 到 1.0）**：
+            #    - 正确答案应接近 0.8~1.0
+            #    - 明显错误选项应接近 -0.8~-1.0
+            #    - 其他选项根据证据强度和合理性打中间分
+            # 4. **证据强度**：根据证据可靠性和逻辑清晰度输出 0~1 的数值，用于加权聚合。
+            # 5. **输出要求**：
+            #    - 输出严格 JSON 格式
+            #    - 包含字段：
+            #      ```json
+            #      {{
+            #        "scores": {{"A": 0.0, "B": 0.0, "C": 0.0, "D": 0.0, "E": 0.0}},
+            #        "reasoning": "<简短推理说明>",
+            #        "evidence_strength": 0.0,
+            #        "evidences": ["<证据1>", "<证据2>"]
+            #      }}
+            #      ```
+            #    - 不要输出其他文字或说明
+            # 6. **打分逻辑链条**：
+            #    - 先列出证据 → 再推理出正确答案 → 然后根据推理结果打分 → 输出证据强度
+            # """
             # prompt = f"""
             # 你是医学多学科团队（MDT）成员，身份：{role_value}，角色描述：{role_desc}, 角色权重：{role_weight}。
             #
@@ -985,7 +1072,17 @@ class LLMInterface:
             mdt_leader_summary: str = None,
             dataset_name: str = None
     ) -> str:
-        """生成自然的多轮对话回应 - 减少模板化"""
+        """
+        基于新立场进行一次多轮对话
+        :param question_state:
+        :param question_options:
+        :param role:
+        :param current_opinion:
+        :param dialogue_history:
+        :param mdt_leader_summary:
+        :param dataset_name:
+        :return:
+        """
 
         prompt = self._build_dialogue_response_prompt_medqa(
             question_state,

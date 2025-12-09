@@ -37,7 +37,6 @@ class RoleType(Enum):
 
 class ChatRole(Enum):
     """非医疗对话角色类型"""
-
     USER = "user"  # 用户/患者
     SYSTEM = "system"  # 系统
 
@@ -141,7 +140,7 @@ class QuestionOpinion:
     """
     角色对选项的意见
 
-    包含角色的支持度、推理、置信度以及支持这个选项的证据列表。
+    包含角色的支持度、推理、证据强度以及支持这个选项的证据列表。
     Attributes:
         role (RoleType): 角色类型
         scores: Dict[QuestionOption, float]

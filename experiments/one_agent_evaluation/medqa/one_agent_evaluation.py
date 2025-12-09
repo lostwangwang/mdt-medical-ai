@@ -53,7 +53,7 @@ def ask_model(case: dict) -> dict:
 选项：
 {', '.join([f'{k}: {v}' for k, v in case['options'].items()])}
 
-请给出你的答案，并解释你的答案。
+答案仅输出(A/B/C/D/E)
 """
 
     try:
@@ -134,12 +134,22 @@ if __name__ == "__main__":
     path = "../../../data/examples/medqa/data_clean/questions/US/dev.jsonl"
     total_count = 50
     # cases = read_jsonl(path, total_count)
+    # cases = [
+    #     {
+    #         "question": "A 53-year-old man with recurrent pancreatic adenocarcinoma is enrolled in a clinical trial for a novel chemotherapeutic agent that his physician believes may be beneficial to his condition. The novel drug was previously tested in a small population and is now undergoing a larger phase 3 trial in preparation for FDA approval. A dose-response trial had the following results:\n\n10 mg dose - 6/59 patients demonstrated improvement\n20 mg dose - 19/49 patients demonstrated improvement\n30 mg dose - 26/53 patients demonstrated improvement\n40 mg dose - 46/51 patients demonstrated improvement\n\nThe same trial also had the following safety profile:\n\n20 mg dose - 5/49 patients had a treatment related adverse event\n40 mg dose - 11/51 patients had a treatment related adverse event\n60 mg dose - 15/42 patients had a treatment related adverse event\n80 mg dose - 23/47 patients had a treatment related adverse event\n100 mg dose - 47/52 patients had a treatment related adverse event\n\nBased on this study, which of the following represents the most likely therapeutic index for this novel chemotherapeutic agent?",
+    #         "answer": "2.67", "options": {"A": "0.375", "B": "0.5", "C": "2", "D": "2.5", "E": "2.67"},
+    #         "meta_info": "step1", "answer_idx": "E"}
+    #
+    # ]
     cases = [
+        # {
+        #     "question": "A 53-year-old man with recurrent pancreatic adenocarcinoma is enrolled in a clinical trial for a novel chemotherapeutic agent that his physician believes may be beneficial to his condition. The novel drug was previously tested in a small population and is now undergoing a larger phase 3 trial in preparation for FDA approval. A dose-response trial had the following results:\n\n10 mg dose - 6/59 patients demonstrated improvement\n20 mg dose - 19/49 patients demonstrated improvement\n30 mg dose - 26/53 patients demonstrated improvement\n40 mg dose - 46/51 patients demonstrated improvement\n\nThe same trial also had the following safety profile:\n\n20 mg dose - 5/49 patients had a treatment related adverse event\n40 mg dose - 11/51 patients had a treatment related adverse event\n60 mg dose - 15/42 patients had a treatment related adverse event\n80 mg dose - 23/47 patients had a treatment related adverse event\n100 mg dose - 47/52 patients had a treatment related adverse event\n\nBased on this study, which of the following represents the most likely therapeutic index for this novel chemotherapeutic agent?",
+        #     "answer": "2.67", "options": {"A": "0.375", "B": "0.5", "C": "2", "D": "2.5", "E": "2.67"},
+        #     "meta_info": "step1", "answer_idx": "E"}
         {
             "question": "A 53-year-old man with recurrent pancreatic adenocarcinoma is enrolled in a clinical trial for a novel chemotherapeutic agent that his physician believes may be beneficial to his condition. The novel drug was previously tested in a small population and is now undergoing a larger phase 3 trial in preparation for FDA approval. A dose-response trial had the following results:\n\n10 mg dose - 6/59 patients demonstrated improvement\n20 mg dose - 19/49 patients demonstrated improvement\n30 mg dose - 26/53 patients demonstrated improvement\n40 mg dose - 46/51 patients demonstrated improvement\n\nThe same trial also had the following safety profile:\n\n20 mg dose - 5/49 patients had a treatment related adverse event\n40 mg dose - 11/51 patients had a treatment related adverse event\n60 mg dose - 15/42 patients had a treatment related adverse event\n80 mg dose - 23/47 patients had a treatment related adverse event\n100 mg dose - 47/52 patients had a treatment related adverse event\n\nBased on this study, which of the following represents the most likely therapeutic index for this novel chemotherapeutic agent?",
             "answer": "2.67", "options": {"A": "0.375", "B": "0.5", "C": "2", "D": "2.5", "E": "2.67"},
             "meta_info": "step1", "answer_idx": "E"}
-
     ]
     print(f"=== 读取了 {len(cases)} 条病例数据 ===")
     results, acc = evaluate_dataset(cases)

@@ -44,22 +44,13 @@ if __name__ == "__main__":
     # path = "../../" + "data/examples/medqa/data_clean/questions/Mainland/dev.jsonl"
     path = "../../data/examples/medqa/data_clean/questions/US/test_update_no_image.jsonl"
     print(path)
+    data = read_jsonl(path, random_sample=50, seed=42)
     # data = [
-    #     {
-    #         "question": "A 23-year-old woman presents to the emergency department because of nausea. She has been experiencing severe intermittent nausea and diarrhea for the last year and refuses to leave the emergency department until she is told what is causing her symptoms. She hates hospitals but has reluctantly undergone numerous workups and imaging studies in order to discern what is wrong. All of the studies have been normal. She says that these symptoms have been causing her severe distress and is impairing her ability to perform her job. She says that she feels as if the nausea is worse when she is trying to work but says that she will continue to work as an insurance agent despite the physical discomfort. She has started restricting her diet to only graham crackers because she thinks that helps her symptoms. She has also started avoiding eating lunch because of the nausea. Which of the following disorders is most consistent with this patient's presentation?",
-    #         "answer": "Somatic symptom disorder",
-    #         "options": {"A": "Conversion disorder", "B": "Factitious disorder", "C": "Illness anxiety disorder",
-    #                     "D": "Malingering", "E": "Somatic symptom disorder"}, "meta_info": "step1", "answer_idx": "E"}
-    #
+    #         {
+    #             "question": "A 53-year-old man with recurrent pancreatic adenocarcinoma is enrolled in a clinical trial for a novel chemotherapeutic agent that his physician believes may be beneficial to his condition. The novel drug was previously tested in a small population and is now undergoing a larger phase 3 trial in preparation for FDA approval. A dose-response trial had the following results:\n\n10 mg dose - 6/59 patients demonstrated improvement\n20 mg dose - 19/49 patients demonstrated improvement\n30 mg dose - 26/53 patients demonstrated improvement\n40 mg dose - 46/51 patients demonstrated improvement\n\nThe same trial also had the following safety profile:\n\n20 mg dose - 5/49 patients had a treatment related adverse event\n40 mg dose - 11/51 patients had a treatment related adverse event\n60 mg dose - 15/42 patients had a treatment related adverse event\n80 mg dose - 23/47 patients had a treatment related adverse event\n100 mg dose - 47/52 patients had a treatment related adverse event\n\nBased on this study, which of the following represents the most likely therapeutic index for this novel chemotherapeutic agent?",
+    #             "answer": "2.67", "options": {"A": "0.375", "B": "0.5", "C": "2", "D": "2.5", "E": "2.67"},
+    #             "meta_info": "step1", "answer_idx": "E"}
     # ]
-    # data = [{"question": "An 83-year-old man is admitted to the hospital with fever, weakness, and decreased responsiveness. He is diagnosed with urosepsis based on urinalysis and culture and started on ceftriaxone and intravenous fluids. By hospital day 3, he is clinically improving. During the evening, the patient becomes irritable. He is talking to someone despite nobody being present in the room. He is easily agitated and attempts to strike a nurse with a remote control to his TV. Subsequently, the patient keeps getting out of bed and trying to walk away despite being a fall risk. Which of the following is the most appropriate next step in management?", "answer": "Olanzapine", "options": {"A": "Diphenhydramine", "B": "Lorazepam", "C": "Olanzapine", "D": "Phenobarbital", "E": "Physical restraints"}, "meta_info": "step2&3", "answer_idx": "C"}]
-    # data = read_jsonl(path, random_sample=50, seed=42)
-    data = [
-        {
-            "question": "A 53-year-old man with recurrent pancreatic adenocarcinoma is enrolled in a clinical trial for a novel chemotherapeutic agent that his physician believes may be beneficial to his condition. The novel drug was previously tested in a small population and is now undergoing a larger phase 3 trial in preparation for FDA approval. A dose-response trial had the following results:\n\n10 mg dose - 6/59 patients demonstrated improvement\n20 mg dose - 19/49 patients demonstrated improvement\n30 mg dose - 26/53 patients demonstrated improvement\n40 mg dose - 46/51 patients demonstrated improvement\n\nThe same trial also had the following safety profile:\n\n20 mg dose - 5/49 patients had a treatment related adverse event\n40 mg dose - 11/51 patients had a treatment related adverse event\n60 mg dose - 15/42 patients had a treatment related adverse event\n80 mg dose - 23/47 patients had a treatment related adverse event\n100 mg dose - 47/52 patients had a treatment related adverse event\n\nBased on this study, which of the following represents the most likely therapeutic index for this novel chemotherapeutic agent?",
-            "answer": "2.67", "options": {"A": "0.375", "B": "0.5", "C": "2", "D": "2.5", "E": "2.67"},
-            "meta_info": "step1", "answer_idx": "E"}
-    ]
     right_cnt = 0
     for idx, item in enumerate(data, start=1):
         print(f"执行第{idx}个问题: {item["question"]}")
@@ -81,7 +72,7 @@ if __name__ == "__main__":
         # 打印结果
         final_result = dialogue_manager.conduct_mdt_discussion_medqa(question_state, question_options,
                                                                      dataset_name="medqa")
-        df = final_result["final_consensus"]["df_summary"]
+        df = final_result["final_consensus"]["df"]
         logging.info(f"第{idx}个问题的共识矩阵: {df}")
         # mdt_leader_final_summary = final_result["mdt_leader_final_summary"]
         # print(mdt_leader_final_summary["label"])
@@ -107,7 +98,8 @@ if __name__ == "__main__":
         # logging.debug(f"当前已经答对的问题数: {right_cnt}")
         # logging.info(f"第{idx}个问题的正确答案: {question_state.answer_idx}")
         # logging.info(f"第{idx}个问题的智能体给的最终方案: {final_result["mdt_leader_final_summary"]}")
-        print(f"打印一下final_answer{final_answer}")
+        print(f"MDT_LEADER:{final_result["mdt_leader_final_summary"]}")
+        print(f"打印一下final_answer:{final_answer}")
         if final_answer == question_state.answer:
             logging.info(f"第{idx}个问题的智能体给的答案: {final_answer}: {question_state.answer}，正确")
             print(f"第{idx}个问题正确的答案: {question_state.answer_idx}: {question_state.answer}，正确")

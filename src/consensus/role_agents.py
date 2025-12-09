@@ -241,11 +241,11 @@ class RoleAgent:
             opinions_dict: Dict[Union[RoleType, RoleRegistry], Union[RoleOpinion, QuestionOpinion]] = None,
     ):
         current_round = dialogue_rounds.round_number
-        if not consensus_dict["consensus_bool"]:
+        if not consensus_dict["consensus"]:
             mdt_leader_summary = self.llm_interface.llm_generate_mdt_leader_content(
                 question_state, question_options, dialogue_rounds
             )
-        elif consensus_dict["consensus_bool"]:
+        elif consensus_dict["consensus"]:
             response = self.llm_interface.llm_generate_final_mdt_leader_summary(
                 question_state, question_options, dialogue_rounds, consensus_dict, opinions_dict
             )

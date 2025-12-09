@@ -92,9 +92,6 @@ class CalculateConsensusByCosineSimilarity:
     def select_final_answer(self, summary_df):
         """
         summary_df: DataFrame，包含 columns=['mean','std']，index=选项标签
-
-
-
         """
         summary_df = self.df_scores.copy()
         summary_df["mean"] = summary_df.mean(axis=1)
