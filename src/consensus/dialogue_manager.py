@@ -91,8 +91,6 @@ class MultiAgentDialogueManager:
             registry = RoleRegistry(expert['name'], expert['value'], expert['description'], expert['weight'])
             role_list.append(registry)
         self.agents = {role: RoleAgent(role, llm_interface=self.llm_interface) for role in role_list}
-        # self.consensus_calculator_by_cosine_similarity.set_roles(role_list)
-        # self.consensus_calculator.set_roles(role_list)
         self.consensus_calculator_by_icc.set_roles(role_list)
         # 初始化对话 - 各角色生成基于证据的初始意见
         opinions_list = self._initialize_discussion_medqa(
@@ -100,25 +98,14 @@ class MultiAgentDialogueManager:
         )
         # 将意见列表转换为字典，方便按角色快速访问
         opinions_dict = {opinion.role: opinion for opinion in opinions_list}
-        # 这里是使用肯德尔系数
-        # self.df, self.W, self.p_value, self.consensus = self._check_discussion_convergence_medqa(opinions_dict, question_options)
-        # 这里是使用余弦相似度进行判断共识
-        # self.df_summary, self.cos_matrix_df, self.group_consensus, self.consensus_bool = self._check_discussion_convergence_by_cosine_medqa(opinions_dict, question_options)
-        # consensus_dict = {
-        #     "df_summary": self.df_summary,
-        #     "cos_matrix_df": self.cos_matrix_df,
-        #     "group_consensus": self.group_consensus,
-        #     "consensus_bool": self.consensus_bool,
-        # }
-        # 这里使用icc
+        # 这里使用icc组内协调系数
         self.df, self.group_icc, self.consensus = self._check_dissead_convergence_by_icc(opinions_dict, question_options)
+        # 这里将数据转化为字典
         consensus_dict = {
             "df": self.df,
             "group_icc": self.group_icc,
             "consensus": self.consensus,
         }
-        print(f"初始化的consensus_dict: {consensus_dict}")
-        # 还是需要进行一次讨论的，所以我们需要
         if self.consensus:
             print("已经达成共识了，不用再跑了")
             logger.info(f"第{self.current_round}轮有共识结果")
@@ -149,13 +136,6 @@ class MultiAgentDialogueManager:
                 )
                 logger.info(f"dialogue round {self.current_round}: {current_round_messages}")
                 self.dialogue_rounds.append(current_round_messages)
-                # 肯德尔系数
-                # self.df, self.W, self.p_value, self.consensus = self._check_discussion_convergence_medqa(
-                #     opinions_dict, question_options
-                # )
-                # 余弦相似度
-                # self.df_summary, self.cos_matrix_df, self.group_consensus, self.consensus_bool = self._check_discussion_convergence_by_cosine_medqa(
-                #     opinions_dict, question_options)
 
                 # icc
                 self.df, self.group_icc, self.consensus = self._check_dissead_convergence_by_icc(opinions_dict, question_options)
@@ -163,14 +143,6 @@ class MultiAgentDialogueManager:
                 if self.current_round == self.max_rounds:
                     print("已经达到最大轮数，不再进行下一轮")
                     self.consensus = True
-                    # self.consensus_bool = True
-
-                # consensus_dict = {
-                #     "df_summary": self.df_summary,
-                #     "cos_matrix_df": self.cos_matrix_df,
-                #     "group_consensus": self.group_consensus,
-                #     "consensus_bool": self.consensus_bool,
-                # }
                 consensus_dict = {
                     "df": self.df,
                     "group_icc": self.group_icc,

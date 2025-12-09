@@ -299,7 +299,6 @@ class RoleAgent:
             role=self.role.value,
             scores=reasoning["scores"],
             reasoning=reasoning["reasoning"],
-            evidence_strength=reasoning["evidence_strength"],
             evidences=reasoning["evidences"],
         )
         # 更新当前角色的 TreatmentPreferences
@@ -425,7 +424,6 @@ class RoleAgent:
             role=self.role,
             scores=reasoning["scores"],
             reasoning=reasoning["reasoning"],
-            evidence_strength=reasoning["evidence_strength"],
             evidences=reasoning["evidences"],
         )
         self.current_stance = role_opinion.scores

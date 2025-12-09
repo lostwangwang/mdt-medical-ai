@@ -145,14 +145,13 @@ class QuestionOpinion:
         role (RoleType): 角色类型
         scores: Dict[QuestionOption, float]
         reasoning (str): 推理过程，说明为什么选择了这些选项。
-        evidence_strength (float): 证据强度，0到1之间的值
         evidences: List[str]: 支持这个选项的证据列表
     """
 
     role: Union[RoleType, RoleRegistry]
     scores: Dict[QuestionOption, float]  # -1 to +1
     reasoning: str
-    evidence_strength: float  # 0 to 1
+    # evidence_strength: float  # 0 to 1
     evidences: List[str]
 
 

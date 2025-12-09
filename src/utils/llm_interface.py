@@ -190,8 +190,6 @@ class LLMInterface:
             consensus_dict: Dict[str, Any],
             opinions_dict: Dict[Union[RoleType, RoleRegistry], Union[RoleOpinion, QuestionOpinion]] = None,
     ):
-        # df_summary, cos_matrix_df, group_consensus, consensus_bool = consensus_dict["df_summary"], consensus_dict[
-        #     "cos_matrix_df"], consensus_dict["group_consensus"], consensus_dict["consensus_bool"]
         df, group_icc, consensus = consensus_dict["df"], consensus_dict["group_icc"], consensus_dict["consensus"]
         means = df["mean"]
         mean_scores = [f"{option.name}: {means[option.value]}" for option in question_options]
@@ -516,14 +514,12 @@ class LLMInterface:
             {{
                 "scores": {{"A": 0.0, "B": 0.0, "C": 0.0, "D": 0.0, "E": 0.0}},
                 "reasoning": "",
-                "evidence_strength": 0.0,
                 "evidences": []
             }}
             
             字段解释：
             - scores：你对每个选项的重新评估分数  
             - reasoning：80–120 字的中文解释，说明你的判断逻辑  
-            - evidence_strength：0.0–1.0，表示证据对你判断的支撑强度  
             - evidences：2–3 条关键证据点，每条 ≤20 字  
             
             -----------------------------------
@@ -774,7 +770,6 @@ class LLMInterface:
 
               * 各选项评分：{opinion.scores}
               * 推理：{opinion.reasoning}
-              * 证据强度：{opinion.evidence_strength}
               * 证据：{opinion.evidences}
 
             ==============================
@@ -845,32 +840,24 @@ class LLMInterface:
                - 禁止所有选项给相近分数
                - 分数必须能反映你的推理过程
             
-            4. **证据强度（0~1）**  
-               - 直接数据 / 强逻辑支持 → 0.7~0.9  
-               - 间接数据 / 推测 / 部分合理 → 0.4~0.7  
-               - 弱证据 / 不充分 → 0.2~0.4  
-               - 所有选项证据强度不得全部接近 1，必须能区分优劣  
-               - 证据强度仅反映证据可靠性，不是个人信心
-            
-            5. **反思（Reflection）**  
+            4. **反思（Reflection）**  
                - 对你刚才生成的评分和证据强度进行复核  
                - 检查是否与证据一致，是否有分数区间违规，是否最合理选项高于次优选项至少 0.3  
                - 如发现问题，调整评分和证据强度  
                - 输出反思结论的简短说明
             
-            6. **输出格式（严格 JSON，不加任何文字）**
+            5. **输出格式（严格 JSON，不加任何文字）**
             
             请严格输出如下格式（JSON）：
             {{
               "scores": {{"A": 0.0, "B": 0.0, "C": 0.0, "D": 0.0, "E": 0.0}},
               "reasoning": "<简短推理说明>",
-              "evidence_strength": 0.0,
               "evidences": ["<证据1>", "<证据2>"],
               "reflection": "<简短反思说明>"
             }}
             
             评分流程必须遵循：
-            列证据 → 推理出最可能正确答案 → 根据推理赋分 → 量化证据强度 → 自我反思 → 输出 JSON。
+            列证据 → 推理出最可能正确答案 → 根据推理赋分 → 自我反思 → 输出 JSON。
 
             """
 
@@ -1554,16 +1541,12 @@ class LLMInterface:
         if evidences_str:
             evidences_str = "- " + evidences_str  # 加上列表标记
 
-        # 证据强度
-        evidence_strength = current_opinion.evidence_strength
-
         # 最终字符串
         formatted = (
             f"{role_name}观点:\n"
             f"选项评分: {scores_str}\n"
             f"核心观点: {core_reasoning}\n"
             f"关键证据:\n{evidences_str}\n"
-            f"证据强度: {evidence_strength}"
         )
         return formatted
 

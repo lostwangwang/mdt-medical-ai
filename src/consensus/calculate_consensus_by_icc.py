@@ -29,10 +29,10 @@ class CalculateConsensusByICC:
         score_matrix = np.zeros((self.m, self.n))
         for i, role in enumerate(self.roles):
             prefs = opinions_dict[role].scores
-            conf = opinions_dict[role].evidence_strength
+            # conf = opinions_dict[role].evidence_strength
             role_weight = role.weight
-            score_matrix[i, :] = [prefs[t.name] * conf * role_weight for t in self.treatments]
-
+            # score_matrix[i, :] = [prefs[t.name] * conf * role_weight for t in self.treatments]
+            score_matrix[i, :] = [prefs[t.name] * role_weight for t in self.treatments]
         self.df_scores = pd.DataFrame(
             score_matrix,
             index=[role.value for role in self.roles],
