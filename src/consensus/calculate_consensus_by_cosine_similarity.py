@@ -1,11 +1,7 @@
-from typing import List, Union, Dict
 import numpy as np
 import pandas as pd
-from scipy.stats import rankdata, chi2
 import matplotlib.pyplot as plt
 from typing import List, Union, Dict
-import sys
-import os
 from experiments.medqa_types import QuestionOption
 from src.core.data_models import RoleType, TreatmentOption, RoleRegistry, RoleOpinion, QuestionOpinion
 
@@ -29,7 +25,7 @@ class CalculateConsensusByCosineSimilarity:
         self.m = len(roles)
 
     def build_weighted_matrix(self, opinions_dict: Dict[Union[RoleType, RoleRegistry], Union[RoleOpinion, QuestionOpinion]]):
-        """构建偏好×置信度×角色权重向量矩阵"""
+        """构建支持度×证据强度×角色权重向量矩阵"""
         score_matrix = np.zeros((self.m, self.n))
         for i, role in enumerate(self.roles):
             prefs = opinions_dict[role].scores
@@ -77,16 +73,42 @@ class CalculateConsensusByCosineSimilarity:
 
         return self.cos_matrix, self.group_consensus
 
-    def summarize(self, consensus_threshold=0.8):
+    def summarize(self, consensus_threshold=0.7, std_threshold=0.1):
         """输出均值、标准差、共识矩阵、整体共识"""
         if self.df_scores is None:
             raise ValueError("请先调用 build_weighted_matrix()")
         df = self.df_scores.copy()
         df["mean"] = df.mean(axis=1)
         df["std"] = df.std(axis=1)
-        consensus = True if self.group_consensus and self.group_consensus >= consensus_threshold else False
+        max_std = df["std"].max()
+        consensus_by_std = max_std <= std_threshold
+
+        # 综合余弦相似度和标准差判断
+        consensus = (self.group_consensus >= consensus_threshold) and consensus_by_std
+        # consensus = True if self.group_consensus and self.group_consensus >= consensus_threshold else False
         print(f"Group consensus (Cosine similarity): {self.group_consensus:.3f}, 达成共识: {consensus}")
         return df, self.cos_matrix, self.group_consensus, consensus
+
+    def select_final_answer(self, summary_df):
+        """
+        summary_df: DataFrame，包含 columns=['mean','std']，index=选项标签
+        """
+        summary_df = self.df_scores.copy()
+        summary_df["mean"] = summary_df.mean(axis=1)
+        summary_df["std"] = summary_df.std(axis=1)
+        # 调整分数：惩罚分歧大的选项
+        summary_df["adjusted_score"] = summary_df["mean"] * (1 - summary_df["std"])
+
+        # 选择分数最高的选项
+        final_option = summary_df["adjusted_score"].idxmax()
+
+        # 可选：打印调试信息
+        print("选项均值:\n", summary_df["mean"])
+        print("选项标准差:\n", summary_df["std"])
+        print("调整后分数:\n", summary_df["adjusted_score"])
+        print("最终答案:", final_option)
+
+        return final_option
 
     def plot_matrix(self):
         """绘制每个治疗项目的均值与方差"""

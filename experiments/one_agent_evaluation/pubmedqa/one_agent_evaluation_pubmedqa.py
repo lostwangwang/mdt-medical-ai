@@ -40,10 +40,10 @@ def build_prompt(case) -> str:
     context_text = case["context"]
 
     prompt = (
-        "请根据以下医疗问题描述，选择最合适的选项答案。\n\n"
-        f"题目：{question}\n\n"
-        f"摘要：\n{context_text}\n\n"
-        '答案只需要回答: "yes", "no", or "maybe"'
+        "Please choose the most appropriate answer based on the following medical question description.\n\n"
+        f"Question：{question}\n\n"
+        f"Context：\n{context_text}\n\n"
+        f'The answer should only be: "yes", "no", or "maybe".'
     )
     return prompt
 
@@ -69,12 +69,18 @@ def ask_model(case: dict) -> dict:
             messages=[
                 {
                     "role": "system",
-                    "content": "你是医疗问题回答助手，请基于问题描述和上下文摘要，进行回答最终的问题。",
+                    "content": (
+                        "You are a medical question-answering assistant. "
+                        "Only output the final answer exactly as: yes, no, or maybe."
+                    ),
                 },
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.2,
+            temperature=0.7
         )
+        print(response)
+        print(f"response model: {response.model}")
+        logging.info("模型原始输出：%s", response)
         content = response.choices[0].message.content.strip()
     except Exception as e:
         content = f"[Error] {e}"
@@ -85,12 +91,14 @@ def ask_model(case: dict) -> dict:
 if __name__ == "__main__":
     ds = get_datas()
     right_count = 0
-    for i in range(50):
+    for i in range(1):
         logging.info(f"==========第{i}题==============")
         case = format_data(ds["train"][i])
         prompt = build_prompt(case)
         logging.info(prompt)
         content = ask_model(case)
+        print(f"content: {content}")
+        print(f"final_decision: {case['final_decision']}")
         if content == case["final_decision"]:
             right_count += 1
     logging.info(f"准确率: {right_count / 50:.2%}")

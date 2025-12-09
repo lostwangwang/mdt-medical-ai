@@ -13,6 +13,8 @@ import logging
 import pandas as pd
 from pandas import DataFrame
 
+from src.consensus.calculate_consensus_by_cosine_similarity import CalculateConsensusByCosineSimilarity
+from src.consensus.calculate_consensus_by_icc import CalculateConsensusByICC
 from ..core.data_models import (
     RoleType,
     TreatmentOption,
@@ -45,6 +47,8 @@ class MultiAgentDialogueManager:
         }
         self.llm_interface = llm_interface
         self.consensus_calculator = CalculateConsensus()
+        self.consensus_calculator_by_cosine_similarity = CalculateConsensusByCosineSimilarity()
+        self.consensus_calculator_by_icc = CalculateConsensusByICC()
         self.rag_system = rag_system
         self.dialogue_rounds = []
         self.current_round = 1
@@ -53,7 +57,12 @@ class MultiAgentDialogueManager:
         self.df = None
         self.W = None
         self.p_value = None
-        self.consensus = None
+        self.consensus = None,
+        self.df_summary = None,
+        self.cos_matrix_df = None,
+        self.group_consensus = 0,
+        self.consensus_bool = False
+        self.initial_round = None
 
     def conduct_mdt_discussion_medqa(
             self,
@@ -64,8 +73,8 @@ class MultiAgentDialogueManager:
         """
         进行MDT讨论
         讨论流程:
-        1. 初始化讨论 - 各角色基于RAG检索的医学知识生成初始意见
-        2. 多轮对话协商 - 角色间就治疗方案进行结构化讨论
+        1. 注册MDT_LEADER角色，让MDT_LEADER根据问题难度去生成需要参与到多轮讨论中的角色，以及角色权重。
+        2. MDT_LEADER生成
         3. 立场更新 - 基于其他角色观点调整自己的立场
         4. 争议聚焦 - 针对分歧较大的治疗方案深入讨论
         5. 共识达成 - 生成最终的治疗建议和共识结果
@@ -82,26 +91,36 @@ class MultiAgentDialogueManager:
             registry = RoleRegistry(expert['name'], expert['value'], expert['description'], expert['weight'])
             role_list.append(registry)
         self.agents = {role: RoleAgent(role, llm_interface=self.llm_interface) for role in role_list}
-        self.consensus_calculator.set_roles(role_list)
+        # self.consensus_calculator_by_cosine_similarity.set_roles(role_list)
+        # self.consensus_calculator.set_roles(role_list)
+        self.consensus_calculator_by_icc.set_roles(role_list)
         # 初始化对话 - 各角色生成基于证据的初始意见
         opinions_list = self._initialize_discussion_medqa(
             question_state, question_options, dataset_name
         )
         # 将意见列表转换为字典，方便按角色快速访问
         opinions_dict = {opinion.role: opinion for opinion in opinions_list}
-        self.df, self.W, self.p_value, self.consensus = (
-            self._check_discussion_convergence_medqa(opinions_dict, question_options)
-        )
-        self.consensus = False
+        # 这里是使用肯德尔系数
+        # self.df, self.W, self.p_value, self.consensus = self._check_discussion_convergence_medqa(opinions_dict, question_options)
+        # 这里是使用余弦相似度进行判断共识
+        # self.df_summary, self.cos_matrix_df, self.group_consensus, self.consensus_bool = self._check_discussion_convergence_by_cosine_medqa(opinions_dict, question_options)
+        # consensus_dict = {
+        #     "df_summary": self.df_summary,
+        #     "cos_matrix_df": self.cos_matrix_df,
+        #     "group_consensus": self.group_consensus,
+        #     "consensus_bool": self.consensus_bool,
+        # }
+        # 这里使用icc
+        self.df, self.group_icc, self.consensus = self._check_dissead_convergence_by_icc(opinions_dict, question_options)
         consensus_dict = {
             "df": self.df,
-            "W": self.W,
-            "p_value": self.p_value,
+            "group_icc": self.group_icc,
             "consensus": self.consensus,
         }
+        print(f"初始化的consensus_dict: {consensus_dict}")
         # 还是需要进行一次讨论的，所以我们需要
-        if self.consensus == True:
-            print("有共识结果,不用再继续跑了")
+        if self.consensus:
+            print("已经达成共识了，不用再跑了")
             logger.info(f"第{self.current_round}轮有共识结果")
             mdt_leader_summary = self._mdt_leader_summary_medqa(question_state, question_options,
                                                                 self.dialogue_rounds[-1], consensus_dict, opinions_dict)
@@ -130,19 +149,34 @@ class MultiAgentDialogueManager:
                 )
                 logger.info(f"dialogue round {self.current_round}: {current_round_messages}")
                 self.dialogue_rounds.append(current_round_messages)
-                self.df, self.W, self.p_value, self.consensus = self._check_discussion_convergence_medqa(
-                    opinions_dict, question_options
-                )
+                # 肯德尔系数
+                # self.df, self.W, self.p_value, self.consensus = self._check_discussion_convergence_medqa(
+                #     opinions_dict, question_options
+                # )
+                # 余弦相似度
+                # self.df_summary, self.cos_matrix_df, self.group_consensus, self.consensus_bool = self._check_discussion_convergence_by_cosine_medqa(
+                #     opinions_dict, question_options)
+
+                # icc
+                self.df, self.group_icc, self.consensus = self._check_dissead_convergence_by_icc(opinions_dict, question_options)
 
                 if self.current_round == self.max_rounds:
                     print("已经达到最大轮数，不再进行下一轮")
                     self.consensus = True
+                    # self.consensus_bool = True
+
+                # consensus_dict = {
+                #     "df_summary": self.df_summary,
+                #     "cos_matrix_df": self.cos_matrix_df,
+                #     "group_consensus": self.group_consensus,
+                #     "consensus_bool": self.consensus_bool,
+                # }
                 consensus_dict = {
                     "df": self.df,
-                    "W": self.W,
-                    "p_value": self.p_value,
+                    "group_icc": self.group_icc,
                     "consensus": self.consensus,
                 }
+                logger.info(f"第{self.current_round}轮的consensus_dict: {consensus_dict}")
                 # 3. 这里要更新MDT_LEADER的内容
                 mdt_leader_summary = self._mdt_leader_summary_medqa(
                     question_state, question_options, current_round_messages, consensus_dict, opinions_dict
@@ -153,16 +187,18 @@ class MultiAgentDialogueManager:
         print(f"第{self.current_round - 1}轮达成共识")
         logger.info(f"第{self.current_round}轮达成共识!!!")
         logger.info("\n==生成共识结果开始：==")
+        # final_answer = self.consensus_calculator_by_cosine_similarity.select_final_answer(self.df_summary)
+        final_answer = self.consensus_calculator_by_icc.select_final_answer()
         final_result = {
             "question_state": question_state,
             "question_options": question_options,
             "final_opinions_dict": opinions_dict,
             "final_consensus": {
                 "df": self.df,
-                "W": self.W,
-                "p_value": self.p_value,
-                "consensus": self.consensus,
+                "group_icc": self.group_icc,
+                "consensus": self.consensus
             },
+            "final_answer": final_answer,
             "mdt_leader_final_summary": mdt_leader_summary,
         }
         return final_result
@@ -187,7 +223,6 @@ class MultiAgentDialogueManager:
     ):
         response = self.mdt_leader.generate_mdt_leader_summary_dataset(question_state, question_options, dialogue_round,
                                                                        consensus_dict, opinions_dict)
-
         return response
 
     def _conduct_dialogue_round_medqa(
@@ -254,7 +289,7 @@ class MultiAgentDialogueManager:
             dataset_name: str = None,
     ):
         # 生成各角色的初始意见
-        initial_round = DialogueRound(
+        self.initial_round = DialogueRound(
             round_number=0,
             messages=[],
             opinion_dict=None,
@@ -262,18 +297,19 @@ class MultiAgentDialogueManager:
         )
 
         # 遍历每个角色智能体，生成其初始意见并构建首轮对话消息
-        opinions_list = []
+        self.opinions_list = []
         for role, agent in self.agents.items():
             # 构建初始意见
             opinion = agent.generate_initial_opinion_medqa(
                 question_state, question_options, dataset_name
             )
-            logger.info(f"Generated initial opinion for {role}: {opinion}")
-            opinions_list.append(opinion)
+            logger.info(f"Generated initial opinion for {role.value}: {opinion}")
+            print(f"Generated initial opinion for {role.value}: {opinion}")
+            self.opinions_list.append(opinion)
 
         for role, agent in self.agents.items():
             # 选取角色opinion
-            opinion_result = [opinion for opinion in opinions_list if opinion.role == role]
+            opinion_result = [opinion for opinion in self.opinions_list if opinion.role == role]
             # 生成初始发言
             initial_message = self._create_initial_message_medqa(
                 agent,
@@ -284,14 +320,36 @@ class MultiAgentDialogueManager:
             )
 
             logger.info(
-                f"Generated initial message for {role}: {initial_message.content}"
+                f"Generated initial message for {role.value}: {initial_message.content}"
             )
+            print(f"Generated initial message for {role.value}: {initial_message.content}")
 
-            initial_round.messages.append(initial_message)
-        opinions_dict = {opinion.role: opinion for opinion in opinions_list}
-        initial_round.opinion_dict = opinions_dict
-        self.dialogue_rounds.append(initial_round)
-        return opinions_list
+            self.initial_round.messages.append(initial_message)
+        opinions_dict = {opinion.role: opinion for opinion in self.opinions_list}
+        self.initial_round.opinion_dict = opinions_dict
+        self.dialogue_rounds.append(self.initial_round)
+        return self.opinions_list
+
+
+    def _initialize_agents_messages_medqa(
+            self,
+            question_state: MedicalQuestionState,
+            question_options: List[QuestionOption],
+            dataset_name: str = None,
+    ):
+        for role, agent in self.agents.items():
+            # 选取角色的opinion
+            opinion_result = [opinion for opinion in self.opinions_list if opinion.role == role]
+
+            # 各智能体生成初始发言
+            initial_message = self._create_initial_message_medqa(
+                agent,
+                question_state,
+                question_options,
+                dataset_name
+            )
+            self.initial_round.messages.append(initial_message)
+        pass
 
     def _create_initial_message_medqa(
             self,
@@ -447,11 +505,51 @@ class MultiAgentDialogueManager:
         logger.info(f"Final consensus result: {final_result}")
         return final_result
 
+    def _check_dissead_convergence_by_icc(
+            self,
+            opinions_dict: Dict[Union[RoleType, RoleRegistry], Union[RoleOpinion, QuestionOpinion]],
+            question_options: List[QuestionOption],
+    ):
+        self.consensus_calculator_by_icc.set_treatments(question_options)
+        self.consensus_calculator_by_icc.build_weighted_matrix(opinions_dict)
+
+        # 构建加权矩阵
+        self.consensus_calculator_by_icc.build_weighted_matrix(opinions_dict)
+
+        # 计算ICC共识
+        self.consensus_calculator_by_icc.compute_icc_consensus()
+        df, group_icc, consensus = self.consensus_calculator_by_icc.summarize(icc_threshold=self.convergence_threshold)
+        return df, group_icc, consensus
+
+    def _check_discussion_convergence_by_cosine_medqa(
+            self,
+            opinions_dict: Dict[Union[RoleType, RoleRegistry], Union[RoleOpinion, QuestionOpinion]],
+            question_options: List[QuestionOption],
+    ):
+        """
+        检查讨论是否收敛
+        """
+        self.consensus_calculator_by_cosine_similarity.set_treatments(question_options)
+        self.consensus_calculator_by_cosine_similarity.build_weighted_matrix(opinions_dict)
+        # 构建加权矩阵
+        df_scores = self.consensus_calculator_by_cosine_similarity.build_weighted_matrix(opinions_dict)
+
+        # 计算Cosine共识
+        cos_matrix, group_consensus = self.consensus_calculator_by_cosine_similarity.compute_cosine_consensus()
+        print(f"\nCosine similarity matrix:{cos_matrix}")
+        print(f"\nGroup consensus:{group_consensus}")
+
+        # 输出总结
+        df_summary, cos_matrix_df, group_consensus, consensus_bool = self.consensus_calculator_by_cosine_similarity.summarize()
+        print("\nSummary df:")
+        print(df_summary)
+        return df_summary, cos_matrix_df, group_consensus, consensus_bool
+
     def _check_discussion_convergence_medqa(
             self,
-            opinions_dict: Dict[RoleType, RoleOpinion],
+            opinions_dict: Dict[Union[RoleType, RoleRegistry], Union[RoleOpinion, QuestionOpinion]],
             question_options: List[QuestionOption],
-    ) -> bool:
+    ):
         """
         检查讨论是否收敛
         """
