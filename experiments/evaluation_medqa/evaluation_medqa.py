@@ -74,37 +74,29 @@ if __name__ == "__main__":
                                                                      dataset_name="medqa")
         df = final_result["final_consensus"]["df"]
         logging.info(f"第{idx}个问题的共识矩阵: {df}")
-        # mdt_leader_final_summary = final_result["mdt_leader_final_summary"]
-        # print(mdt_leader_final_summary["label"])
-        # label = mdt_leader_final_summary["label"]
+        mdt_leader_final_summary = final_result["mdt_leader_final_summary"]
+        print(mdt_leader_final_summary["label"])
+        label = mdt_leader_final_summary["label"]
         final_answer = final_result["final_answer"]
-        # if label == question_state.answer_idx:
-        #     logging.info(f"第{idx}个问题的智能体给的答案: {label}，回答正确")
-        #     right_cnt += 1
-        # else:
-        #     logging.info(f"第{idx}个问题正确的答案: {question_state.answer_idx}，回答错误")
-        # logging.info(f"第{idx}个问题的最终答案标签: {mdt_leader_final_summary['label']}")
-        # logging.info(f"第{idx}个问题最终答案的内容: {mdt_leader_final_summary['content']}")
-        # logging.info(f"第{idx}个问题的最终摘要: {mdt_leader_final_summary['decision_reasoning']}")
-        # best_treatment = df['mean'].idxmax()
-        # logging.info(f"第{idx}个问题的最佳治疗方案: {best_treatment}")
-        # logging.info(f"第{idx}个问题的平均分数: {df['mean']}")
-        # if medqa_types.QuestionOption(best_treatment).name == question_state.answer_idx:
-        #     logging.info(f"第{idx}个问题的智能体给的答案: {best_treatment}，正确")
-        #     right_cnt += 1
-        # else:
-        #     logging.info(f"第{idx}个问题的最佳治疗方案: {best_treatment}，错误")
-        # print(f"当前已经答对的问题数: {right_cnt}, 当前是第{idx}个问题")
-        # logging.debug(f"当前已经答对的问题数: {right_cnt}")
-        # logging.info(f"第{idx}个问题的正确答案: {question_state.answer_idx}")
-        # logging.info(f"第{idx}个问题的智能体给的最终方案: {final_result["mdt_leader_final_summary"]}")
-        print(f"MDT_LEADER:{final_result["mdt_leader_final_summary"]}")
-        print(f"打印一下final_answer:{final_answer}")
-        if final_answer == question_state.answer:
-            logging.info(f"第{idx}个问题的智能体给的答案: {final_answer}: {question_state.answer}，正确")
-            print(f"第{idx}个问题正确的答案: {question_state.answer_idx}: {question_state.answer}，正确")
+        if label == question_state.answer_idx:
+            logging.info(f"第{idx}个问题的智能体给的答案: {label}，回答正确")
             right_cnt += 1
         else:
-            logging.info(f"第{idx}个问题正确的答案: {question_state.answer_idx} : {question_state.answer}，错误")
-            print(f"第{idx}个问题正确的答案: {question_state.answer_idx} : {question_state.answer}，错误")
+            logging.info(f"第{idx}个问题正确的答案: {question_state.answer_idx}，回答错误")
+        logging.info(f"第{idx}个问题的最终答案标签: {mdt_leader_final_summary['label']}")
+        logging.info(f"第{idx}个问题最终答案的内容: {mdt_leader_final_summary['content']}")
+        logging.info(f"第{idx}个问题的最终摘要: {mdt_leader_final_summary['decision_reasoning']}")
+        print(f"当前已经答对的问题数: {right_cnt}, 当前是第{idx}个问题")
+        logging.debug(f"当前已经答对的问题数: {right_cnt}")
+        logging.info(f"第{idx}个问题的正确答案: {question_state.answer_idx}")
+        logging.info(f"第{idx}个问题的智能体给的最终方案: {final_result["mdt_leader_final_summary"]}")
+        # print(f"MDT_LEADER:{final_result["mdt_leader_final_summary"]}")
+        # print(f"打印一下final_answer:{final_answer}")
+        # if final_answer == question_state.answer:
+        #     logging.info(f"第{idx}个问题的智能体给的答案: {final_answer}: {question_state.answer}，正确")
+        #     print(f"第{idx}个问题正确的答案: {question_state.answer_idx}: {question_state.answer}，正确")
+        #     right_cnt += 1
+        # else:
+        #     logging.info(f"第{idx}个问题正确的答案: {question_state.answer_idx} : {question_state.answer}，错误")
+        #     print(f"第{idx}个问题正确的答案: {question_state.answer_idx} : {question_state.answer}，错误")
     logging.info(f"总体准确率: {right_cnt / len(data):.2f}")

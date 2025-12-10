@@ -45,7 +45,7 @@ class LLMConfig:
     model_name: str = None
     api_key: Optional[str] = None
     base_url: Optional[str] = None
-    temperature: float = 0.7
+    temperature: float = 0.0
     max_tokens: int = 1000
     timeout: int = 30
 
@@ -235,83 +235,48 @@ class LLMInterface:
             question_options: List[medqa_types.QuestionOption],
     ):
         prompt = f"""
-            You are the MDT Leader (Multidisciplinary Team Leader) in a medical intelligent reasoning system.
+        You are the MDT Leader (Multidisciplinary Team Leader) in a medical intelligent reasoning system.
 
-            Your task is to recruit the most relevant **medical expert roles** (not real people) for this question.
-            
-            【Input Information】
-            - Question: {question_state.question}
-            - Options: {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
-            
-            【Requirements】
-            1. Recruit 3–5 **medical expert roles**, not real individuals.
-               - Use generic role names such as: "Pharmacologist", "Radiologist", "Oncologist",
-                 "Internal Medicine Specialist", "Neurologist", "Hematologist", "Pathologist", etc.
-               - DO NOT generate personal names, fictional doctors, or real-world people.
-            
-            2. Each role must represent a distinct medical subfield to ensure heterogeneity.
-            
-            3. Assign a weight (0–1) to each expert role:
-               - Core: 0.7–1.0
-               - Secondary: 0.3–0.6
-               - Weakly related: 0–0.3
-            
-            4. Output strictly in JSON, no extra explanation.
-            
-            【Output Format】
+        Your task is to recruit the most relevant **medical expert roles** (not real people) for this question, focusing on **knowledge-based reasoning** rather than clinical practice judgment.
+
+        【Input Information】
+        - Question: {question_state.question}
+        - Options: {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
+
+        【Requirements】
+        1. Recruit 3–5 **medical expert roles**, not real individuals.
+           - Prefer knowledge-oriented roles such as:
+             "Pharmacologist", "Biostatistician", "Clinical Trial Specialist", "Toxicologist", 
+             "Epidemiologist", "Medical Informatics Specialist"
+           - DO NOT generate personal names, fictional doctors, or real-world people.
+
+        2. Each role must represent a distinct medical subfield to ensure heterogeneity.
+
+        3. Assign a weight (0–1) to each expert role based on relevance to answering the question:
+           - Core: 0.7–1.0
+           - Secondary: 0.3–0.6
+           - Weakly related: 0–0.3
+
+        4. Output strictly in JSON, no extra explanation.
+
+        【Output Format】
+        {{
+          "recruited_experts": [
             {{
-              "recruited_experts": [
-                {{
-                  "name": "<RoleTypeEnglish>", 
-                  "value": "<RoleTypeChinese>",
-                  "description": ""<A concise role description (10–25 words)>",
-                  "weight": <0~1>
-                }}
-              ]
+              "name": "<RoleTypeEnglish>", 
+              "value": "<RoleTypeChinese>",
+              "description": "<A concise role description (10–25 words)>",
+              "weight": <0~1>
             }}
-            
-            【Important Instructions】
-            - Only output role types, not personal identities.
-            - Do NOT use or fabricate any real or fictional human names.
-            - Ensure JSON is strictly valid.
+          ]
+        }}
+
+        【Important Instructions】
+        - Only output role types, not personal identities.
+        - Do NOT use or fabricate any real or fictional human names.
+        - Focus on **knowledge-driven reasoning** rather than clinical intuition.
+        - Ensure JSON is strictly valid.
         """
-        # prompt = f"""
-        # You are the MDT Leader (Multidisciplinary Team Leader) in a medical intelligent reasoning system.
-        # Your task is to recruit the most relevant medical experts for this question and its options.
-        #
-        # 【Input Information】
-        # - Question: {question_state.question}
-        # - Options: {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
-        #
-        # 【Requirements】
-        # 1. Recruit 3–5 experts ensuring **heterogeneity**:
-        #    - Cover **different medical subfields** (e.g., diagnosis, treatment, pharmacology, imaging, oncology, surgery)
-        #    - Ensure **complementary expertise** so each expert focuses on a unique angle
-        # 2. Assign a **weight (0~1)** to each expert reflecting their **contribution to solving this question**
-        #    - Core expert: 0.7–1.0
-        #    - Secondary expert: 0.3–0.6
-        #    - Weakly related expert: 0–0.3
-        # 3. Avoid selecting multiple experts with overlapping expertise
-        # 4. Only output **strict JSON** as below; do not include explanations or extra text
-        #
-        # 【Output Format】
-        # {{
-        #   "recruited_experts": [
-        #     {{
-        #       "name": "<Expert English Name>",
-        #       "value": "<Expert Chinese Name>",
-        #       "description": "<Expert Responsibilities>",
-        #       "weight": "<0~1>"
-        #     }}
-        #   ]
-        # }}
-        #
-        # 【Instructions】
-        # - Focus on **diversity and complementarity** in your selection
-        # - Weigh experts according to relevance to this specific question
-        # - Ensure at least one expert is selected, up to 5 experts
-        # - JSON must be strictly valid; do not output any text outside JSON
-        # """
         return prompt
 
     def llm_recurt_agents_medqa(
@@ -333,8 +298,7 @@ class LLMInterface:
                     "role": "system",
                     "content": (
                         "You are the MDT Leader (Multidisciplinary Team Leader) in a medical reasoning system. "
-                        "Recruit relevant medical experts for each question, ensuring diversity across different specialties. "
-                        "Assign a weight (0~1) to each expert based on their contribution. "
+                        "Recruit medical expert roles using knowledge-based, data-driven reasoning."
                         "Only output a strict JSON; do not include explanations or extra text."
                     )
                 },
@@ -808,58 +772,106 @@ class LLMInterface:
         role_weight = role.weight
         if dataset_name in ["medqa", "pubmedqa", "symcat", "ddxplus", "medbullets"]:
             prompt = f"""
-            你是医学多学科团队（MDT, Multidisciplinary Team）的一名智能体成员，
-            身份：{role_value}，角色描述：{role_desc}，角色权重：{role_weight}。
-            你需要根据题目做出医学推理，并对每个选项进行量化评分。
-            
-            ==============================
-            题目：
-            {question_state.question}
-            
-            选项：
-            {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
-            ==============================
-            
-            你的任务包括：
-            
-            1. **识别关键证据**  
-               提取题目中支持或反驳各选项的关键证据（症状、实验室检查、影像、机制、数据等）。
-            
-            2. **推理正确答案**  
-               基于医学知识和证据链，推理哪个选项最可能正确，并给出理由。
-            
-            3. **严格量化评分（-1.0 ~ 1.0）**  
-               必须严格按照以下区间打分：
-               - 最合理、最可能正确 → 0.9~1.0
-               - 次优、部分合理 → 0.4~0.6
-               - 不太合理、证据弱 → -0.4~0.2
-               - 明显错误、与证据相反 → -0.8~-0.5
-               - 完全错误、方向相反 → -1.0
-               【约束】：
-               - 最合理选项分数必须比次优选项高至少 0.3
-               - 禁止所有选项给相近分数
-               - 分数必须能反映你的推理过程
-            
-            4. **反思（Reflection）**  
-               - 对你刚才生成的评分和证据强度进行复核  
-               - 检查是否与证据一致，是否有分数区间违规，是否最合理选项高于次优选项至少 0.3  
-               - 如发现问题，调整评分和证据强度  
-               - 输出反思结论的简短说明
-            
-            5. **输出格式（严格 JSON，不加任何文字）**
-            
-            请严格输出如下格式（JSON）：
-            {{
-              "scores": {{"A": 0.0, "B": 0.0, "C": 0.0, "D": 0.0, "E": 0.0}},
-              "reasoning": "<简短推理说明>",
-              "evidences": ["<证据1>", "<证据2>"],
-              "reflection": "<简短反思说明>"
-            }}
-            
-            评分流程必须遵循：
-            列证据 → 推理出最可能正确答案 → 根据推理赋分 → 自我反思 → 输出 JSON。
-
+            你是医学多学科团队（MDT）系统的一名角色：
+                - 身份：{role_value}
+                - 角色描述：{role_desc}
+                - 权重：{role_weight}
+                
+                你的任务是对题目进行专业分析、推理与量化评分。
+                
+                ==============================
+                题目：
+                {question_state.question}
+                
+                选项：
+                {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
+                ==============================
+                
+                请严格按照以下流程思考（必须按顺序执行）：
+                
+                1. **关键证据提取**
+                   - 列出题目中与判断相关的关键线索（症状、机制、实验、药理、影像、逻辑关系等）
+                
+                2. **推理过程（非常关键）**
+                   - 基于医学知识与证据链，推理哪一个选项最合理
+                   - 在推理末尾，用一句话明确写出：
+                     **“Answer = <A/B/C/D/E>”**
+                
+                3. **量化评分（-1.0 ~ 1.0）**
+                   - 你的评分必须符合以下规则：
+                     - Answer 对应的选项必须获得最高分
+                     - 该选项的分数必须比次优选项高 ≥ 0.3
+                     - 分数必须能反映你在推理中的证据强度
+                     - 禁止所有选项分数过于接近
+                   - 所有分数必须与 “Answer = X” 保持一致
+                
+                4. **反思（Reflection）**
+                   - 检查 scores 是否与推理一致
+                   - 如不一致，必须修正 scores
+                   - 简要说明是否进行了自我修正
+                
+                5. **严格 JSON 输出（禁止额外文字）**：
+                {{
+                  "scores": {{"A": 0.0, "B": 0.0, "C": 0.0, "D": 0.0, "E": 0.0}},
+                  "reasoning": "<推理过程（包含 Answer = X）>",
+                  "evidences": ["<证据1>", "<证据2>"],
+                  "final_choice": "<A/B/C/D/E>",
+                  "reflection": "<反思说明>"
+                }}
             """
+            # prompt = f"""
+            # 你是医学多学科团队（MDT, Multidisciplinary Team）的一名智能体成员，
+            # 身份：{role_value}，角色描述：{role_desc}，角色权重：{role_weight}。
+            # 你需要根据题目做出医学推理，并对每个选项进行量化评分。
+            #
+            # ==============================
+            # 题目：
+            # {question_state.question}
+            #
+            # 选项：
+            # {[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
+            # ==============================
+            #
+            # 你的任务包括：
+            #
+            # 1. **识别关键证据**
+            #    提取题目中支持或反驳各选项的关键证据（症状、实验室检查、影像、机制、数据等）。
+            #
+            # 2. **推理正确答案**
+            #    基于医学知识和证据链，推理哪个选项最可能正确，并给出理由。
+            #
+            # 3. **严格量化评分（-1.0 ~ 1.0）**
+            #    必须严格按照以下区间打分：
+            #    - 最合理、最可能正确 → 0.9~1.0
+            #    - 次优、部分合理 → 0.4~0.6
+            #    - 不太合理、证据弱 → -0.4~0.2
+            #    - 明显错误、与证据相反 → -0.8~-0.5
+            #    - 完全错误、方向相反 → -1.0
+            #    【约束】：
+            #    - 最合理选项分数必须比次优选项高至少 0.3
+            #    - 禁止所有选项给相近分数
+            #    - 分数必须能反映你的推理过程
+            #
+            # 4. **反思（Reflection）**
+            #    - 对你刚才生成的评分和证据强度进行复核
+            #    - 检查是否与证据一致，是否有分数区间违规，是否最合理选项高于次优选项至少 0.3
+            #    - 如发现问题，调整评分和证据强度
+            #    - 输出反思结论的简短说明
+            #
+            # 5. **输出格式（严格 JSON，不加任何文字）**
+            #
+            # 请严格输出如下格式（JSON）：
+            # {{
+            #   "scores": {{"A": 0.0, "B": 0.0, "C": 0.0, "D": 0.0, "E": 0.0}},
+            #   "reasoning": "<简短推理说明>",
+            #   "evidences": ["<证据1>", "<证据2>"],
+            #   "reflection": "<简短反思说明>"
+            # }}
+            #
+            # 评分流程必须遵循：
+            # 列证据 → 推理出最可能正确答案 → 根据推理赋分 → 自我反思 → 输出 JSON。
+            #
+            # """
 
             # prompt = f"""
             # 你是医学多学科团队（MDT, Multidisciplinary Team）的一名智能体成员，身份：{role_value}，角色描述：{role_desc}，角色权重：{role_weight}。
