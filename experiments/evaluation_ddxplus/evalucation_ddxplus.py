@@ -92,11 +92,11 @@ if __name__ == "__main__":
         rag_system = MedicalKnowledgeRAG()
         dialogue_manager = MultiAgentDialogueManager(rag_system, llm_interface)
         # 打印结果
-        final_result = dialogue_manager.conduct_mdt_discussion_medqa(
+        final_result = dialogue_manager.conduct_mdt_discussion_medqa_demo(
             question_state, question_options, dataset_name="ddxplus"
         )
-        final_df = final_result["final_consensus"]["df"]
-        logging.info(f"第{idx}个问题的共识矩阵: {final_df}")
+        # final_df = final_result["final_consensus"]["df"]
+        # logging.info(f"第{idx}个问题的共识矩阵: {final_df}")
         mdt_leader_final_summary = final_result["mdt_leader_final_summary"]
         print(mdt_leader_final_summary["label"])
         label = mdt_leader_final_summary["label"]

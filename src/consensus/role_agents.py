@@ -231,6 +231,33 @@ class RoleAgent:
             return None
         return reasoning
 
+    def generate_mdt_leader_final_summary_dataset(
+            self,
+            question_state: MedicalQuestionState,
+            question_options: List[QuestionOption],
+            dialogue_rounds: DialogueRound,
+            opinions_dict: Dict[Union[RoleType, RoleRegistry], Union[RoleOpinion, QuestionOpinion]] = None,
+    ):
+        response = self.llm_interface.llm_generate_final_mdt_leader_summary(
+            question_state, question_options, dialogue_rounds, opinions_dict
+        )
+        if isinstance(response, str):
+            try:
+                reasoning = fix_and_parse_single_json(response)
+            except Exception as e:
+                logger.warning(
+                    f"json解析失败:{e}, 原始字符串:{reasoning}"
+                )
+        elif isinstance(response, dict):
+            pass
+        else:
+            logger.warning(
+                f"final_mdt_prompt未知的返回类型:{type(response)}"
+            )
+            return None
+        mdt_leader_final_summary = reasoning
+        return mdt_leader_final_summary
+
 
     def generate_mdt_leader_summary_dataset(
             self,
@@ -241,29 +268,9 @@ class RoleAgent:
             opinions_dict: Dict[Union[RoleType, RoleRegistry], Union[RoleOpinion, QuestionOpinion]] = None,
     ):
         current_round = dialogue_rounds.round_number
-        if not consensus_dict["consensus"]:
-            mdt_leader_summary = self.llm_interface.llm_generate_mdt_leader_content(
-                question_state, question_options, dialogue_rounds
-            )
-        elif consensus_dict["consensus"]:
-            response = self.llm_interface.llm_generate_final_mdt_leader_summary(
-                question_state, question_options, dialogue_rounds, consensus_dict, opinions_dict
-            )
-            if isinstance(response, str):
-                try:
-                    reasoning = fix_and_parse_single_json(response)
-                except Exception as e:
-                    logger.warning(
-                        f"json解析失败:{e}, 原始字符串:{reasoning}"
-                    )
-            elif isinstance(response, dict):
-                pass
-            else:
-                logger.warning(
-                    f"final_mdt_prompt未知的返回类型:{type(response)}"
-                )
-                return None
-            mdt_leader_summary = reasoning
+        mdt_leader_summary = self.llm_interface.llm_generate_mdt_leader_content(
+            question_state, question_options, dialogue_rounds
+        )
         logger.info(f"current_round:{current_round}, MDT_LEADER_SUMMARY: {mdt_leader_summary}")
         return mdt_leader_summary
 
@@ -296,13 +303,11 @@ class RoleAgent:
             return None
 
         role_opinion = QuestionOpinion(
-            role=self.role.value,
-            scores=reasoning["scores"],
-            reasoning=reasoning["reasoning"],
-            evidences=reasoning["evidences"],
+            role=self.role,
+            reasoning=reasoning["reasoning"]
         )
         # 更新当前角色的 TreatmentPreferences
-        self.current_stance = role_opinion.scores
+        # self.current_stance = role_opinion.scores
         return role_opinion
 
     def _update_agent_opinions_and_preferences(
@@ -420,13 +425,18 @@ class RoleAgent:
             logger.error(f"未知的推理类型:{type(reasoning)}, 原始字符串:{reasoning}")
             return None
 
+        # role_opinion = QuestionOpinion(
+        #     role=self.role,
+        #     scores=reasoning["scores"],
+        #     reasoning=reasoning["reasoning"],
+        #     evidences=reasoning["evidences"],
+        # )
         role_opinion = QuestionOpinion(
             role=self.role,
-            scores=reasoning["scores"],
-            reasoning=reasoning["reasoning"],
-            evidences=reasoning["evidences"],
+            reasoning=reasoning["reasoning"]
         )
-        self.current_stance = role_opinion.scores
+        # 这里先注销掉
+        # self.current_stance = role_opinion.scores
 
         return role_opinion
 

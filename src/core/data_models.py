@@ -143,16 +143,16 @@ class QuestionOpinion:
     包含角色的支持度、推理、证据强度以及支持这个选项的证据列表。
     Attributes:
         role (RoleType): 角色类型
-        scores: Dict[QuestionOption, float]
+        scores: Dict[QuestionOption, float] 分数先注掉.
         reasoning (str): 推理过程，说明为什么选择了这些选项。
         evidences: List[str]: 支持这个选项的证据列表
     """
 
     role: Union[RoleType, RoleRegistry]
-    scores: Dict[QuestionOption, float]  # -1 to +1
+    # scores: Dict[QuestionOption, float]  # -1 to +1
     reasoning: str
     # evidence_strength: float  # 0 to 1
-    evidences: List[str]
+    # evidences: List[str]
 
 
 @dataclass

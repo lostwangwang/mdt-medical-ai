@@ -24,7 +24,7 @@ logging.basicConfig(
 )
 
 if __name__ == "__main__":
-    path = "/mnt/e/project/LLM/mdt_medical_ai/data/examples/symcat/symcat_style_dataset.jsonl"
+    path = "/mnt/e/project/LLM/mdt_medical_ai/data/examples/symcat/symcat_style_dataset_new.jsonl"
 
     data = read_jsonl(path, 50)
     print("读取的数据条数:", len(data))
@@ -76,11 +76,11 @@ if __name__ == "__main__":
         rag_system = MedicalKnowledgeRAG()
         dialogue_manager = MultiAgentDialogueManager(rag_system, llm_interface)
         # 打印结果
-        final_result = dialogue_manager.conduct_mdt_discussion_medqa(
+        final_result = dialogue_manager.conduct_mdt_discussion_medqa_demo(
             question_state, question_options, dataset_name="symcat"
         )
-        df = final_result["final_consensus"]["df"]
-        logging.info(f"第{idx}个问题的共识矩阵: {df}")
+        # df = final_result["final_consensus"]["df"]
+        # logging.info(f"第{idx}个问题的共识矩阵: {df}")
         mdt_leader_final_summary = final_result["mdt_leader_final_summary"]
         print(mdt_leader_final_summary["label"])
         label = mdt_leader_final_summary["label"]

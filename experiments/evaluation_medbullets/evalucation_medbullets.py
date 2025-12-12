@@ -148,12 +148,12 @@ if __name__ == "__main__":
         dialogue_manager = MultiAgentDialogueManager(rag_system, llm_interface)
 
         # 执行MDT协同讨论（复用MedQA流程）
-        final_result = dialogue_manager.conduct_mdt_discussion_medqa(question_state, question_options,
+        final_result = dialogue_manager.conduct_mdt_discussion_medqa_demo(question_state, question_options,
                                                                      dataset_name="medbullets")
-        df = final_result["final_consensus"]["df"]
-        logging.info(f"第{idx}个问题的共识矩阵: {df}")
+        # df = final_result["final_consensus"]["df"]
+        # logging.info(f"第{idx}个问题的共识矩阵: {df}")
         mdt_leader_final_summary = final_result["mdt_leader_final_summary"]
-        print(mdt_leader_final_summary["label"])
+        # print(mdt_leader_final_summary["label"])
         label = mdt_leader_final_summary["label"]
         if label == question_state.answer_idx:
             logging.info(f"第{idx}个问题的智能体给的答案: {label}，回答正确")

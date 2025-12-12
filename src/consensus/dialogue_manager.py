@@ -64,6 +64,97 @@ class MultiAgentDialogueManager:
         self.consensus_bool = False
         self.initial_round = None
 
+    def conduct_mdt_discussion_medqa_demo(
+            self,
+            question_state: MedicalQuestionState,
+            question_options: List[QuestionOption],
+            dataset_name: str = None,
+    ) -> ConsensusResult:
+        """
+        进行MDT讨论
+        讨论流程:
+        1. 注册MDT_LEADER角色，让MDT_LEADER根据问题难度去生成需要参与到多轮讨论中的角色，以及角色权重。
+        2. MDT_LEADER生成
+        3. 立场更新 - 基于其他角色观点调整自己的立场
+        4. 争议聚焦 - 针对分歧较大的治疗方案深入讨论
+        5. 共识达成 - 生成最终的治疗建议和共识结果
+        """
+        logger.info(f"Starting MDT discussion for question {question_state}")
+        # 实例化一个mdt_leader
+        mdt_leader_role = RoleRegistry("MDT LEADER", "MDT LEADER")
+        self.mdt_leader = RoleAgent(role=mdt_leader_role, llm_interface=self.llm_interface)
+        response = self.mdt_leader.recurt_agents_medqa(question_state, question_options)
+        recruited_experts = response['recruited_experts']
+        logger.info(f"Recruited experts: {recruited_experts}")
+        role_list = []
+        for expert in recruited_experts:
+            registry = RoleRegistry(expert['name'], expert['value'], expert['description'], expert['weight'])
+            role_list.append(registry)
+        self.agents = {role: RoleAgent(role, llm_interface=self.llm_interface) for role in role_list}
+        # self.consensus_calculator_by_icc.set_roles(role_list)
+        # 初始化对话 - 各角色生成基于证据的初始意见
+        opinions_list = self._initialize_discussion_medqa(
+            question_state, question_options, dataset_name
+        )
+        # 将意见列表转换为字典，方便按角色快速访问
+        opinions_dict = {opinion.role: opinion for opinion in opinions_list}
+        while self.current_round <= self.max_rounds:
+            mdt_leader_summary = self._mdt_leader_summary_medqa(question_state, question_options, self.dialogue_rounds[-1], opinions_dict)
+            # 1. 基于上一轮的对话内容更新各角色立场
+            new_opinions_dict = self._update_agent_opinions_medqa(
+                question_state,
+                self.dialogue_rounds[-1],
+                opinions_dict,
+                question_options,
+                mdt_leader_summary,
+                dataset_name,
+            )
+            opinions_dict = new_opinions_dict
+            current_round_messages = self.convert_opinions_to_messages(opinions_dict, self.current_round)
+            self.dialogue_rounds.append(current_round_messages)
+            self.current_round += 1
+        mdt_leader_final_summary = self._mdt_leader_final_summary_medqa(question_state, question_options,
+                                                                 self.dialogue_rounds[-1], opinions_dict)
+        logger.info("\n==生成共识结果开始：==")
+        # final_answer = self.consensus_calculator_by_icc.select_final_answer()
+        final_result = {
+            "question_state": question_state,
+            "question_options": question_options,
+            "final_opinions_dict": opinions_dict,
+            "mdt_leader_final_summary": mdt_leader_final_summary,
+        }
+        return final_result
+
+    def _mdt_leader_final_summary_medqa(
+            self,
+            question_state: MedicalQuestionState,
+            question_options: List[QuestionOption],
+            dialogue_round: DialogueRound,
+            opinions_dict: Dict[Union[RoleType, RoleRegistry], Union[RoleOpinion, QuestionOpinion]],
+    ):
+
+        response = self.mdt_leader.generate_mdt_leader_final_summary_dataset(question_state, question_options, dialogue_round)
+        return response
+
+    def convert_opinions_to_messages(
+            self,
+            opinions_dict: Dict[Union[RoleType, RoleRegistry], Union[RoleOpinion, QuestionOpinion]],
+            round_number: int = 0
+    ):
+        """进行一轮结构化对话"""
+        current_dialogue_round = DialogueRound(
+            round_number=round_number,
+            messages=[],
+            opinion_dict=opinions_dict,
+            consensus_status="discussing",
+        )
+        current_messages = []
+        for role, role_opinion in opinions_dict.items():
+            role_message = f"{role.value}认为: {role_opinion.reasoning}。"
+            current_messages.append(role_message)
+        current_dialogue_round.messages = current_messages
+        return current_dialogue_round
+
     def conduct_mdt_discussion_medqa(
             self,
             question_state: MedicalQuestionState,
@@ -175,26 +266,16 @@ class MultiAgentDialogueManager:
         }
         return final_result
 
-    def _mdt_leader_recruit_agents_medqa(self, question_state: MedicalQuestionState, question_options: List[QuestionOption]):
-        """
-        根据问题内容，进行角色分配
-        """
-        self.mdt_leader.recurt_agents_medqa(question_state, question_options)
-        # 获取角色列表
-        role_list = RoleRegistry.get_role_list()
-        # 获取角色数量
-        role_num = len(role_list)
 
     def _mdt_leader_summary_medqa(
             self,
             question_state: MedicalQuestionState,
             question_options: List[QuestionOption],
             dialogue_round: DialogueRound,
-            consensus_dict: Dict[str, Any],
             opinions_dict: Dict[RoleType, Union[RoleOpinion, QuestionOpinion]] = None
     ):
         response = self.mdt_leader.generate_mdt_leader_summary_dataset(question_state, question_options, dialogue_round,
-                                                                       consensus_dict, opinions_dict)
+                                                                        opinions_dict)
         return response
 
     def _conduct_dialogue_round_medqa(
@@ -205,7 +286,7 @@ class MultiAgentDialogueManager:
             mdt_leader_summary: str,
             dataset_name: str = None,
             round_number: int = None,
-    ) -> Tuple[DialogueRound, QuestionOption]:
+    ):
         """进行一轮结构化对话"""
         current_round = DialogueRound(
             round_number=round_number,
@@ -282,20 +363,8 @@ class MultiAgentDialogueManager:
         for role, agent in self.agents.items():
             # 选取角色opinion
             opinion_result = [opinion for opinion in self.opinions_list if opinion.role == role]
-            # 生成初始发言
-            initial_message = self._create_initial_message_medqa(
-                agent,
-                opinion_result[0],
-                question_state,
-                question_options,
-                dataset_name
-            )
-
-            logger.info(
-                f"Generated initial message for {role.value}: {initial_message.content}"
-            )
-            print(f"Generated initial message for {role.value}: {initial_message.content}")
-
+            role_opinion = opinion_result[0]
+            initial_message = f"{role.value}的推理: {role_opinion.reasoning}。"
             self.initial_round.messages.append(initial_message)
         opinions_dict = {opinion.role: opinion for opinion in self.opinions_list}
         self.initial_round.opinion_dict = opinions_dict
@@ -321,7 +390,6 @@ class MultiAgentDialogueManager:
                 dataset_name
             )
             self.initial_round.messages.append(initial_message)
-        pass
 
     def _create_initial_message_medqa(
             self,
