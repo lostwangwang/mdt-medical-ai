@@ -113,6 +113,7 @@ class MultiAgentDialogueManager:
             current_round_messages = self.convert_opinions_to_messages(opinions_dict, self.current_round)
             self.dialogue_rounds.append(current_round_messages)
             self.current_round += 1
+
         mdt_leader_final_summary = self._mdt_leader_final_summary_medqa(question_state, question_options,
                                                                  self.dialogue_rounds[-1], opinions_dict)
         logger.info("\n==生成共识结果开始：==")
