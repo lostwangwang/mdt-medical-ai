@@ -98,21 +98,21 @@ class MultiAgentDialogueManager:
         )
         # 将意见列表转换为字典，方便按角色快速访问
         opinions_dict = {opinion.role: opinion for opinion in opinions_list}
-        while self.current_round <= self.max_rounds:
-            mdt_leader_summary = self._mdt_leader_summary_medqa(question_state, question_options, self.dialogue_rounds[-1], opinions_dict)
-            # 1. 基于上一轮的对话内容更新各角色立场
-            new_opinions_dict = self._update_agent_opinions_medqa(
-                question_state,
-                self.dialogue_rounds[-1],
-                opinions_dict,
-                question_options,
-                mdt_leader_summary,
-                dataset_name,
-            )
-            opinions_dict = new_opinions_dict
-            current_round_messages = self.convert_opinions_to_messages(opinions_dict, self.current_round)
-            self.dialogue_rounds.append(current_round_messages)
-            self.current_round += 1
+        # while self.current_round <= self.max_rounds:
+        #     mdt_leader_summary = self._mdt_leader_summary_medqa(question_state, question_options, self.dialogue_rounds[-1], opinions_dict)
+        #     # 1. 基于上一轮的对话内容更新各角色立场
+        #     new_opinions_dict = self._update_agent_opinions_medqa(
+        #         question_state,
+        #         self.dialogue_rounds[-1],
+        #         opinions_dict,
+        #         question_options,
+        #         mdt_leader_summary,
+        #         dataset_name,
+        #     )
+        #     opinions_dict = new_opinions_dict
+        #     current_round_messages = self.convert_opinions_to_messages(opinions_dict, self.current_round)
+        #     self.dialogue_rounds.append(current_round_messages)
+        #     self.current_round += 1
 
         mdt_leader_final_summary = self._mdt_leader_final_summary_medqa(question_state, question_options,
                                                                  self.dialogue_rounds[-1], opinions_dict)

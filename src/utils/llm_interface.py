@@ -45,7 +45,7 @@ class LLMConfig:
     model_name: str = None
     api_key: Optional[str] = None
     base_url: Optional[str] = None
-    temperature: float = 0.0
+    temperature: float = 0.3
     max_tokens: int = 1000
     timeout: int = 30
 
@@ -215,21 +215,26 @@ class LLMInterface:
         #     agents_opinions_str += "\n\n"
 
         prompt = f"""
-        你是多学科医疗团队（MDT）的负责人（Leader）。你的任务是根据智能体的聚合意见，对题目进行最终总结，并给出结论。
+        你是多学科医疗团队（MDT）的负责人（Leader）。
+        你的任务是基于各智能体的分析性观点，对医学题目进行最终整合判断，并给出结论。
 
         输入信息：
-        - 题目（QUESTION）：{question_state.question}
-        - 选项（OPTIONS）：{[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
-        - 智能体发言内容：{agents_messages}
+        - 题目：{question_state.question}
+        - 选项：{[f"{option.name}: {question_state.options[option.name]}" for option in question_options]}
+        - 智能体观点分析：{agents_messages}
 
-        任务要求：
-        - 综合各智能体发言内容，给出最可能的正确选项或最终结论。
-        - 提供决策依据，说明为何选择该选项并排除其他选项。
-        - 输出 JSON，格式如下：
+        任务：
+        - 综合不同智能体的分析观点，判断最合理的选项。
+        - 说明该选项为何在整体推理上更具优势，并简要解释其他选项未被采纳的原因。
+        - 在给出最终结论前，请检查是否存在在该题目语境下通常需要优先完成的前置步骤或流程性判断；
+          若存在被跳过的前置步骤，应优先将该步骤作为最终结论。
+        - 给出一个明确的最终结论。
+
+        请严格以 JSON 格式输出（禁止额外文本）：
         {{
-            "label": "{{最终选项标签}}",
-            "content": "{{选项内容}}",
-            "decision_reasoning": "{{决策推理，100~150字}}"
+          "label": "<最终选项字母>",
+          "content": "<对应选项内容>",
+          "decision_reasoning": "<100–150字的整合性推理说明>"
         }}
         """
         return prompt
@@ -311,7 +316,9 @@ class LLMInterface:
                     "role": "user",
                     "content": prompt,
                 }
-            ]
+            ],
+            temperature=self.config.temperature,
+            max_tokens=self.config.max_tokens
         )
         return response.choices[0].message.content.strip()
 
@@ -604,7 +611,7 @@ class LLMInterface:
                         {
                             "role": "system",
                             "content": (
-                                f"你是医学多学科团队（MDT）的专业医生智能体。你的任务是在收到用户提示后，基于你的医学角色，对医学题目进行结构化推理，并严格按用户要求的格式输出。"
+                                f"你是医学多学科团队（MDT）系统中的一名成员，负责从你的专业背景出发，提供医学推理视角与观点，以支持团队讨论与决策过程。"
                             ),
                         },
                         {"role": "user", "content": prompt},
@@ -748,27 +755,24 @@ class LLMInterface:
         ])
         if dataset_name in ["medqa", "pubmedqa", "symcat", "ddxplus", "medbullets"]:
             prompt = f"""
-            你是医学多学科团队（MDT）系统中的一名医生：
-            - 身份：{role_value}
-            - 角色描述：{role_desc}
+            你是医学多学科团队（MDT）系统中的一名医生。
+            身份：{role_value}（{role_desc}）
 
-            任务：对下列医学题目进行专业推理（**仅推理，不评分、不列证据、不逐项分析**）。
+            任务：从你的专业视角，对下列医学题目的各个选项进行观点性分析，
+            对每个选项简要说明其推理是否合理、是否存在疑点或不确定性。
+            本阶段不需要给出最终答案。
 
-            ==============================
             题目：
             {question_state.question}
 
             选项：
             {options_str}
-            ==============================
 
-            请给出一段连贯、自然的医学推理，说明你是如何得出答案的。
-            推理末尾请明确写出：
-            “Answer = <选项字母>”
+            请输出你的分析性推理。
 
-            严格 JSON 输出（禁止额外内容）：
+            严格 JSON 输出：
             {{
-              "reasoning": "<你的推理（包含 Answer = X）>"
+              "reasoning": "<你的观点性推理>"
             }}
             """
         return prompt
